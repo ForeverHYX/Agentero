@@ -265,6 +265,11 @@ fn read_cli_version(bin: &Path) -> Option<String> {
     }
 }
 
+#[cfg(windows)]
+fn windows_shim_binary_path(binary: &Path) -> String {
+    binary.to_string_lossy().replace("\\\\?\\", "")
+}
+
 fn preferred_bin_dir() -> PathBuf {
     if let Some(home) = dirs::home_dir() {
         let local = home.join(".local").join("bin");
@@ -523,7 +528,7 @@ pub(crate) fn install_shim(binary: &Path, shim: &Path) -> Result<(), AppError> {
     {
         let body = format!(
             "@echo off\r\n\"{}\" %*\r\n",
-            binary.display().to_string().replace('"', "")
+            windows_shim_binary_path(binary).replace('"', "")
         );
         fs::write(shim, body)?;
         Ok(())
@@ -664,6 +669,16 @@ mod tests {
         );
         assert_eq!(fs::read(&foreign).unwrap(), b"not-agentero");
         let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn windows_shim_strips_verbatim_path_prefix() {
+        let path = Path::new(r"\\?\C:\Users\me\AppData\Local\Agentero\cli\agentero.exe");
+        assert_eq!(
+            windows_shim_binary_path(path),
+            r"C:\Users\me\AppData\Local\Agentero\cli\agentero.exe"
+        );
     }
 
     #[cfg(unix)]

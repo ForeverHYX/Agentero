@@ -923,19 +923,24 @@ function citationResolveFailedMessage(source: string): string {
 	const hash = source.indexOf("#");
 	const frag = hash >= 0 ? source.slice(hash + 1) : "";
 	const key = (frag.split("=")[0] ?? "").toLowerCase();
-	const i18nKey =
-		(
-			{
-				figure: "agent:citation.figureNotFound",
-				section: "agent:citation.sectionNotFound",
-				table: "agent:citation.tableNotFound",
-				algorithm: "agent:citation.algorithmNotFound",
-				formula: "agent:citation.formulaNotFound",
-				page: "agent:citation.pageNotFound",
-				region: "agent:citation.regionNotFound",
-			} as Record<string, string>
-		)[key] ?? "agent:citation.resolveFailed";
-	return i18n.t(i18nKey, { source });
+	switch (key) {
+		case "figure":
+			return i18n.t("agent:citation.figureNotFound", { source });
+		case "section":
+			return i18n.t("agent:citation.sectionNotFound", { source });
+		case "table":
+			return i18n.t("agent:citation.tableNotFound", { source });
+		case "algorithm":
+			return i18n.t("agent:citation.algorithmNotFound", { source });
+		case "formula":
+			return i18n.t("agent:citation.formulaNotFound", { source });
+		case "page":
+			return i18n.t("agent:citation.pageNotFound", { source });
+		case "region":
+			return i18n.t("agent:citation.regionNotFound", { source });
+		default:
+			return i18n.t("agent:citation.resolveFailed", { source });
+	}
 }
 
 /**

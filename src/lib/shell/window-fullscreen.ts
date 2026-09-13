@@ -14,7 +14,11 @@ export async function toggleBorderlessFullscreen(): Promise<void> {
 		const { getCurrentWindow } = await import("@tauri-apps/api/window");
 		const win = getCurrentWindow();
 		const full = await win.isFullscreen();
-		await win.setFullscreen(!full);
+		const next = !full;
+		await win.setFullscreen(next);
+		if ((await win.isFullscreen()) !== next) {
+			throw new Error(`fullscreen state did not change to ${next}`);
+		}
 	} catch (error) {
 		logger.warn("toggle borderless fullscreen failed", {
 			error: errorText(error),

@@ -140,10 +140,9 @@ fn vault_create_which_info_check() {
     assert_eq!(v["ok"], true);
     let vaults = v["data"]["vaults"].as_array().unwrap();
     assert!(
-        vaults.iter().any(|entry| entry["path"]
-            .as_str()
-            .unwrap()
-            .contains("v")),
+        vaults
+            .iter()
+            .any(|entry| entry["path"].as_str().unwrap().contains("v")),
         "vault list should contain the newly created vault"
     );
 }

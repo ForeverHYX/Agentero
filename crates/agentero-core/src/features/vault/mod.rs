@@ -7,8 +7,7 @@ use std::fs;
 use std::path::Path;
 
 /// Default AGENTS.md template written on Create Vault (only if missing).
-pub const AGENTS_MD_TEMPLATE: &str =
-    include_str!("../../../../../templates/vault/AGENTS.md");
+pub const AGENTS_MD_TEMPLATE: &str = include_str!("../../../../../templates/vault/AGENTS.md");
 
 /// Scaffold for `.agents/README.md` (only if missing).
 pub const AGENTS_DIR_README: &str =

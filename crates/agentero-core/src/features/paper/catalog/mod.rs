@@ -188,7 +188,10 @@ fn copy_dir_all(src: &Path, dst: &Path) -> Result<(), AppError> {
         )));
     }
     std::fs::create_dir_all(dst)?;
-    for entry in walkdir::WalkDir::new(src).into_iter().filter_map(Result::ok) {
+    for entry in walkdir::WalkDir::new(src)
+        .into_iter()
+        .filter_map(Result::ok)
+    {
         let rel = entry
             .path()
             .strip_prefix(src)

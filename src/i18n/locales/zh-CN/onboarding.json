@@ -71,8 +71,11 @@
 		"title": "建一个自己的文献库",
 		"desc": "文献库（Vault）就是一个普通文件夹，论文和笔记都存在你自己电脑上。之后随时可以创建新的或换着用。",
 		"create": "新建文献库",
+		"createDesc": "先选择一个独立的 Agentero 文件夹。创建完成后，可再选择是否从 Zotero 导入。",
 		"zotero": "从 Zotero 导入",
-		"zoteroDesc": "第 1 步选择新的 Agentero 文献库位置；第 2 步再选择 Zotero 来源目录。"
+		"zoteroOfferTitle": "要从 Zotero 导入吗？",
+		"zoteroOfferDesc": "Agentero 文献库已经创建。接下来可以选择 Zotero 数据目录作为导入来源。",
+		"zoteroLater": "稍后导入"
 	},
 	"actions": {
 		"start": "开始配置",

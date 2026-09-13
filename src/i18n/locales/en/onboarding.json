@@ -71,8 +71,11 @@
 		"title": "Create your library",
 		"desc": "A vault is just a plain folder on your computer where papers and notes live. You can create or switch to another one anytime.",
 		"create": "Create a vault",
+		"createDesc": "Choose a separate Agentero folder first. After it is created, you can import from Zotero.",
 		"zotero": "Import from Zotero",
-		"zoteroDesc": "Step 1 chooses a new Agentero vault; Step 2 chooses the Zotero source folder."
+		"zoteroOfferTitle": "Import from Zotero now?",
+		"zoteroOfferDesc": "Your Agentero vault is ready. You can now choose a Zotero data folder as the import source.",
+		"zoteroLater": "Later"
 	},
 	"actions": {
 		"start": "Start setup",

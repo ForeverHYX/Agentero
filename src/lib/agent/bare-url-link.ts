@@ -70,7 +70,8 @@ export function linkifyBareVaultCitations(text: string): string {
 			lastIndex = hrefStart + href.length;
 		} else {
 			out += text.slice(lastIndex, hrefStart);
-			out += `[${citationLabel(href)}](${href})`;
+			// `./` so Streamdown rehype-harden keeps vault-relative hrefs.
+			out += `[${citationLabel(href)}](./${href})`;
 			lastIndex = hrefStart + href.length;
 		}
 

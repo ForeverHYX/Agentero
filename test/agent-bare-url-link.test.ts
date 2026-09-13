@@ -11,7 +11,7 @@ describe("linkifyBareVaultCitations", () => {
 				"Figure 9 (papers/vla/2504.16054/2504.16054.pdf#figure=9)",
 			),
 		).toBe(
-			"Figure 9 ([2504.16054.pdf · figure=9](papers/vla/2504.16054/2504.16054.pdf#figure=9))",
+			"Figure 9 ([2504.16054.pdf · figure=9](./papers/vla/2504.16054/2504.16054.pdf#figure=9))",
 		);
 	});
 

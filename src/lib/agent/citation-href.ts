@@ -32,10 +32,15 @@ export function splitCitationHref(href: string): {
 
 /** Strip zero-width / BOM noise that paste or LLM output often leaves on URLs. */
 export function cleanCitationHref(href: string): string {
-	return href
-		.trim()
-		.replace(/^<|>$/g, "")
-		.replace(/[\u200B-\u200D\uFEFF]/g, "");
+	return (
+		href
+			.trim()
+			.replace(/^<|>$/g, "")
+			.replace(/[\u200B-\u200D\uFEFF]/g, "")
+			// Streamdown's rehype-harden only treats paths starting with `/` `./` `../`
+			// as relative; we may prefix `./` for rendering — strip it before jumps.
+			.replace(/^\.\//, "")
+	);
 }
 
 /**

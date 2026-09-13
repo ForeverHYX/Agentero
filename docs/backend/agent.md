@@ -93,6 +93,12 @@ wait / kill / release 在分发时先获取或移除句柄，再经 `connection.
 run / warm / list / load / probe 共用 `agentero_acp_builder!`（name + terminal
 handler）；各入口自行挂 notification / permission 回调。
 
+**warm 与空会话**：模型列表来自 Session Setup 的 `configOptions`（协议不在
+`initialize` 提供），故 warm 仍需 `session/new`。若 Agent 声明
+`sessionCapabilities.delete`，warm 在读完 models/usage 后对该空会话调用
+`session/delete`，避免 `session/list` / CLI 历史堆积无消息 thread；未声明时仅
+debug 日志，行为与旧版相同。
+
 Kimi Code ACP 会把 `Bash`/`Glob`/`Grep` 等工具实现为 `terminal/create`。[当前实现](https://github.com/MoonshotAI/kimi-cli/blob/main/src/kimi_cli/acp/tools.py)
 会把完整 shell 文本放进 `command`；Host 对可解析的可执行文件继续按 `command + args`
 直接 spawn，对无法解析且没有 `args` 的命令在 Windows 用 PowerShell、Unix 用

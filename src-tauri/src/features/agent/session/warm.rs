@@ -14,7 +14,8 @@ use crate::features::agent::models::{
 use crate::features::agent::runtime::events::AgentEventEmitter;
 use crate::features::agent::session::config::apply_model_and_collaboration_prefs;
 use agent_client_protocol::schema::v1::{
-    NewSessionRequest, RequestPermissionRequest, SessionNotification, SessionUpdate,
+    DeleteSessionRequest, NewSessionRequest, RequestPermissionRequest, SessionNotification,
+    SessionUpdate,
 };
 use agent_client_protocol::{Agent, ConnectionTo};
 use std::path::PathBuf;
@@ -23,6 +24,10 @@ use uuid::Uuid;
 
 /// Background warm-up: spawn ACP → initialize → new_session → emit models/usage (no prompt).
 /// Used when Chat opens so the model selector and context meter are ready before first send.
+///
+/// When the agent advertises `sessionCapabilities.delete`, the warm session is removed via
+/// `session/delete` before disconnect so empty threads do not pile up in `session/list` /
+/// the agent's own history. Agents without delete keep today's behavior (debug log only).
 pub async fn warm_agent(
     app: AgentEventEmitter,
     desc: AgentDescriptor,
@@ -119,12 +124,17 @@ pub async fn warm_agent(
             let preferred_collaboration = preferred_collaboration.clone();
             let models_for_conn = models_for_conn.clone();
             move |connection: ConnectionTo<Agent>| async move {
-                timed_acp_initialize(
+                let init = timed_acp_initialize(
                     connection
                         .send_request(client_initialize_request())
                         .block_task(),
                 )
                 .await?;
+                let supports_delete = init
+                    .agent_capabilities
+                    .session_capabilities
+                    .delete
+                    .is_some();
 
                 let new_session = timed_acp_request(
                     "new_session",
@@ -161,6 +171,42 @@ pub async fn warm_agent(
 
                 // Brief settle so agents can push usage/config updates after session create.
                 tokio::time::sleep(std::time::Duration::from_millis(400)).await;
+
+                // Drop the empty warm session when the agent can remove it from history.
+                if supports_delete {
+                    match timed_acp_request(
+                        "delete_session",
+                        connection
+                            .send_request(DeleteSessionRequest::new(acp_session_id.clone()))
+                            .block_task(),
+                    )
+                    .await
+                    {
+                        Ok(_) => {
+                            log::debug!(
+                                target: "agentero::agent",
+                                "agent={} warm deleted empty session {}",
+                                agent_for_conn,
+                                acp_session_id
+                            );
+                        }
+                        Err(e) => {
+                            log::debug!(
+                                target: "agentero::agent",
+                                "agent={} warm session/delete failed for {}: {e}",
+                                agent_for_conn,
+                                acp_session_id
+                            );
+                        }
+                    }
+                } else {
+                    log::debug!(
+                        target: "agentero::agent",
+                        "agent={} warm left empty session {} (no sessionCapabilities.delete)",
+                        agent_for_conn,
+                        acp_session_id
+                    );
+                }
                 Ok(())
             }
         })

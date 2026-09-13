@@ -1,4 +1,3 @@
-import { homeDir, join } from "@tauri-apps/api/path";
 import { CheckCircle2, FolderOpen, Loader2, TriangleAlert } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -18,7 +17,10 @@ import { useOverlayRegistration } from "@/hooks/use-overlay-registration";
 import { errorText } from "@/lib/core/error";
 import { readJsonStorage, writeJsonStorage } from "@/lib/core/storage";
 import { isTauri } from "@/lib/core/tauri";
-import { pickZoteroDir } from "@/lib/paper/import/zotero-migrate";
+import {
+	discoverZoteroDirs,
+	pickZoteroDir,
+} from "@/lib/paper/import/zotero-migrate";
 import {
 	syncZotero,
 	type ZoteroSyncResult,
@@ -110,11 +112,10 @@ export function ZoteroSyncDialog({
 		void (async () => {
 			setDetecting(true);
 			try {
-				const candidates = [zoteroSyncDir, saved.dir];
-				if (!candidates.some(Boolean)) {
-					candidates.push(await join(await homeDir(), "Zotero"));
-				}
-				for (const c of candidates) {
+				const candidates = [zoteroSyncDir, saved.dir].filter((c): c is string =>
+					Boolean(c),
+				);
+				for (const c of [...candidates, ...(await discoverZoteroDirs())]) {
 					if (!c) continue;
 					if (!cancelled) setDir(c);
 					break;

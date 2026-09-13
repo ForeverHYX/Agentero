@@ -173,6 +173,7 @@ export {
 } from "@/lib/pdf/layout/run-analysis";
 export {
 	clearLayoutDocumentResult,
+	expandFocusBboxForOverlay,
 	type FocusedLayoutSnapshot,
 	type FocusedLayoutState,
 	getFocusedLayoutRegion,

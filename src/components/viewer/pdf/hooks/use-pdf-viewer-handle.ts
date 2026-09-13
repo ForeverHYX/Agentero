@@ -33,6 +33,7 @@ import { deletePdfAskThread, type PdfAskThread } from "@/lib/pdf/ask";
 import { isHighlightObject } from "@/lib/pdf/highlight/annotation-store";
 import type { PdfHighlight } from "@/lib/pdf/highlight/types";
 import {
+	expandFocusBboxForOverlay,
 	layoutKindFromRegionId,
 	setFocusedLayoutRegion,
 } from "@/lib/pdf/layout";
@@ -168,14 +169,28 @@ export function usePdfViewerHandle({
 				});
 			},
 			scrollToLayoutRegion: (region) => {
+				const kind = region.kind ?? layoutKindFromRegionId(region.id);
+				const bbox = expandFocusBboxForOverlay(region.bbox, kind);
+				const page =
+					docCapRef.current?.getDocument(docId)?.pages[region.pageIndex];
+				const pageSize = page?.size;
+				const pageCoordinates = pageSize
+					? {
+							x: bbox.x * pageSize.width,
+							y: bbox.y * pageSize.height,
+						}
+					: undefined;
 				scrollRef.current?.scrollToPage({
 					pageNumber: region.pageIndex + 1,
 					behavior: "instant",
+					...(pageCoordinates
+						? { pageCoordinates, alignX: 0, alignY: 18 }
+						: {}),
 				});
 				setFocusedLayoutRegion(docId, region.id, {
 					pageIndex: region.pageIndex,
-					bbox: region.bbox,
-					kind: region.kind ?? layoutKindFromRegionId(region.id),
+					bbox,
+					kind,
 				});
 			},
 			renderRegion: async ({ pageIndex, bbox, maxEdgePx }) => {

@@ -161,6 +161,7 @@
 		"createDesktopOnly": "Create vault is only available in the Tauri app.",
 		"dialogTitle": "Select Agentero vault folder",
 		"createDialogTitle": "Choose folder for new Agentero vault",
+		"zoteroVaultDialogTitle": "Step 1: Choose a new Agentero vault folder",
 		"createFailed": "Failed to create vault.",
 		"readDesktopOnly": "Reading local files requires the Tauri app.",
 		"writeDesktopOnly": "Writing local files requires the Tauri app.",

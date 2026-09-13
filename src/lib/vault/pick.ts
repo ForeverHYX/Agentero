@@ -26,7 +26,9 @@ export async function pickVaultDirectory(): Promise<string | null> {
 }
 
 /** Pick a directory that will be scaffolded as a new Agentero vault. */
-export async function pickCreateVaultDirectory(): Promise<string | null> {
+export async function pickCreateVaultDirectory(
+	title = i18n.t("app:vault.createDialogTitle"),
+): Promise<string | null> {
 	if (!isTauri()) {
 		throw new Error(i18n.t("app:vault.createDesktopOnly"));
 	}
@@ -34,7 +36,7 @@ export async function pickCreateVaultDirectory(): Promise<string | null> {
 	const selected = await open({
 		directory: true,
 		multiple: false,
-		title: i18n.t("app:vault.createDialogTitle"),
+		title,
 	});
 
 	if (selected === null) return null;

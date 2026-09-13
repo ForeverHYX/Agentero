@@ -1007,7 +1007,9 @@ export async function migrateZoteroFromWelcome(): Promise<void> {
 			return;
 		}
 		setVaultBusy(true);
-		const path = await pickCreateVaultDirectory();
+		const path = await pickCreateVaultDirectory(
+			i18n.t("app:vault.zoteroVaultDialogTitle"),
+		);
 		if (!path) return;
 		if (await isZoteroDataDir(path)) {
 			notifyError(i18n.t("sidebar:zoteroMigrate.vaultIsZotero"));

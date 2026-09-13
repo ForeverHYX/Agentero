@@ -7,6 +7,7 @@ import {
 	appDataDir,
 	configDir,
 	dataDir,
+	dirname,
 	homeDir,
 	join,
 } from "@tauri-apps/api/path";
@@ -66,10 +67,17 @@ export async function discoverZoteroDirs(): Promise<string[]> {
 	return found;
 }
 
-/** Guard the onboarding vault picker against selecting Zotero's data directory. */
+/** Guard the onboarding vault picker against placing a vault inside Zotero data. */
 export async function isZoteroDataDir(path: string): Promise<boolean> {
 	if (!isTauri()) return false;
-	return exists(await join(path, "zotero.sqlite"));
+	let current = path;
+	for (let depth = 0; depth < 32; depth++) {
+		if (await exists(await join(current, "zotero.sqlite"))) return true;
+		const parent = await dirname(current);
+		if (parent === current) break;
+		current = parent;
+	}
+	return false;
 }
 
 /** Backend scan error when the picked folder holds no zotero.sqlite. */

@@ -7,7 +7,7 @@ use crate::features::catalog::papers::{hide_arxiv_category_tag, PaperKind, Paper
 use crate::features::scholar_api::identifiers::{doi_slug, strip_arxiv_version};
 use crate::features::scholar_api::sources::translator::map_zotero_item;
 use crate::features::scholar_api::urls::{
-    acl_anthology_pdf_url, arxiv_canonical_urls, doi_landing_url,
+    acl_anthology_pdf_url, arxiv_canonical_urls, doi_landing_url, usenix_presentation_pdf_url,
 };
 use crate::features::scholar_api::{ApiPaper, PaperIdentifiers, PaperUrls};
 
@@ -334,11 +334,13 @@ pub fn enrich_remote_urls(meta: &mut PaperRecord) {
         }
     }
 
-    // ACL Anthology landing pages don't expose a PDF attachment, but the PDF
-    // is always available at <landing>.pdf.
+    // ACL Anthology and USENIX presentation landing pages don't expose a PDF
+    // attachment in Translator, but the PDF URL follows a deterministic pattern.
     if meta.pdf_url.is_none() {
         if let Some(url) = meta.source_url.as_deref().or(meta.html_url.as_deref()) {
             if let Some(pdf) = acl_anthology_pdf_url(url) {
+                meta.pdf_url = Some(pdf);
+            } else if let Some(pdf) = usenix_presentation_pdf_url(url) {
                 meta.pdf_url = Some(pdf);
             }
         }
@@ -672,6 +674,30 @@ mod tests {
         assert_eq!(
             meta.pdf_url.as_deref(),
             Some("https://aclanthology.org/2026.acl-long.1248.pdf")
+        );
+    }
+
+    #[test]
+    fn enrich_remote_urls_fills_usenix_presentation_pdf() {
+        let item = serde_json::json!({
+            "itemType": "conferencePaper",
+            "title": "Harmonizing Efficiency and Practicability: Optimizing Resource Utilization in Serverless Computing with Jiagu",
+            "creators": [
+                {"firstName": "Qingyuan", "lastName": "Liu", "creatorType": "author"}
+            ],
+            "date": "2024",
+            "conferenceName": "2024 USENIX Annual Technical Conference (USENIX ATC 24)",
+            "ISBN": "9781939133410",
+            "url": "https://www.usenix.org/conference/atc24/presentation/liu-qingyuan"
+        });
+        let meta = map_zotero_item_to_record(&item).expect("map");
+        assert_eq!(
+            meta.pdf_url.as_deref(),
+            Some("https://www.usenix.org/system/files/atc24-liu-qingyuan.pdf")
+        );
+        assert_eq!(
+            meta.publication.as_deref(),
+            Some("2024 USENIX Annual Technical Conference (USENIX ATC 24)")
         );
     }
 }

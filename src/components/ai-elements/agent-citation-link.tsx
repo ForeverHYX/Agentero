@@ -2,7 +2,11 @@
 
 import type { ComponentPropsWithoutRef, ReactNode } from "react";
 import { isValidElement, useCallback, useMemo } from "react";
-import { rewriteCitationHrefToPdf } from "@/lib/agent/citation-href";
+import {
+	citationLabelFromHref,
+	isCitationStatusLabel,
+	rewriteCitationHrefToPdf,
+} from "@/lib/agent/citation-href";
 import { cn } from "@/lib/core/utils";
 
 type AgentCitationLinkProps = ComponentPropsWithoutRef<"a"> & {
@@ -74,7 +78,14 @@ export function AgentCitationLink({
 		[resolvedHref, incomplete, onOpenSource],
 	);
 
-	const label = labelFromChildren(children) || resolvedHref || "link";
+	const rawLabel = labelFromChildren(children);
+	const label = useMemo(() => {
+		if (rawLabel && !isCitationStatusLabel(rawLabel)) return rawLabel;
+		if (resolvedHref && !incomplete) {
+			return citationLabelFromHref(resolvedHref) || resolvedHref;
+		}
+		return rawLabel || "link";
+	}, [rawLabel, resolvedHref, incomplete]);
 
 	// Every resolved agent link is a pill. Ignore Streamdown's default
 	// `underline text-primary` className so chips stay chip-shaped.

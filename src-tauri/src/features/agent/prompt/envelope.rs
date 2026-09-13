@@ -37,7 +37,9 @@ pub fn build_prompt(
         `[Figure 1](papers/<id>/<id>.pdf#figure=1)`, or `[p.11](papers/<id>/<id>.pdf#page=11)`. \
         Notes: `[[papers/<id>/NOTES]]`. Do not cite `source/**/*.tex` in hrefs \
         (read TeX for accuracy, link the PDF). For web pages use `[domain](https://...)`. \
-        Do not wrap citations as `([…])` and do not end with a separate `## Sources` block.";
+        Do not wrap citations as `([…])`, do not end with a separate `## Sources` block, \
+        and never use status words like `blocked` / `read` / `failed` as the link label \
+        or as a trailing `[blocked]` tag — if a file was unreadable, omit it or explain in prose.";
 
     let system = match workflow {
         "summary" => {
@@ -545,7 +547,8 @@ mod tests {
         assert!(p.contains("[[papers/<id>/NOTES]]"));
         assert!(p.contains("[Section 2.3](papers/<id>/<id>.pdf#section=2.3)"));
         assert!(p.contains("Do **not** cite") || p.contains("source/**/*.tex"));
-        assert!(p.contains("no wrapping parentheses") || p.contains("Do not write `([…])`"));
+        assert!(p.contains("no wrapping parentheses") || p.contains("Do not wrap citations"));
+        assert!(p.contains("never use status words like `blocked`"));
         assert!(!p.contains("([Section 2.3]"));
         assert!(!p.contains("([Figure 1]"));
         assert!(!p.contains("PAPER.md#section=2.3)"));

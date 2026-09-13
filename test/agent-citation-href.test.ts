@@ -1,9 +1,12 @@
 import { describe, expect, it } from "vitest";
 import {
 	citationHrefFromWikiParts,
+	citationLabelFromHref,
 	isAgentCitationHref,
+	isCitationStatusLabel,
 	paperDirFromCitationPath,
 	rewriteCitationHrefToPdf,
+	stripCitationStatusTags,
 } from "@/lib/agent/citation-href";
 
 describe("paperDirFromCitationPath", () => {
@@ -73,6 +76,31 @@ describe("isAgentCitationHref", () => {
 				"\u200bpapers/vla/2504.16054/2504.16054.pdf#page=1\u200b",
 			),
 		).toBe(true);
+	});
+});
+
+describe("stripCitationStatusTags", () => {
+	it("removes trailing status tags from source lines", () => {
+		expect(
+			stripCitationStatusTags(
+				"papers/Dflash/2608.02438/NOTES.md [blocked]\npapers/a/a.pdf#page=11 [read]",
+			),
+		).toBe("papers/Dflash/2608.02438/NOTES.md\npapers/a/a.pdf#page=11");
+	});
+});
+
+describe("citation status labels", () => {
+	it("detects status-only link labels", () => {
+		expect(isCitationStatusLabel("blocked")).toBe(true);
+		expect(isCitationStatusLabel("Failed")).toBe(true);
+		expect(isCitationStatusLabel("Section 2")).toBe(false);
+	});
+
+	it("derives a pill label from the href when the label is a status word", () => {
+		expect(
+			citationLabelFromHref("papers/vla/2504.16054/2504.16054.pdf#page=11"),
+		).toBe("2504.16054.pdf · p.11");
+		expect(citationLabelFromHref("papers/a/NOTES.md")).toBe("NOTES.md");
 	});
 });
 

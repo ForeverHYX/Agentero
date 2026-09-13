@@ -4,6 +4,9 @@
  */
 
 const TEX_EXT = /\.(tex|ltx)$/i;
+/** Trailing agent status tags still appear in older / permission-denied replies. */
+const STATUS_TAG = /\s*\[(blocked|read|failed|denied)\]/gi;
+const STATUS_LINK_LABELS = new Set(["blocked", "read", "failed", "denied"]);
 
 /** Fragment keys understood by Host `resolve_citation`. */
 export const CITATION_FRAGMENT_KEYS = new Set([
@@ -108,4 +111,38 @@ export function rewriteCitationHrefToPdf(href: string): string {
 	if (!id) return cleaned;
 	const pdf = `${paperDir}/${id}.pdf`;
 	return fragment ? `${pdf}#${fragment}` : pdf;
+}
+
+/**
+ * Strip agent-authored status tags like `introduction.tex [blocked]` that
+ * clutter the bubble and are not valid citation targets.
+ */
+export function stripCitationStatusTags(text: string): string {
+	return text.replace(STATUS_TAG, "");
+}
+
+/**
+ * True when the markdown link label is only a status word (`blocked`, …).
+ * Agents still emit `[blocked](papers/…)` when a read was denied under
+ * Restricted ACP permissions — the pill should show the path, not "blocked".
+ */
+export function isCitationStatusLabel(label: string): boolean {
+	return STATUS_LINK_LABELS.has(label.trim().toLowerCase());
+}
+
+/** Human pill label derived from a citation href (basename + fragment). */
+export function citationLabelFromHref(href: string): string {
+	const cleaned = cleanCitationHref(href);
+	if (!cleaned || cleaned === "streamdown:incomplete-link") return cleaned;
+	const { path, fragment } = splitCitationHref(cleaned);
+	const base =
+		path.replace(/\\/g, "/").split("/").filter(Boolean).pop() || path;
+	if (!fragment) return base || cleaned;
+	const eq = fragment.indexOf("=");
+	if (eq < 0) return `${base} · ${fragment}`;
+	const key = fragment.slice(0, eq).trim().toLowerCase();
+	const value = fragment.slice(eq + 1).trim();
+	if (key === "page" && value) return `${base} · p.${value}`;
+	if (value) return `${base} · ${key}=${value}`;
+	return base || cleaned;
 }

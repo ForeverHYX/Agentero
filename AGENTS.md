@@ -4,61 +4,18 @@
 
 Agentero 是一个基于 Tauri 2 + React 19 的本地优先科研工作台。Vault 中笔记与源文件以 Markdown/文件为准，论文结构化 metadata 以 `.agentero/catalog.sqlite` 为准。离开应用后数据仍可被外部工具读取。
 
-**核心能力：**
-
-- **论文库**：Catalog SQLite 管理论文集合，支持表头排序/选列/标签筛选、BibTeX 导出
-- **魔棒入库**：通过 URL/arXiv ID/DOI 一键导入论文，自动下载 PDF、解压 LaTeX 源码
-- **PDF 阅读与标注**：分屏阅读（左 PDF/右笔记），划词高亮/批注/翻译/提问，大纲与页码导航
-- **Agent 工作流**：BYOA 接入本机 ACP Agent，支持论文总结/问答/精读，选区上下文与 @ 提及
-- **Markdown 编辑**：Plate 编辑器，双链 `[[...]]`、Obsidian Callout、嵌套标题引用、内嵌图片管理
-- **Zotero Connector**：兼容官方浏览器扩展，一键保存文献到当前 Vault
-
 架构总览：[docs/architecture.md](docs/architecture.md)
-
-## 论文单元
-
-`papers/<id>/` 是最小论文单元（语义对象，不是普通文件夹）。内部约定：
-
-```text
-papers/<id>/
-├── NOTES.md          # 人/Agent 笔记
-├── <id>.pdf          # 主 PDF（可选）
-├── PAPER.md          # 无 TeX 时的派生正文
-├── source/           # TeX / e-print（不要往这里塞附件）
-├── marks/            # 阅读标注
-├── assets/           # NOTES 内嵌图
-└── attachments/      # 支撑材料：补充 PDF、幻灯片、代码仓库
-```
-
-- 支撑材料**只**放 `{paper}/attachments/`，不要堆在论文根目录，也不要放进 `source/`。
-- 不要预建空的 `attachments/`；有文件再创建。
-- 文件树默认把论文当叶子。`attachments/` 非空时论文行才出 chevron，子项直接挂在论文下（不显示 `attachments` 桶本身，也不展开 `source/` / `marks/` 等内部文件）。
-- `attachments/` 不是论文身份 marker。
-
-布局细则：[docs/backend/data-model.md](docs/backend/data-model.md)；树交互：[docs/frontend/vault-tree.md](docs/frontend/vault-tree.md)。Vault 内 Agent 读的是盘上 `AGENTS.md`（创建时由 Host 模板写入）。
-
-## 技术速览
-
-| 层 | 技术栈 | 关键能力 | 入口 |
-|---|---|---|---|
-| 前端 | React 19、TypeScript、Tailwind CSS 4、shadcn/ui、AI Elements | zustand 按域状态管理、Plate Markdown 编辑器、EmbedPDF 渲染、Dockview 多面板工作区 | [docs/frontend/](docs/frontend/index.md) |
-| Host | Rust、Tauri 2、feature-first 布局 | 文件系统与 Vault 树、Catalog SQLite、Wiki 双链索引、ACP Client、本地文件监听、可选 loopback MCP | [docs/backend/](docs/backend/index.md) |
-| CLI | Rust、`agentero` bin | headless Vault/Catalog 操作、论文标签管理、BibTeX 导入导出 | [docs/backend/cli.md](docs/backend/cli.md) |
 
 ## 开发规则
 
-- 优先做小而聚焦的改动，避免无关重构。
-- 保持 local-first：不要引入私有存储作为事实来源。
-- 高内聚、低耦合。
+- 优先做小而聚焦的改动，能用少的修改解决问题就不要增加复杂度。高内聚、低耦合。如果系统有额外冗余可以提示用户进行重构
+- 只加必要的影响性能和功能的测试代码，不加没有实际意义的测试用例。
 - 尽可能能复用能力，避免重复造轮子。
-- 未经明确确认，不要覆盖用户手写的 Vault 文件。
-- 在 UI 修改的过程中尽量少加入无关的、非必须的i18n 文案，如果能用icon表达，就不要加额外的描述 
-- 修改完成后，把当次相关的改动按照 commit 部分的要求提交。=
-- 编辑或生成 Markdown 时保留 Obsidian 兼容的双链文本（`[[...]]`）。
-- UI 保持简约：图标按钮必须有可访问名称和 Tooltip；避免常驻解释文案。操作失败用 `notifyError` Toast，不在侧栏 header 挂常驻错误条。
+- 在 UI 修改的过程中尽量少加入无关的、非必须的i18n 文案，如果能用icon表达，就不要加额外的描述。操作失败用 `notifyError` Toast，不在侧栏 header 挂常驻错误条。
 - 国际化（i18n）：所有面向用户文案必须经 `t()` 走 `react-i18next`。en 源语言 → 同步 `zh-CN`（`src/i18n/locales/`）。详见 [docs/frontend/shell.md](docs/frontend/shell.md)。
+- 如果修改了 Template 下的 Skill 和 AGENTS.md ，需要对应更新版本号。
 - 修改后需同步更新相关文档，并检查 Roadmap 和 Todo。
-- 如果修改了 Template 下的 Skill，需要对应更新版本号。
+- 修改完成后，把当次相关的改动按照 commit 部分的要求提交。
 
 ## Windows 注意事项
 
@@ -103,6 +60,12 @@ cargo test -p agentero-core   # tauri 无关基础层（crates/agentero-core）
 完成实现前运行最小必要验证。UI 改动优先启动应用检查对应流程。
 
 ## 文档地图
+
+| 层 | 技术栈 | 关键能力 | 入口 |
+|---|---|---|---|
+| 前端 | React 19、TypeScript、Tailwind CSS 4、shadcn/ui、AI Elements | zustand 按域状态管理、Plate Markdown 编辑器、EmbedPDF 渲染、Dockview 多面板工作区 | [docs/frontend/](docs/frontend/index.md) |
+| Host | Rust、Tauri 2、feature-first 布局 | 文件系统与 Vault 树、Catalog SQLite、Wiki 双链索引、ACP Client、本地文件监听、可选 loopback MCP | [docs/backend/](docs/backend/index.md) |
+| CLI | Rust、`agentero` bin | headless Vault/Catalog 操作、论文标签管理、BibTeX 导入导出 | [docs/backend/cli.md](docs/backend/cli.md) |
 
 | 分类 | 内容 | 路径 |
 |---|---|---|

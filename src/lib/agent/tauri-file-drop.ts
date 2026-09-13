@@ -9,14 +9,20 @@ import { isTauri } from "@/lib/core/tauri";
 
 export type TauriFileDropPayload = DragDropEvent;
 
-type Handler = (payload: TauriFileDropPayload) => void;
+type Handler = (payload: TauriFileDropPayload) => unknown;
 
-const handlers = new Set<Handler>();
+type HandlerRegistration = {
+	handler: Handler;
+	priority: number;
+};
+
+const handlers = new Set<HandlerRegistration>();
 let startPromise: Promise<UnlistenFn | null> | null = null;
 
 function dispatch(payload: TauriFileDropPayload): void {
-	for (const handler of handlers) {
-		handler(payload);
+	const ordered = [...handlers].sort((a, b) => b.priority - a.priority);
+	for (const registration of ordered) {
+		if (registration.handler(payload) === true) break;
 	}
 }
 
@@ -36,11 +42,19 @@ async function ensureStarted(): Promise<UnlistenFn | null> {
 	return startPromise;
 }
 
-export function subscribeTauriFileDrop(handler: Handler): () => void {
-	handlers.add(handler);
+/**
+ * Higher-priority handlers run first. Returning `true` claims the payload so
+ * lower-priority fallbacks cannot import the same native drop twice.
+ */
+export function subscribeTauriFileDrop(
+	handler: Handler,
+	options?: { priority?: number },
+): () => void {
+	const registration = { handler, priority: options?.priority ?? 0 };
+	handlers.add(registration);
 	void ensureStarted();
 	return () => {
-		handlers.delete(handler);
+		handlers.delete(registration);
 	};
 }
 

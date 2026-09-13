@@ -23,12 +23,12 @@ import {
 	isPdfMimeOrUti,
 } from "@/lib/core/file-accept";
 import { notifyError } from "@/lib/core/notify";
-import { basenameOf } from "@/lib/core/path";
 import { isVaultFileDragActive } from "@/lib/core/vault-file-drag";
 import { libraryDropParentDir } from "@/lib/paper/api";
 import { dropLocalPdfs } from "@/lib/paper/import-actions";
 import { currentLookupParentDir } from "@/lib/paper/library-actions";
 import {
+	pdfsFromPaths,
 	type ResolvedDropPdf,
 	resolveDroppedPdfPaths,
 	snapshotDataTransfer,
@@ -112,44 +112,39 @@ export function useLibraryPdfDrop(scopePath: string | null | undefined) {
 		return subscribeTauriFileDrop((payload) => {
 			if (isVaultFileDragActive()) {
 				setIsPdfDragOver(false);
-				return;
+				return false;
 			}
 			if (payload.type === "leave" || payload.type === "drop") {
+				let claimed = false;
 				if (payload.type === "drop") {
-					const pdfPaths = payload.paths.filter((path) =>
-						hasPdfExtension(path),
-					);
+					const pdfs = pdfsFromPaths(payload.paths);
 					const el = shellRef.current;
-					if (
-						pdfPaths.length > 0 &&
+					const overShell =
 						el != null &&
-						isPhysicalPointInRect(payload.position, el.getBoundingClientRect())
-					) {
-						importPdfs(
-							pdfPaths.map((path) => ({
-								path,
-								sourceName: basenameOf(path),
-							})),
-						);
+						isPhysicalPointInRect(payload.position, el.getBoundingClientRect());
+					if (pdfs.length > 0 && overShell) {
+						importPdfs(pdfs);
+						claimed = true;
 					}
 				}
 				tauriPathsRef.current = [];
 				setIsPdfDragOver(false);
-				return;
+				return claimed;
 			}
 			if (payload.type === "enter") {
 				tauriPathsRef.current = payload.paths;
 			}
 			const paths = tauriPathsRef.current;
-			if (!paths.some((path) => hasPdfExtension(path))) {
+			if (!pdfsFromPaths(paths).length) {
 				setIsPdfDragOver(false);
-				return;
+				return false;
 			}
 			const el = shellRef.current;
 			const over =
 				el != null &&
 				isPhysicalPointInRect(payload.position, el.getBoundingClientRect());
 			setIsPdfDragOver(over);
+			return false;
 		});
 	}, [importPdfs]);
 

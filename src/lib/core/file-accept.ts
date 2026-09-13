@@ -154,6 +154,11 @@ export function dataTransferLooksLikeOsFiles(
 	} catch {
 		// ignore
 	}
+	try {
+		if (dt.files?.length) return true;
+	} catch {
+		// ignore
+	}
 	return false;
 }
 
@@ -342,6 +347,15 @@ export function dataTransferLooksLikePdfs(
 		} else if (/\.[a-z0-9]+$/i.test(name)) {
 			sawNonPdf = true;
 		}
+	}
+
+	// Some desktop WebViews expose the absolute path on File but omit the
+	// filename from the drag metadata. Use that path for classification too.
+	for (const file of filesFromDataTransfer(dt)) {
+		const path = (file as File & { path?: string }).path;
+		if (!path) continue;
+		if (hasPdfExtension(path)) sawPdf = true;
+		else if (/\.[a-z0-9]+$/i.test(path)) sawNonPdf = true;
 	}
 
 	if (sawPdf) return true;

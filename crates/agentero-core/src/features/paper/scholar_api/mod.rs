@@ -155,7 +155,14 @@ pub enum ApiError {
 
 impl From<ApiError> for AppError {
     fn from(value: ApiError) -> Self {
-        AppError::message(value.to_string())
+        match value {
+            // Stable wire code so callers (e.g. PDF recognize) can branch on
+            // arXiv / Crossref 429 without string-matching Display text.
+            ApiError::RateLimited => AppError::domain("rate_limited", "rate limited"),
+            ApiError::Cancelled => AppError::domain("cancelled", "cancelled"),
+            ApiError::NotFound => AppError::domain("not_found", "not found"),
+            other => AppError::message(other.to_string()),
+        }
     }
 }
 

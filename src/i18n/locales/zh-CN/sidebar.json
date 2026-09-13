@@ -146,6 +146,7 @@
 		"importPdfMerged": "已将 PDF 合入已有条目：「{{title}}」",
 		"importPdfMergedMany": "已将 {{count}} 个 PDF 合入已有条目",
 		"recognizeMerged": "识别后的 PDF 已合入已有条目：{{id}}",
+		"recognizeArxivRateLimited": "arXiv 接口限流（{{id}}），未能补全标题/作者。请稍后再点「刷新元数据」。",
 		"importFailed": "导入失败",
 		"exportFailed": "导出失败",
 		"backfillPublication": "补全期刊/会议",

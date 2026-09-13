@@ -27,6 +27,7 @@ import {
 import { isPaperAssetPath, isPaperDirectory } from "@/lib/paper";
 import {
 	dataTransferHasFiles,
+	pdfsFromPaths,
 	resolveDroppedPdfPaths,
 	snapshotDataTransfer,
 } from "@/lib/shell/external-file-drop";
@@ -68,6 +69,7 @@ export function useTreeDragDrop({
 	const [dropTarget, setDropTarget] = useState<string | null>(null);
 	const draggingRef = useRef<string[] | null>(null);
 	const moveClaimedRef = useRef(false);
+	const nativeDropPathsRef = useRef<string[]>([]);
 	/**
 	 * macOS delivers the native drop *after* DOM `dragend`, which clears
 	 * `dragging`. Keep the paths alive briefly past dragend so that late drop
@@ -217,12 +219,12 @@ export function useTreeDragDrop({
 
 	const handleRowDrop = useCallback(
 		(path: string, e: ReactDragEvent) => {
-			e.preventDefault();
 			const vaultMovePaths = dragging;
 			const markedVault = dataTransferTypes(e.dataTransfer).includes(
 				VAULT_FILE_DRAG_TYPE,
 			);
 			if (vaultMovePaths || markedVault) {
+				e.preventDefault();
 				const paths =
 					vaultMovePaths ??
 					e.dataTransfer
@@ -247,6 +249,7 @@ export function useTreeDragDrop({
 				dataTransferHasFiles(e.dataTransfer) &&
 				isPapersOrgFolder(path)
 			) {
+				e.preventDefault();
 				e.stopPropagation();
 				const dest = relPathForNode(path) || "papers";
 				const nativeDt =
@@ -303,25 +306,81 @@ export function useTreeDragDrop({
 	 */
 	useEffect(() => {
 		return subscribeTauriFileDrop((payload) => {
-			const paths = liveDragPaths();
-			if (!paths?.length) return;
-			if (payload.type === "leave") {
-				setDropTarget(null);
-				return;
+			const vaultPaths = liveDragPaths();
+			if (vaultPaths?.length) {
+				if (payload.type === "leave") {
+					nativeDropPathsRef.current = [];
+					setDropTarget(null);
+					return false;
+				}
+				const targetPath = rowPathAtPoint(payload.position);
+				if (payload.type === "enter" || payload.type === "over") {
+					setDropTarget(
+						targetPath && canDrop(targetPath, vaultPaths)
+							? dropDirFor(targetPath)
+							: null,
+					);
+					return false;
+				}
+				if (payload.type !== "drop") return false;
+				if (targetPath) finishVaultMove(vaultPaths, targetPath);
+				else {
+					setDragging(null);
+					setDropTarget(null);
+					endVaultFileDrag();
+				}
+				nativeDropPathsRef.current = [];
+				// Never let an internal file move fall through to the importer.
+				return true;
 			}
+
+			if (payload.type === "leave") {
+				nativeDropPathsRef.current = [];
+				setDropTarget(null);
+				return false;
+			}
+			if (payload.type === "enter") {
+				nativeDropPathsRef.current = payload.paths;
+			}
+			const nativePaths =
+				payload.type === "drop" ? payload.paths : nativeDropPathsRef.current;
+			const pdfs = onDropLocalPdfs ? pdfsFromPaths(nativePaths) : [];
 			const targetPath = rowPathAtPoint(payload.position);
 			if (payload.type === "enter" || payload.type === "over") {
 				setDropTarget(
-					targetPath && canDrop(targetPath, paths)
-						? dropDirFor(targetPath)
+					targetPath &&
+						pdfs.length > 0 &&
+						onDropLocalPdfs &&
+						isPapersOrgFolder(targetPath)
+						? targetPath
 						: null,
 				);
-				return;
+				return false;
 			}
-			if (payload.type !== "drop" || !targetPath) return;
-			finishVaultMove(paths, targetPath);
+			nativeDropPathsRef.current = [];
+			if (
+				payload.type !== "drop" ||
+				!targetPath ||
+				!pdfs.length ||
+				!onDropLocalPdfs ||
+				!isPapersOrgFolder(targetPath)
+			) {
+				return false;
+			}
+			setDropTarget(null);
+			onDropLocalPdfs(pdfs, relPathForNode(targetPath) || "papers");
+			return true;
 		});
-	}, [finishVaultMove, rowPathAtPoint, canDrop, dropDirFor, liveDragPaths]);
+	}, [
+		finishVaultMove,
+		rowPathAtPoint,
+		canDrop,
+		dropDirFor,
+		liveDragPaths,
+		onDropLocalPdfs,
+		isPapersOrgFolder,
+		relPathForNode,
+	]);
 
 	const handleRowDragEnd = useCallback(() => {
 		// WebKit fires this source-side event *before* wry delivers the native

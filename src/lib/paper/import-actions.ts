@@ -43,6 +43,7 @@ import { getSettings } from "@/lib/settings/react-store";
 import {
 	cleanupImportTempPaths,
 	isImportTempPath,
+	normalizeDroppedPath,
 } from "@/lib/shell/external-file-drop";
 import {
 	addPaperSearchDraft,
@@ -79,6 +80,46 @@ export type LookupSubmitOptions = {
 
 /** In-flight title-search jobs; closing the picker card cancels them. */
 const pendingSearchJobIds = new Set<string>();
+
+type LocalPdfDropRequest = {
+	vaultPath: string;
+	entries: LocalPdfImportEntry[];
+	parentDir: string;
+};
+
+/** Preserve rapid consecutive drops instead of discarding them while busy. */
+const localPdfDropQueue: LocalPdfDropRequest[] = [];
+let localPdfDropRunning = false;
+let localPdfDropIdleUnsubscribe: (() => void) | null = null;
+
+function drainLocalPdfDropQueue(): void {
+	if (localPdfDropRunning || localPdfDropQueue.length === 0) return;
+	if (libraryStore.getState().ioBusy) {
+		if (localPdfDropIdleUnsubscribe) return;
+		const unsubscribe = libraryStore.subscribe((state) => {
+			if (state.ioBusy) return;
+			localPdfDropIdleUnsubscribe = null;
+			unsubscribe();
+			drainLocalPdfDropQueue();
+		});
+		localPdfDropIdleUnsubscribe = unsubscribe;
+		return;
+	}
+
+	localPdfDropRunning = true;
+	void (async () => {
+		try {
+			while (localPdfDropQueue.length > 0) {
+				const request = localPdfDropQueue.shift();
+				if (!request) break;
+				await importLocalPdf(request);
+			}
+		} finally {
+			localPdfDropRunning = false;
+			drainLocalPdfDropQueue();
+		}
+	})();
+}
 
 /**
  * Results the executor produced, keyed by job id: the submitter settles its
@@ -445,13 +486,25 @@ export function cancelCitingImport(): void {
 export async function importLocalPdf(opts?: {
 	entries?: LocalPdfImportEntry[];
 	parentDir?: string;
+	vaultPath?: string;
 }): Promise<void> {
-	const vaultPath = getVaultPath();
-	if (!vaultPath || libraryStore.getState().ioBusy) return;
 	// Paths under ~/.agentero/import-tmp from path-less WKWebView drops.
 	const stagingPaths = (opts?.entries ?? [])
 		.map((e) => e.filePath)
 		.filter(isImportTempPath);
+	const activeVaultPath = getVaultPath();
+	const vaultPath = opts?.vaultPath ?? activeVaultPath;
+	if (
+		!vaultPath ||
+		(opts?.vaultPath != null && opts.vaultPath !== activeVaultPath)
+	) {
+		void cleanupImportTempPaths(stagingPaths);
+		return;
+	}
+	if (libraryStore.getState().ioBusy) {
+		void cleanupImportTempPaths(stagingPaths);
+		return;
+	}
 	setLibraryIoBusy("import-pdf");
 	try {
 		await enqueueTaskSettled({
@@ -558,18 +611,26 @@ export function dropLocalPdfs(
 	parentDir: string,
 ): void {
 	if (!items.length) return;
-	const paths = items.map((i) => i.path);
+	const paths: string[] = [];
+	const seen = new Set<string>();
+	for (const item of items) {
+		const path = normalizeDroppedPath(item.path);
+		if (!path || seen.has(path)) continue;
+		seen.add(path);
+		paths.push(path);
+	}
+	if (!paths.length) return;
 	if (!getVaultPath()) {
 		notifyWarning(i18n.t("app:errors.dropPdfNeedsVault"));
 		void cleanupImportTempPaths(paths);
 		return;
 	}
-	if (libraryStore.getState().ioBusy) {
-		void cleanupImportTempPaths(paths);
-		return;
-	}
-	void importLocalPdf({
+	const vaultPath = getVaultPath();
+	if (!vaultPath) return;
+	localPdfDropQueue.push({
+		vaultPath,
 		entries: paths.map((filePath) => ({ filePath })),
 		parentDir: parentDir || "papers",
 	});
+	drainLocalPdfDropQueue();
 }

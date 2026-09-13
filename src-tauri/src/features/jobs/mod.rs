@@ -1276,6 +1276,29 @@ impl JobCenter {
         }
     }
 
+    /// Merge keys into a running job's `params` (e.g. soft warnings before
+    /// `Succeeded`). No-op when the job is missing or already terminal.
+    pub async fn merge_running_job_params(&self, job_id: &str, patch: serde_json::Value) {
+        let mut inner = self.inner.lock().await;
+        let id = JobId(job_id.to_string());
+        let Some(job) = inner.jobs.get_mut(&id) else {
+            return;
+        };
+        if job.state != JobState::Running {
+            return;
+        }
+        let mut params = job.params.take().unwrap_or_else(|| serde_json::json!({}));
+        match (params.as_object_mut(), patch.as_object()) {
+            (Some(dst), Some(src)) => {
+                for (k, v) in src {
+                    dst.insert(k.clone(), v.clone());
+                }
+            }
+            _ => params = patch,
+        }
+        job.params = Some(params);
+    }
+
     async fn finish(
         &self,
         job_id: &str,

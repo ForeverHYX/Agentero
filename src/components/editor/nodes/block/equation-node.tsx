@@ -95,24 +95,27 @@ export function EquationElement(props: PlateElementProps<TEquationElement>) {
 	});
 
 	return (
-		<PlateElement className="my-2 min-w-0" {...props}>
+		<PlateElement
+			{...props}
+			className="my-2 block w-full min-w-0 rounded-sm hover:bg-primary/10 data-[selected=true]:bg-primary/10"
+			data-selected={selected}
+		>
 			<Popover open={open} onOpenChange={setOpen} modal={false}>
 				<PopoverTrigger asChild>
 					<button
 						type="button"
 						className={cn(
-							"group flex w-full min-w-0 cursor-pointer select-none items-stretch justify-center rounded-sm hover:bg-primary/10 data-[selected=true]:bg-primary/10",
+							"group flex w-full min-w-0 cursor-pointer select-none items-stretch justify-center rounded-sm",
 							props.element.texExpression.length === 0
 								? "bg-muted p-3"
 								: "px-2 py-2",
 						)}
-						data-selected={selected}
 						contentEditable={false}
 					>
 						{props.element.texExpression.length > 0 ? (
 							<div
 								ref={katexRef}
-								className="agentero-scroll-both agentero-scroll-x-only min-w-0 max-w-full overflow-x-auto overflow-y-hidden py-1 text-center [&_.katex-display]:my-0 [&_.katex-display]:min-w-max"
+								className="agentero-scroll-both agentero-scroll-x-only w-full min-w-0 overflow-x-auto overflow-y-hidden py-1 text-center [&_.katex-display]:my-0 [&_.katex-display]:min-w-max"
 							/>
 						) : (
 							<span className="flex h-7 items-center gap-2 text-muted-foreground text-sm">
@@ -150,13 +153,13 @@ export function InlineEquationElement(
 	return (
 		<PlateElement
 			{...props}
-			className="mx-0.5 inline-block select-none rounded-sm"
+			className="mx-0.5 inline-flex max-w-full select-none rounded-sm align-middle"
 		>
 			<Popover open={open} onOpenChange={setOpen} modal={false}>
 				<PopoverTrigger asChild>
 					<span
 						className={cn(
-							"cursor-pointer rounded-sm px-1 hover:bg-primary/10",
+							"inline-flex max-w-full cursor-pointer items-center rounded-sm px-1 py-0.5 align-middle hover:bg-primary/10",
 							selected && "bg-primary/10",
 							props.element.texExpression.length === 0 &&
 								"text-muted-foreground",
@@ -167,7 +170,7 @@ export function InlineEquationElement(
 							ref={katexRef}
 							className={cn(
 								props.element.texExpression.length === 0 && "hidden",
-								"font-mono leading-none",
+								"min-w-0 max-w-full font-mono leading-normal",
 							)}
 						/>
 						{props.element.texExpression.length === 0 && (

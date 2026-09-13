@@ -1,4 +1,3 @@
-import { homeDir, join } from "@tauri-apps/api/path";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import {
 	BookOpen,
@@ -38,6 +37,7 @@ import { readJsonStorage, writeJsonStorage } from "@/lib/core/storage";
 import { runLocalActivity } from "@/lib/core/tasks";
 import { isTauri } from "@/lib/core/tauri";
 import {
+	discoverZoteroDirs,
 	isSqliteMissingError,
 	migrateZotero,
 	pickZoteroDir,
@@ -201,12 +201,14 @@ export function ZoteroMigrateDialog({
 		void (async () => {
 			setDetecting(true);
 			try {
-				const candidate = await join(await homeDir(), "Zotero");
-				const r = await scanZotero(candidate);
-				if (!cancelled && r.valid && r.itemCount > 0) {
-					setDir(candidate);
-					setScan(r);
-					setSelectedItems(new Set(r.items.map((i) => i.id)));
+				for (const candidate of await discoverZoteroDirs()) {
+					const r = await scanZotero(candidate);
+					if (!cancelled && r.valid && r.itemCount > 0) {
+						setDir(candidate);
+						setScan(r);
+						setSelectedItems(new Set(r.items.map((i) => i.id)));
+						break;
+					}
 				}
 			} catch {
 				// no default library here — the user picks the folder manually
@@ -436,6 +438,9 @@ export function ZoteroMigrateDialog({
 						</div>
 					) : (
 						<div className="space-y-4">
+							<p className="text-muted-foreground text-xs">
+								{t("sidebar:zoteroMigrate.stepsHint")}
+							</p>
 							<div className="space-y-1.5">
 								<Button
 									type="button"

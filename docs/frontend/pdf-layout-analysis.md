@@ -51,6 +51,7 @@ PP-DocLayoutV3  每页: render → detect → map to PDF points（仅无 sidecar
         ▼
 ③ 侧栏展示: isSidebarLayoutKind + dedupeLayoutRegions(minScore 默认 0.3)
         │  分区顺序：插图 → 表 → 算法 → **公式（最底）**
+        │  解析运行中：无结果时显示居中加载态；已有结果重跑时顶部显示进度条与 page/pct
         ▼
 右栏 Figures + 聚焦高亮（store.focused）+ 可选 PDF bbox 叠加层（Eye，调试）
         │  叠加层画 **rawRegions**（合并前、全 kind、无 NMS；score ≥ 0.3）

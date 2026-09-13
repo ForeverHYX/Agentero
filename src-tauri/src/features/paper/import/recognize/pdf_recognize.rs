@@ -409,13 +409,17 @@ pub(crate) async fn recognize_and_resolve(
         .filter(|a| !a.is_empty())
     {
         match fetch_arxiv_metadata(arxiv, task_id).await {
+            // The chain names whichever source actually answered (arxiv / s2
+            // / alphaxiv), so meta_source reflects the failover.
             Ok(meta) => {
-                return PdfIdentProbe::from_meta(&file_path, &api_paper_to_meta(&meta), "arxiv")
+                return PdfIdentProbe::from_meta(&file_path, &api_paper_to_meta(&meta), meta.source)
             }
             Err(e) => {
                 log::debug!(target: "agentero::recognize", "arXiv {arxiv} resolve failed: {e}");
                 let mut probe = title_fallback(&file_path, &hit);
                 probe.arxiv_id = Some(arxiv.to_string());
+                // The chain only reports rate limiting after its internal
+                // retry pass, so this warning means every source throttled.
                 if e.code() == "rate_limited" {
                     probe.warning = Some("arxiv_rate_limited".into());
                 }

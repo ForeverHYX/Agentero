@@ -135,7 +135,7 @@ bitflags! {
 }
 
 /// Errors that can occur inside the `scholar_api` layer.
-#[derive(Debug, thiserror::Error)]
+#[derive(Debug, Clone, thiserror::Error)]
 pub enum ApiError {
     #[error("network: {0}")]
     Network(String),

@@ -1,6 +1,7 @@
 //! Concrete implementations of [`crate::features::scholar_api::traits`] for external
 //! scholarly services.
 
+pub mod alphaxiv;
 pub mod arxiv;
 pub mod biorxiv;
 pub mod crossref;

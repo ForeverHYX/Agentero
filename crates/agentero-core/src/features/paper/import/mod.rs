@@ -889,8 +889,9 @@ pub async fn resolve_metadata(
             Ok((meta, true))
         }
         Err(e) => {
-            // Direct-connect fallbacks from the resolver table (arXiv Atom,
-            // DOI → Crossref) so local dev works without the Runtime sidecar.
+            // Direct-connect fallback chains from the resolver table (arXiv →
+            // S2 → alphaXiv, DOI → Crossref → S2 → OpenAlex, PMID → PubMed)
+            // so local dev works without the Runtime sidecar.
             match crate::features::scholar_api::identifiers::fetch_direct_fallback(text, task_id)
                 .await
             {
@@ -900,7 +901,7 @@ pub async fn resolve_metadata(
                 }
                 Some(Err(err)) => Err(err),
                 None => Err(AppError::message(format!(
-                    "translator unreachable at {translator_base} ({e}); only arXiv/Crossref fallbacks are available without Runtime"
+                    "translator unreachable at {translator_base} ({e}); no identifier matched the direct-connect fallback chains (arXiv/S2/alphaXiv, DOI/Crossref/S2/OpenAlex, PMID/PubMed)"
                 ))),
             }
         }

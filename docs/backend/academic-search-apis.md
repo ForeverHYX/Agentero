@@ -20,6 +20,7 @@ Agentero Host 端（`src-tauri/src/features/`）在论文识别、入库、引�
 | **OpenAlex REST API** | `GET https://api.openalex.org/works` | 标题搜索兜底（含 `cited_by_count`） | `features/paper/scholar_api/search.rs`（`SourceScope::All` 兜底源） |
 | **Unpaywall** | `GET https://api.unpaywall.org/v2/{doi}` | DOI → 开放获取 PDF | `features/paper/import/download.rs` |
 | **PubMed / NCBI E-utilities** | `GET https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi` / `efetch.fcgi` | 标题/PMID → 医学/生命科学元数据 | `features/paper/scholar_api/sources/pubmed.rs` |
+| **alphaXiv** | `GET https://api.alphaxiv.org/papers/v3/{id}/preview`、`GET /v1/search/paper?q=` | arXiv 元数据/标题搜索的末位备份源（未文档化匿名 JSON API） | `features/paper/scholar_api/sources/alphaxiv.rs` |
 | **bioRxiv** | `GET https://api.biorxiv.org/details/biorxiv/{doi}` | DOI → 生命科学预印本元数据 | `features/paper/scholar_api/sources/biorxiv.rs` |
 | **medRxiv** | `GET https://api.biorxiv.org/details/medrxiv/{doi}` | DOI → 医学预印本元数据 | `features/paper/scholar_api/sources/biorxiv.rs` |
 | **Zotero Recognizer** | `POST https://services.zotero.org/recognizer/recognize` | PDF 首页文字几何识别 | `features/paper/import/recognize/pdf_recognize.rs` |
@@ -42,11 +43,13 @@ Agentero Host 端（`src-tauri/src/features/`）在论文识别、入库、引�
 2. **Translator Runtime**（`features/import/mod.rs::resolve_metadata`）
    - 若用户输入被识别为 arXiv id / DOI / URL，会构造 `{base}/web` 或 `{base}/search` 请求。
    - arXiv 的各类输入（`2508.05004`、`arXiv:2508.05004v2`、`https://arxiv.org/pdf/...`、`https://arxiv.org/html/...`）都会被规范化为 `https://arxiv.org/abs/{id}` 再走 `/web`。
-   - Translator 失败且输入是 arXiv id 时，本地 fallback 到 `fetch_arxiv_metadata`。
-3. **Crossref DOI fallback**（`features/paper/scholar_api/identifiers/fallback.rs::fetch_crossref_metadata`）
-   - 当 Translator 无法解析一个 DOI 时，`fetch_direct_fallback` 直接请求 `api.crossref.org/works/{doi}`。
-4. **arXiv Atom 直接 fallback**（`features/paper/scholar_api/identifiers/fallback.rs::fetch_arxiv_metadata`）
-   - 请求 `export.arxiv.org/api/query?id_list={id}`，解析 `<arxiv:journal_ref>` 作为 publication/venue。
+   - Translator 失败时按标识符类型走**直连兜底链**（`scholar_api::identifiers::fallback`，见下）。
+3. **直连兜底链**（`features/paper/scholar_api/identifiers/fallback.rs`）
+   - arXiv → `ARXIV_CHAIN` = arXiv Atom → S2 `ARXIV:{id}` → alphaXiv `/papers/v3/{id}/preview`。
+   - DOI → `DOI_CHAIN` = Crossref `works/{doi}` → S2 `DOI:{doi}` → OpenAlex。
+   - PMID → `PMID_CHAIN` = PubMed `efetch`。
+   - 执行模型是**错峰投机并发 + 优先级顺序接受**（hedged chain）：链内所有源同时 spawn，第 i 个源先睡 `i×600ms` 再请求，随后严格按优先级顺序 await——首个非空 `Ok` 胜出并 abort 其余在飞请求。健康主源在错峰窗口内完成时请求数与单源直连相同；主源 429/慢时失败前缀时延取 `max` 而非 `sum`。整趟全失败且含 429 → 2s 冷却后重试一趟，仍失败按 `rate_limited` 上报（#524：不再误报「无结果」）。
+   - arXiv Atom 解析 `<arxiv:journal_ref>` 作为 publication/venue（链内其余源不提供 venue 回填语义，透明受益于既有 merge 偏好）。
 
 > **被引数（`citation_count`）**：Crossref 解析 `is-referenced-by-count`、OpenAlex 解析 `cited_by_count`、Semantic Scholar 解析 `citationCount`，三者 `capabilities()` 均声明 `PROVIDE_CITATION_COUNT`；Crossref / OpenAlex 的 title search 还必须把该字段列进 `select` 白名单，否则 API 根本不返回它。`api_paper_to_meta` 把值带进 `PaperRecord`，`merge_api_papers` 合并两个源时取较大值（各自索引的引用文献子集不同）。arXiv Atom 与 Translator 不产出被引数。**注意**：入库以 Translator 为主路径，`map_zotero_item_to_record` 不带被引数，因此常规导入写入的仍是 NULL；只有 Translator 失败后降级到 Crossref 直连的 DOI 导入才会落进真实值。完整缺口见 [catalog.md](catalog.md)。
 
@@ -58,8 +61,8 @@ Agentero Host 端（`src-tauri/src/features/`）在论文识别、入库、引�
 
 1. 本地 liteparse 探测 PDF 前若干页文字几何。
 2. 将文字几何按 Zotero Worker 形状提交到 `https://services.zotero.org/recognizer/recognize`，获取可能的 DOI / arXiv / title。
-3. 若识别出 DOI → `import/mod.rs::resolve_metadata` → Translator → Crossref 直连 fallback。
-4. 若识别出 arXiv → `fetch_arxiv_metadata`。
+3. 若识别出 DOI → `import/mod.rs::resolve_metadata` → Translator → DOI 兜底链（Crossref→S2→OpenAlex）。
+4. 若识别出 arXiv → arXiv 兜底链（Atom→S2→alphaXiv）；`meta_source` 如实反映实际应答源。
 5. 仅有 title/authors 时 → 生成本地 PDF 占位元数据（`meta_from_recognize`）。
 
 ### 2.3 参考文献在线补全
@@ -157,7 +160,8 @@ UI 刷新（`paper_resolve_identifier`）对 DOI/arXiv/URL **先走标识符解�
 
 | 能力 | 并发控制 | 说明 |
 |---|---|---|
-| 标题/关键词搜索 | `SEARCH_CONCURRENCY = 2`（Semaphore） | S2 免费搜索端点限流严格，arXiv Atom 也有速率限制；单条查询并行占用至多 2 个 permit（S2 + arXiv） |
+| scholar_api 全部请求 | `GLOBAL_CONCURRENCY = 4`（`scholar_api/client.rs` Semaphore） | 6 个标题搜索源并发时尾部排队，排队计入各源 8s `FETCH_BUDGET`；429→`RateLimited`、404→`NotFound` 统一处理 |
+| 直连兜底链 | 错峰 600ms/源 + 优先级顺序接受 | 主源健康时零请求放大；链整体限流才 2s 重试一趟 |
 | 在线参考文献 | `ONLINE_REFERENCE_CONCURRENCY = 2` | 与 title search 独立 |
 | 批量入库 | 默认 `concurrency = 5` | `LookupImportBatchArgs.concurrency` 可覆盖 |
 | 反向引用发现 | `FETCH_CONCURRENCY = 8` | 实测 8 并发比串行快约 4.6 倍 |
@@ -184,13 +188,13 @@ Translator Runtime 约定端点：
 
 | 场景 | 第一选择 | Fallback | 最后兜底 |
 |---|---|---|---|
-| 用户输入 title/关键词 | S2 ∥ arXiv 并行竞速（5s 预算内 S2 优先） | 已在途的 arXiv 结果 | 无 |
-| 用户输入 arXiv id | Translator `/web` (canonical abs URL) | arXiv Atom | 无 |
-| 用户输入 DOI | Translator `/search` | Crossref `works/{doi}` | 无 |
-| 用户输入 PMID | Translator `/search` | PubMed `efetch` | 无 |
+| 用户输入 title/关键词 | 6 源并发（S2/Crossref/OpenAlex/arXiv/PubMed/alphaXiv，S2 match 3s 快路径优先） | 单源失败 warn 降级；任一源应答即返回 | 全源失败且含 429 → 报 `rate limited`（#524 不再误报无结果） |
+| 用户输入 arXiv id | Translator `/web` (canonical abs URL) | arXiv 链：Atom → S2 → alphaXiv（错峰投机并发） | 链整体限流 → 2s 重试一趟 → `rate_limited` |
+| 用户输入 DOI | Translator `/search` | DOI 链：Crossref → S2 → OpenAlex（错峰投机并发） | 同上 |
+| 用户输入 PMID | Translator `/search` | PubMed 链：`efetch` | 同上 |
 | 用户输入 URL | Translator `/web` | - | 无 |
-| PDF 识别出 DOI | Translator | Crossref | 本地 title fallback |
-| PDF 识别出 arXiv | arXiv Atom | - | 本地 title fallback |
+| PDF 识别出 DOI | Translator | DOI 链（Crossref→S2→OpenAlex） | 本地 title fallback |
+| PDF 识别出 arXiv | arXiv 链（Atom→S2→alphaXiv） | - | 本地 title fallback；链整体限流 → `arxiv_rate_limited` 警告 |
 | 在线参考文献 | S2 references | Crossref `reference[]` | 本地 TeX/`.bbl` |
 | 反向引用 | S2 citations | 无 | 无 |
 | 补全 publication | arXiv journal_ref / S2 `publicationVenue` | S2 `DOI:{doi}` → Crossref `container-title` | S2 title search |

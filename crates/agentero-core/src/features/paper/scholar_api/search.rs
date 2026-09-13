@@ -10,8 +10,8 @@ use std::time::Duration;
 use crate::features::paper::import::api_mapper::merge_api_paper_candidates;
 use crate::features::scholar_api::scoring::{is_same_paper, normalize_title, title_similarity};
 use crate::features::scholar_api::sources::{
-    arxiv::ArxivApi, crossref::CrossrefApi, openalex::OpenAlexApi, pubmed::PubMedApi,
-    semantic_scholar::SemanticScholarApi,
+    alphaxiv::AlphaxivApi, arxiv::ArxivApi, crossref::CrossrefApi, openalex::OpenAlexApi,
+    pubmed::PubMedApi, semantic_scholar::SemanticScholarApi,
 };
 use crate::features::scholar_api::traits::AcademicApi;
 use crate::features::scholar_api::{ApiError, ApiPaper, ApiQuery};
@@ -38,12 +38,19 @@ const SCORE_PRIORITY_WEIGHT: f64 = 0.10;
 const SCORE_CITATION_WEIGHT: f64 = 0.10;
 
 /// All sources capable of title search, ordered by descending priority.
+///
+/// With six sources firing concurrently under the shared
+/// `GLOBAL_CONCURRENCY = 4` client semaphore, the tail of the batch queues
+/// behind earlier permits — queue time counts against each source's
+/// `FETCH_BUDGET`, so worst-case search latency grows slightly with each
+/// source added here.
 const ALL_TITLE_SOURCES: &[&'static dyn AcademicApi] = &[
     &SemanticScholarApi,
     &CrossrefApi,
     &OpenAlexApi,
     &ArxivApi,
     &PubMedApi,
+    &AlphaxivApi,
 ];
 
 /// Preset scopes for title/keyword search.
@@ -81,6 +88,66 @@ impl SourceScope {
                 .collect(),
         }
     }
+}
+
+/// Why one source's title search failed (kept `ApiError`-free so failure
+/// policies are comparable in tests).
+#[derive(Debug, Clone, PartialEq, Eq)]
+enum FailureKind {
+    RateLimited,
+    Timeout,
+    Other(String),
+}
+
+/// One source's failure, retained for end-of-search summarization.
+#[derive(Debug, Clone)]
+struct SearchFailure {
+    source: &'static str,
+    kind: FailureKind,
+}
+
+fn failure_kind(e: &ApiError) -> FailureKind {
+    match e {
+        ApiError::RateLimited => FailureKind::RateLimited,
+        other => FailureKind::Other(other.to_string()),
+    }
+}
+
+/// Decide whether a zero-hit title search should surface an error instead of
+/// an empty result. Pure so the policy is unit-testable without network.
+///
+/// - `None` when any source answered (even with zero hits), when there are
+///   hits, or when nothing was attempted — keep the historical `Ok(vec![])`.
+///   A single authoritative "no such paper" beats guessing rate limiting.
+/// - `Some(RateLimited)` when every attempted source failed and at least one
+///   was rate limited (otherwise the caller would misreport "no search
+///   results" while the sources were merely throttled — #524).
+/// - `Some(Network(summary))` when every source failed without a rate limit.
+fn search_failure_error(
+    failures: &[SearchFailure],
+    attempted: usize,
+    hit_count: usize,
+) -> Option<ApiError> {
+    if attempted == 0 || hit_count > 0 || failures.len() < attempted {
+        return None;
+    }
+    if failures.iter().any(|f| f.kind == FailureKind::RateLimited) {
+        return Some(ApiError::RateLimited);
+    }
+    let names = failures
+        .iter()
+        .map(|f| f.source)
+        .collect::<Vec<_>>()
+        .join(", ");
+    Some(ApiError::Network(format!(
+        "all {attempted} title-search sources failed ({names})"
+    )))
+}
+
+/// One scoped source's title-search outcome for [`search_papers_by_title`].
+enum SourceOutcome {
+    Hits(Vec<RankedHit>),
+    Failed(SearchFailure),
 }
 
 /// A single search hit together with its rank inside the source that produced it.
@@ -155,25 +222,32 @@ pub async fn search_papers_by_title(
         async move {
             let name = source.name();
             match tokio::time::timeout(FETCH_BUDGET, source.fetch(&api_query)).await {
-                Ok(Ok(hits)) => hits
-                    .into_iter()
-                    .enumerate()
-                    .map(|(rank, paper)| RankedHit {
-                        paper,
-                        source_name: name,
-                        source_rank: rank,
-                    })
-                    .collect::<Vec<_>>(),
+                Ok(Ok(hits)) => SourceOutcome::Hits(
+                    hits.into_iter()
+                        .enumerate()
+                        .map(|(rank, paper)| RankedHit {
+                            paper,
+                            source_name: name,
+                            source_rank: rank,
+                        })
+                        .collect::<Vec<_>>(),
+                ),
                 Ok(Err(e)) => {
                     log::warn!("title search: {name} failed ({e})");
-                    Vec::new()
+                    SourceOutcome::Failed(SearchFailure {
+                        source: name,
+                        kind: failure_kind(&e),
+                    })
                 }
                 Err(_) => {
                     log::warn!(
                         "title search: {name} exceeded {}s budget",
                         FETCH_BUDGET.as_secs()
                     );
-                    Vec::new()
+                    SourceOutcome::Failed(SearchFailure {
+                        source: name,
+                        kind: FailureKind::Timeout,
+                    })
                 }
             }
         }
@@ -182,9 +256,19 @@ pub async fn search_papers_by_title(
     let (match_hits, fetch_results) =
         tokio::join!(match_future, futures_util::future::join_all(fetch_futures));
 
+    let attempted = sources.len();
+    let mut failures: Vec<SearchFailure> = Vec::new();
     ranked_hits.extend(match_hits);
-    for mut hits in fetch_results {
-        ranked_hits.append(&mut hits);
+    for outcome in fetch_results {
+        match outcome {
+            SourceOutcome::Hits(mut hits) => ranked_hits.append(&mut hits),
+            SourceOutcome::Failed(failure) => failures.push(failure),
+        }
+    }
+    // Every scoped source failed: report why instead of an empty result so a
+    // fully rate-limited search is not misreported as "no search results".
+    if let Some(e) = search_failure_error(&failures, attempted, ranked_hits.len()) {
+        return Err(e);
     }
 
     // Sort by source priority descending so deduplication keeps the highest
@@ -528,5 +612,86 @@ mod tests {
     fn empty_query_returns_empty() {
         let ranked = fuse_and_rank_candidates(vec![], "query", 5);
         assert!(ranked.is_empty());
+    }
+
+    fn failure(source: &'static str, kind: FailureKind) -> SearchFailure {
+        SearchFailure { source, kind }
+    }
+
+    #[test]
+    fn failure_kind_classifies_rate_limit() {
+        assert_eq!(
+            failure_kind(&ApiError::RateLimited),
+            FailureKind::RateLimited
+        );
+        assert_eq!(
+            failure_kind(&ApiError::Network("boom".into())),
+            FailureKind::Other("network: boom".into())
+        );
+    }
+
+    #[test]
+    fn all_sources_rate_limited_yields_rate_limited_error() {
+        let failures = vec![
+            failure("s2", FailureKind::RateLimited),
+            failure("crossref", FailureKind::RateLimited),
+            failure("arxiv", FailureKind::RateLimited),
+        ];
+        assert!(matches!(
+            search_failure_error(&failures, 3, 0),
+            Some(ApiError::RateLimited)
+        ));
+    }
+
+    #[test]
+    fn mixed_rate_limited_and_network_prefers_rate_limited() {
+        let failures = vec![
+            failure("s2", FailureKind::Timeout),
+            failure("crossref", FailureKind::RateLimited),
+        ];
+        assert!(matches!(
+            search_failure_error(&failures, 2, 0),
+            Some(ApiError::RateLimited)
+        ));
+    }
+
+    #[test]
+    fn all_sources_failed_without_rate_limit_yields_network_summary() {
+        let failures = vec![
+            failure("s2", FailureKind::Timeout),
+            failure("crossref", FailureKind::Other("network: boom".into())),
+        ];
+        match search_failure_error(&failures, 2, 0) {
+            Some(ApiError::Network(msg)) => {
+                assert!(msg.contains("2"), "summary names the count: {msg}");
+                assert!(msg.contains("s2") && msg.contains("crossref"), "{msg}");
+            }
+            other => panic!("expected network summary, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn one_source_answering_empty_suppresses_error() {
+        // Two of three sources failed; one answered with zero hits — an
+        // authoritative "no such paper" wins over a rate-limit guess.
+        let failures = vec![
+            failure("s2", FailureKind::RateLimited),
+            failure("crossref", FailureKind::RateLimited),
+        ];
+        assert!(search_failure_error(&failures, 3, 0).is_none());
+    }
+
+    #[test]
+    fn hits_present_suppresses_error() {
+        let failures = vec![
+            failure("s2", FailureKind::RateLimited),
+            failure("crossref", FailureKind::RateLimited),
+        ];
+        assert!(search_failure_error(&failures, 2, 1).is_none());
+    }
+
+    #[test]
+    fn nothing_attempted_suppresses_error() {
+        assert!(search_failure_error(&[], 0, 0).is_none());
     }
 }

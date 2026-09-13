@@ -62,7 +62,12 @@
 			"pageRunning": "Translating this page…",
 			"needLayout": "Run layout analysis first (Figures panel).",
 			"noText": "No extractable text regions to translate.",
-			"failed": "Full-text translate failed"
+			"failed": "Full-text translate failed",
+			"waiting": "Waiting for layout analysis…",
+			"cancelQueue": "Cancel queue",
+			"queuedToast": "Full-text translation queued — waiting for layout analysis",
+			"startedAfterLayout": "Layout analysis finished — full-text translation started",
+			"parseFailedWhileWaiting": "Layout analysis failed; translation cancelled"
 		},
 		"translation": {
 			"title": "Translation",

@@ -121,6 +121,7 @@ export function PdfTranslationViewerInner({
 		layoutRawRegions,
 		translationPane: true,
 		paperAbsPath,
+		paperRelPath,
 		paperKey,
 		vaultPath,
 	});

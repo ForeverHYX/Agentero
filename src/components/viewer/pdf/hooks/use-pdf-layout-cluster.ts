@@ -177,6 +177,7 @@ export function usePdfLayoutCluster({
 		layoutTranslateItemsByPage,
 		layoutTranslatePageStateByPage,
 		layoutTranslateRunning,
+		layoutTranslateWaiting,
 		layoutTranslateActive,
 		layoutTranslateLabel,
 		toggleLayoutTranslate,
@@ -186,6 +187,7 @@ export function usePdfLayoutCluster({
 		layoutRawRegions,
 		translationPane,
 		paperAbsPath,
+		paperRelPath,
 		paperKey,
 		vaultPath,
 	});
@@ -204,6 +206,7 @@ export function usePdfLayoutCluster({
 		layoutTranslateItemsByPage,
 		layoutTranslatePageStateByPage,
 		layoutTranslateRunning,
+		layoutTranslateWaiting,
 		layoutTranslateActive,
 		layoutTranslateLabel,
 		toggleLayoutTranslate,

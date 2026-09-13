@@ -46,7 +46,8 @@ type Run = RunOptions & {
 
 type Options = {
 	docId: string;
-	paperAbsPath: string;
+	paperAbsPath: string | null;
+	paperRelPath?: string | null;
 	layoutRawRegions: Item[];
 };
 
@@ -57,10 +58,53 @@ type View = {
 		{ active: boolean; running: boolean }
 	>;
 	layoutTranslateRunning: boolean;
+	layoutTranslateWaiting: boolean;
 	layoutTranslateLabel: string;
 	toggleLayoutTranslate: () => void;
 	togglePageLayoutTranslate: (pageIndex: number) => void;
 };
+
+type FakeTask = {
+	id: string;
+	kind: string;
+	status: string;
+	paperPath?: string | null;
+};
+
+type FakeStore<T> = {
+	getState: () => T;
+	setState: (patch: Partial<T>) => void;
+	subscribe: (listener: (state: T, prev: T) => void) => () => void;
+};
+
+/** Minimal zustand-vanilla stand-in: sync notify, partial setState. */
+function createFakeStore<T>(initial: T): FakeStore<T> {
+	let state = initial;
+	const listeners = new Set<(state: T, prev: T) => void>();
+	return {
+		getState: () => state,
+		setState(patch) {
+			const prev = state;
+			state = { ...state, ...patch };
+			for (const listener of listeners) listener(state, prev);
+		},
+		subscribe(listener) {
+			listeners.add(listener);
+			return () => listeners.delete(listener);
+		},
+	};
+}
+
+function region(pageIndex: number): Item {
+	return {
+		id: `region-${pageIndex}`,
+		pageIndex,
+		bbox: { x: 0, y: 0, w: 1, h: 1 },
+		kind: "text",
+		readingOrder: pageIndex,
+		source: `Source ${pageIndex}`,
+	};
+}
 
 type EffectSlot = {
 	deps: readonly unknown[];
@@ -73,6 +117,23 @@ function createHarness() {
 	const runs: Run[] = [];
 	const writes: unknown[][] = [];
 	const errors: unknown[][] = [];
+	const actions: unknown[][] = [];
+	const successes: unknown[][] = [];
+	const warnings: unknown[][] = [];
+	const dismissed: unknown[][] = [];
+	const enqueues: unknown[][] = [];
+	const backgroundTasks = createFakeStore<{ tasks: FakeTask[] }>({
+		tasks: [],
+	});
+	const layoutUi = createFakeStore<{
+		ui: { stage: string };
+		activeDocumentId: string | null;
+		activePaperAbsPath: string | null;
+	}>({
+		ui: { stage: "idle" },
+		activeDocumentId: null,
+		activePaperAbsPath: null,
+	});
 	let cursor = 0;
 	let dirty = true;
 	let effects: (() => void)[] = [];
@@ -81,14 +142,8 @@ function createHarness() {
 	let options: Options = {
 		docId: "paper-a",
 		paperAbsPath: "/vault/papers/a",
-		layoutRawRegions: [0, 1].map((pageIndex) => ({
-			id: `region-${pageIndex}`,
-			pageIndex,
-			bbox: { x: 0, y: 0, w: 1, h: 1 },
-			kind: "text",
-			readingOrder: pageIndex,
-			source: `Source ${pageIndex}`,
-		})),
+		paperRelPath: "papers/a",
+		layoutRawRegions: [0, 1].map((pageIndex) => region(pageIndex)),
 	};
 	const react = {
 		useState<T>(initial: T): [T, (next: T | ((previous: T) => T)) => void] {
@@ -156,6 +211,10 @@ function createHarness() {
 		},
 		persistLayoutTranslateSidecarBestEffort: (...args: unknown[]) =>
 			writes.push(args),
+		normalizeLayoutPaperKey: (path: string) =>
+			path.replace(/[/\\]+$/, "").replace(/\\/g, "/"),
+		enqueuePaperLayoutAnalysis: (...args: unknown[]) => enqueues.push(args),
+		layoutAnalysisStore: layoutUi,
 		runLayoutRegionTranslate(runOptions: RunOptions) {
 			return new Promise<Item[]>((resolve, reject) => {
 				runs.push({ ...runOptions, resolve, reject });
@@ -170,9 +229,20 @@ function createHarness() {
 	const modules: Record<string, unknown> = {
 		react,
 		"react-i18next": { useTranslation: () => ({ t: (key: string) => key }) },
+		sonner: {
+			toast: { dismiss: (...args: unknown[]) => dismissed.push(args) },
+		},
+		zustand: {
+			useStore: <T, S>(store: FakeStore<T>, selector: (state: T) => S): S =>
+				selector(store.getState()),
+		},
+		"@/lib/core/background-tasks": { backgroundTasksStore: backgroundTasks },
 		"@/lib/core/error": { errorText: String },
 		"@/lib/core/notify": {
 			notifyError: (...args: unknown[]) => errors.push(args),
+			notifyAction: (...args: unknown[]) => actions.push(args),
+			notifySuccess: (...args: unknown[]) => successes.push(args),
+			notifyWarning: (...args: unknown[]) => warnings.push(args),
 		},
 		"@/lib/pdf/layout": layout,
 		// Identity stub: the hook only maps known Host markers, else passes through.
@@ -206,6 +276,13 @@ function createHarness() {
 		runs,
 		writes,
 		errors,
+		actions,
+		successes,
+		warnings,
+		dismissed,
+		enqueues,
+		tasks: backgroundTasks,
+		analysis: layoutUi,
 		render,
 		get view() {
 			return view;
@@ -376,4 +453,155 @@ it("persists a successful current page and completes its job", async () => {
 		"Current result",
 	);
 	assert.equal(h.writes.length, writes + 1);
+});
+
+it("queues behind layout analysis and auto-starts when regions land", async () => {
+	const h = createHarness();
+	h.render({ layoutRawRegions: [] });
+	h.tasks.setState({
+		tasks: [
+			{
+				id: "job-1",
+				kind: "layoutAnalyze",
+				status: "running",
+				paperPath: "papers/a",
+			},
+		],
+	});
+	h.render();
+	h.view.toggleLayoutTranslate();
+	h.render();
+	assert.equal(h.view.layoutTranslateWaiting, true);
+	assert.equal(h.view.layoutTranslateLabel, "pdf.layoutTranslate.waiting");
+	assert.equal(h.runs.length, 0);
+	assert.equal(h.actions.length, 1);
+	assert.equal(h.actions[0]?.[0], "pdf.layoutTranslate.queuedToast");
+	assert.equal(h.enqueues.length, 0); // parse already pending
+
+	h.render({ layoutRawRegions: [region(0)] });
+	await h.flush();
+	assert.equal(h.view.layoutTranslateWaiting, false);
+	assert.equal(h.view.layoutTranslateRunning, true);
+	assert.equal(h.runs.length, 1);
+	assert.equal(h.successes.length, 1);
+	assert.equal(h.successes[0]?.[0], "pdf.layoutTranslate.startedAfterLayout");
+});
+
+it("cancels the queued wait on a second toggle", async () => {
+	const h = createHarness();
+	h.render({ layoutRawRegions: [] });
+	h.tasks.setState({
+		tasks: [
+			{
+				id: "job-1",
+				kind: "layoutAnalyze",
+				status: "queued",
+				paperPath: "papers/a",
+			},
+		],
+	});
+	h.render();
+	h.view.toggleLayoutTranslate();
+	h.render();
+	assert.equal(h.view.layoutTranslateWaiting, true);
+	h.view.toggleLayoutTranslate(); // cancel
+	h.render();
+	assert.equal(h.view.layoutTranslateWaiting, false);
+	assert.equal(h.runs.length, 0);
+	assert.equal(h.dismissed.length, 1); // queued toast dismissed
+	h.render({ layoutRawRegions: [region(0)] });
+	await h.flush();
+	assert.equal(h.runs.length, 0); // no auto-start after cancel
+	assert.equal(h.successes.length, 0);
+});
+
+it("cancels the queued wait when the tracked parse job fails", async () => {
+	const h = createHarness();
+	h.render({ layoutRawRegions: [] });
+	h.tasks.setState({
+		tasks: [
+			{
+				id: "job-1",
+				kind: "layoutAnalyze",
+				status: "running",
+				paperPath: "papers/a",
+			},
+		],
+	});
+	h.render();
+	h.view.toggleLayoutTranslate();
+	h.render();
+	assert.equal(h.view.layoutTranslateWaiting, true);
+	h.tasks.setState({
+		tasks: [
+			{
+				id: "job-1",
+				kind: "layoutAnalyze",
+				status: "failed",
+				paperPath: "papers/a",
+			},
+		],
+	});
+	h.render();
+	assert.equal(h.view.layoutTranslateWaiting, false);
+	assert.equal(h.warnings.length, 1);
+	assert.equal(
+		h.warnings[0]?.[0],
+		"pdf.layoutTranslate.parseFailedWhileWaiting",
+	);
+	h.render({ layoutRawRegions: [region(0)] });
+	await h.flush();
+	assert.equal(h.runs.length, 0);
+});
+
+it("enqueues layout analysis when nothing is pending and ignores stale failures", () => {
+	const h = createHarness();
+	h.tasks.setState({
+		tasks: [
+			{
+				id: "old-job",
+				kind: "layoutAnalyze",
+				status: "failed",
+				paperPath: "papers/a",
+			},
+		],
+	});
+	h.render({ layoutRawRegions: [] });
+	h.view.toggleLayoutTranslate();
+	h.render();
+	assert.equal(h.view.layoutTranslateWaiting, true); // stale failure ignored
+	assert.equal(h.enqueues.length, 1); // nothing pending → parse enqueued
+	assert.equal(h.actions.length, 1);
+});
+
+it("keeps the legacy hint for a loose PDF with nothing to enqueue", () => {
+	const h = createHarness();
+	h.render({ layoutRawRegions: [], paperAbsPath: null, paperRelPath: null });
+	h.view.toggleLayoutTranslate();
+	h.render();
+	assert.equal(h.view.layoutTranslateWaiting, false);
+	assert.equal(h.runs.length, 0);
+	assert.equal(h.errors.length, 1);
+	assert.equal(h.errors[0]?.[0], "pdf.layoutTranslate.needLayout");
+	assert.equal(h.enqueues.length, 0);
+});
+
+it("queues a page translate behind an in-viewer layout run", async () => {
+	const h = createHarness();
+	h.render({ layoutRawRegions: [] });
+	h.analysis.setState({
+		ui: { stage: "running" },
+		activeDocumentId: "paper-a",
+	});
+	h.render();
+	h.view.togglePageLayoutTranslate(0);
+	h.render();
+	assert.equal(h.view.layoutTranslateWaiting, true);
+	assert.equal(h.runs.length, 0);
+	h.render({ layoutRawRegions: [region(0), region(1)] });
+	await h.flush();
+	assert.equal(h.view.layoutTranslateRunning, true);
+	assert.equal(h.runs.length, 1);
+	assert.equal(h.runs[0].items.length, 1); // only the queued page
+	assert.equal(h.successes.length, 1);
 });

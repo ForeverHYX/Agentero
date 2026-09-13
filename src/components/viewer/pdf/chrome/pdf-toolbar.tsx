@@ -1,5 +1,5 @@
 import type { PdfEngine } from "@embedpdf/models";
-import { Languages, Library, Loader2, ScanSearch } from "lucide-react";
+import { Clock, Languages, Library, Loader2, ScanSearch } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
@@ -19,6 +19,8 @@ type PdfToolbarProps = {
 	engine: PdfEngine | null;
 	onToggleRegionSelect: () => void;
 	layoutTranslateRunning: boolean;
+	/** Queued behind layout analysis; plain click cancels the wait. */
+	layoutTranslateWaiting?: boolean;
 	layoutTranslateActive: boolean;
 	layoutTranslateLabel: string;
 	onToggleLayoutTranslate: () => void;
@@ -37,6 +39,7 @@ export function PdfToolbar({
 	engine,
 	onToggleRegionSelect,
 	layoutTranslateRunning,
+	layoutTranslateWaiting = false,
 	layoutTranslateActive,
 	layoutTranslateLabel,
 	onToggleLayoutTranslate,
@@ -65,6 +68,7 @@ export function PdfToolbar({
 		(event: React.PointerEvent<HTMLButtonElement>) => {
 			if (event.button !== 0) return;
 			if (layoutTranslateActive || layoutTranslateRunning) return;
+			if (layoutTranslateWaiting) return;
 			setLongPressing(true);
 			longPressTriggeredRef.current = false;
 			suppressNextClickRef.current = false;
@@ -75,7 +79,12 @@ export function PdfToolbar({
 				onToggleLayoutTranslate();
 			}, LONG_PRESS_MS);
 		},
-		[layoutTranslateActive, layoutTranslateRunning, onToggleLayoutTranslate],
+		[
+			layoutTranslateActive,
+			layoutTranslateRunning,
+			layoutTranslateWaiting,
+			onToggleLayoutTranslate,
+		],
 	);
 
 	const handleTranslatePointerUp = useCallback(
@@ -198,14 +207,16 @@ export function PdfToolbar({
 									type="button"
 									size="icon-xs"
 									variant={
-										layoutTranslateActive || longPressing
+										layoutTranslateActive ||
+										layoutTranslateWaiting ||
+										longPressing
 											? "secondary"
 											: "ghost"
 									}
 									className="shrink-0 self-center"
 									data-full-text-translate
 									aria-label={layoutTranslateLabel}
-									aria-pressed={layoutTranslateActive}
+									aria-pressed={layoutTranslateActive || layoutTranslateWaiting}
 									disabled={!engine}
 									onPointerDown={handleTranslatePointerDown}
 									onPointerUp={handleTranslatePointerUp}
@@ -213,7 +224,9 @@ export function PdfToolbar({
 									onPointerCancel={handleTranslatePointerLeave}
 									onClick={handleTranslateClick}
 								>
-									{layoutTranslateRunning && !longPressing ? (
+									{layoutTranslateWaiting ? (
+										<Clock className="size-3.5 animate-pulse" aria-hidden />
+									) : layoutTranslateRunning && !longPressing ? (
 										<Loader2 className="size-3.5 animate-spin" aria-hidden />
 									) : (
 										<Languages className="size-3.5" aria-hidden />

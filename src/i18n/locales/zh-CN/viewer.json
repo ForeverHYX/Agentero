@@ -62,7 +62,12 @@
 			"pageRunning": "正在翻译本页…",
 			"needLayout": "请先运行版面分析（Figures 面板）。",
 			"noText": "没有可提取文字的版面区域可翻译。",
-			"failed": "全文翻译失败"
+			"failed": "全文翻译失败",
+			"waiting": "等待版面解析后翻译…",
+			"cancelQueue": "取消排队",
+			"queuedToast": "全文翻译已排队，等待版面解析完成",
+			"startedAfterLayout": "版面解析完成，已开始全文翻译",
+			"parseFailedWhileWaiting": "版面解析失败，翻译已取消"
 		},
 		"translation": {
 			"title": "翻译",

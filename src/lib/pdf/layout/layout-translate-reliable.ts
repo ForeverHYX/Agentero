@@ -64,6 +64,8 @@ export const LAYOUT_TRANSLATE_MAX_CHARS = 2200;
 /** A finished job can now explicitly report that some blocks still need work. */
 export type LayoutTranslateJobStatus =
 	| "idle"
+	/** Layout regions not parsed yet; the job auto-starts once they land. */
+	| "waitingLayout"
 	| "running"
 	| "done"
 	| "partial"

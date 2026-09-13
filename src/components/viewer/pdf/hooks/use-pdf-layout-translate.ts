@@ -3,21 +3,34 @@
  *
  * Its own hook because it shares nothing with hover or with the analysis run
  * beyond the region list it reads: one abortable job, progressive overlay items,
- * and the toolbar button's start → stop → retry/clear flow.
+ * and the toolbar button's start → stop → retry/clear flow. When layout regions
+ * are missing the job queues (`waitingLayout`) behind the layout-analysis run
+ * and auto-starts once regions land.
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { toast } from "sonner";
+import { useStore } from "zustand";
+import { backgroundTasksStore } from "@/lib/core/background-tasks";
 import { errorText } from "@/lib/core/error";
-import { notifyError } from "@/lib/core/notify";
+import {
+	notifyAction,
+	notifyError,
+	notifySuccess,
+	notifyWarning,
+} from "@/lib/core/notify";
 import {
 	applyLayoutTranslateSidecar,
 	currentLayoutTranslateCacheKey,
+	enqueuePaperLayoutAnalysis,
 	groupLayoutTranslateItemsByPage,
 	hasPendingLayoutTranslateItems,
 	type LayoutTranslateItem,
 	type LayoutTranslateJobStatus,
+	layoutAnalysisStore,
 	listTranslatableLayoutRegions,
+	normalizeLayoutPaperKey,
 	type PdfLayoutRegion,
 	persistLayoutTranslateSidecarBestEffort,
 	readLayoutTranslateSidecar,
@@ -34,6 +47,8 @@ export type UsePdfLayoutTranslateOptions = {
 	layoutRawRegions: PdfLayoutRegion[] | null;
 	/** Paper folder path; when present, full-document translations cache under source/. */
 	paperAbsPath?: string | null;
+	/** Vault-relative paper path; matches background-task rows to this paper. */
+	paperRelPath?: string | null;
 	/** Stable paper identifier for per-document Agent session reuse. */
 	paperKey?: string | null;
 	/** Vault root passed to the Agent as its cwd. */
@@ -52,6 +67,8 @@ export type PdfLayoutTranslate = {
 		{ active: boolean; running: boolean }
 	>;
 	layoutTranslateRunning: boolean;
+	/** Queued behind layout analysis; toolbar shows the waiting state. */
+	layoutTranslateWaiting: boolean;
 	/** Running, or finished with overlays still painted. */
 	layoutTranslateActive: boolean;
 	/** Toolbar button label for the current job phase. */
@@ -61,6 +78,23 @@ export type PdfLayoutTranslate = {
 	/** Per-page tag: retry incomplete blocks, translate this page, or hide a complete page. */
 	togglePageLayoutTranslate: (pageIndex: number) => void;
 };
+
+/** What a queued job should start once layout regions land. */
+type LayoutTranslateWaitTarget =
+	| { mode: "document" }
+	| { mode: "page"; pageIndex: number };
+
+function normalizeRelPaperPath(path: string): string {
+	return path.replace(/\\/g, "/").replace(/^\/+|\/+$/g, "");
+}
+
+function sameRelPaperPath(
+	a: string | null | undefined,
+	b: string | null | undefined,
+): boolean {
+	if (!a || !b) return false;
+	return normalizeRelPaperPath(a) === normalizeRelPaperPath(b);
+}
 
 function mergeTranslatePageItems(
 	items: readonly LayoutTranslateItem[],
@@ -117,6 +151,7 @@ export function usePdfLayoutTranslate({
 	layoutRawRegions,
 	translationPane = false,
 	paperAbsPath,
+	paperRelPath,
 	paperKey,
 	vaultPath,
 }: UsePdfLayoutTranslateOptions): PdfLayoutTranslate {
@@ -130,6 +165,39 @@ export function usePdfLayoutTranslate({
 	layoutTranslateJobRef.current = layoutTranslateJob;
 	const layoutTranslateAbortRef = useRef<AbortController | null>(null);
 	const hiddenPageIndexesRef = useRef(new Set<number>());
+	/** Queued target to auto-start once layout regions land. */
+	const layoutTranslateWaitTargetRef = useRef<LayoutTranslateWaitTarget | null>(
+		null,
+	);
+	const waitingAutoStartedRef = useRef(false);
+	const layoutTranslateWaitToastIdRef = useRef(
+		`layout-translate-wait:${docId}`,
+	);
+	layoutTranslateWaitToastIdRef.current = `layout-translate-wait:${docId}`;
+
+	// Is a layout analysis queued/running for this paper? Task rows are the only
+	// signal covering host-job queueing and headless runs (synthetic docIds);
+	// the store UI covers row-less in-viewer runs via the real documentId.
+	const layoutJobPending = useStore(backgroundTasksStore, (s) =>
+		s.tasks.some(
+			(task) =>
+				(task.kind === "layoutAnalyze" || task.kind === "layoutRun") &&
+				(task.status === "queued" || task.status === "running") &&
+				sameRelPaperPath(task.paperPath, paperRelPath),
+		),
+	);
+	const layoutUiRunning = useStore(layoutAnalysisStore, (s) => {
+		if (s.ui.stage !== "running") return false;
+		if (s.activeDocumentId === docId) return true;
+		const activePaper = s.activePaperAbsPath;
+		return (
+			activePaper != null &&
+			paperAbsPath != null &&
+			normalizeLayoutPaperKey(activePaper) ===
+				normalizeLayoutPaperKey(paperAbsPath)
+		);
+	});
+	const parsePendingForPaper = layoutJobPending || layoutUiRunning;
 
 	const applyHiddenPages = useCallback(
 		(items: readonly LayoutTranslateItem[]) => {
@@ -176,10 +244,52 @@ export function usePdfLayoutTranslate({
 		[t],
 	);
 
+	const cancelWaitingLayout = useCallback(() => {
+		layoutTranslateWaitTargetRef.current = null;
+		waitingAutoStartedRef.current = false;
+		toast.dismiss(layoutTranslateWaitToastIdRef.current);
+		setLayoutTranslateJob((prev) =>
+			prev.status === "waitingLayout"
+				? { status: "idle", items: prev.items }
+				: prev,
+		);
+	}, []);
+
+	/**
+	 * Queue the job behind layout analysis: ensure a parse is pending, park the
+	 * target, and let the auto-start effect fire once regions land. Items are
+	 * kept so a later start reuses completed blocks.
+	 */
+	const enterWaitingLayout = useCallback(
+		(target: LayoutTranslateWaitTarget) => {
+			if (!parsePendingForPaper) {
+				if (!paperAbsPath) {
+					// Loose PDF with nothing to enqueue and nothing running.
+					notifyError(t("pdf.layoutTranslate.needLayout"));
+					return;
+				}
+				enqueuePaperLayoutAnalysis({ paperAbsPath });
+			}
+			layoutTranslateWaitTargetRef.current = target;
+			waitingAutoStartedRef.current = false;
+			setLayoutTranslateJob((prev) => ({
+				status: "waitingLayout",
+				items: prev.items,
+			}));
+			notifyAction(t("pdf.layoutTranslate.queuedToast"), {
+				id: layoutTranslateWaitToastIdRef.current,
+				actionLabel: t("pdf.layoutTranslate.cancelQueue"),
+				onAction: cancelWaitingLayout,
+				duration: 12000,
+			});
+		},
+		[parsePendingForPaper, paperAbsPath, cancelWaitingLayout, t],
+	);
+
 	const startLayoutTranslate = useCallback(() => {
 		const raw = layoutRawRegions;
 		if (!raw?.length) {
-			notifyError(t("pdf.layoutTranslate.needLayout"));
+			enterWaitingLayout({ mode: "document" });
 			return;
 		}
 		const regions = listTranslatableLayoutRegions(raw);
@@ -255,6 +365,7 @@ export function usePdfLayoutTranslate({
 		paperKey,
 		vaultPath,
 		applyHiddenPages,
+		enterWaitingLayout,
 		notifyTranslateItemErrors,
 		t,
 	]);
@@ -263,7 +374,7 @@ export function usePdfLayoutTranslate({
 		(pageIndex: number) => {
 			const raw = layoutRawRegions;
 			if (!raw?.length) {
-				notifyError(t("pdf.layoutTranslate.needLayout"));
+				enterWaitingLayout({ mode: "page", pageIndex });
 				return;
 			}
 			const regions = listTranslatableLayoutRegions(raw).filter(
@@ -387,6 +498,7 @@ export function usePdfLayoutTranslate({
 			paperKey,
 			vaultPath,
 			applyHiddenPages,
+			enterWaitingLayout,
 			notifyTranslateItemErrors,
 			t,
 		],
@@ -394,6 +506,11 @@ export function usePdfLayoutTranslate({
 
 	const togglePageLayoutTranslate = useCallback(
 		(pageIndex: number) => {
+			// Waiting re-click cancels the queue instead of re-queueing.
+			if (layoutTranslateJobRef.current.status === "waitingLayout") {
+				cancelWaitingLayout();
+				return;
+			}
 			const pageItems = layoutTranslateJobRef.current.items.filter(
 				(item) => item.pageIndex === pageIndex,
 			);
@@ -416,10 +533,14 @@ export function usePdfLayoutTranslate({
 			}
 			startPageLayoutTranslate(pageIndex);
 		},
-		[startPageLayoutTranslate, stopLayoutTranslate],
+		[startPageLayoutTranslate, stopLayoutTranslate, cancelWaitingLayout],
 	);
 
 	const toggleLayoutTranslate = useCallback(() => {
+		if (layoutTranslateJob.status === "waitingLayout") {
+			cancelWaitingLayout();
+			return;
+		}
 		if (layoutTranslateJob.status === "running") {
 			stopLayoutTranslate();
 			return;
@@ -444,6 +565,7 @@ export function usePdfLayoutTranslate({
 		startLayoutTranslate,
 		stopLayoutTranslate,
 		clearLayoutTranslate,
+		cancelWaitingLayout,
 	]);
 
 	// Abort bulk translate when switching documents.
@@ -452,11 +574,77 @@ export function usePdfLayoutTranslate({
 		layoutTranslateAbortRef.current?.abort();
 		layoutTranslateAbortRef.current = null;
 		hiddenPageIndexesRef.current.clear();
+		layoutTranslateWaitTargetRef.current = null;
+		waitingAutoStartedRef.current = false;
 		setLayoutTranslateJob({ status: "idle", items: [] });
 		return () => {
 			layoutTranslateAbortRef.current?.abort();
 		};
 	}, [docId]);
+
+	// A queued job starts the moment layout regions land (parse finished —
+	// possibly in another tab via the sidecar file watcher).
+	useEffect(() => {
+		if (layoutTranslateJob.status !== "waitingLayout") return;
+		if (!layoutRawRegions?.length) return;
+		if (waitingAutoStartedRef.current) return;
+		waitingAutoStartedRef.current = true;
+		notifySuccess(t("pdf.layoutTranslate.startedAfterLayout"), {
+			id: layoutTranslateWaitToastIdRef.current,
+		});
+		const target = layoutTranslateWaitTargetRef.current;
+		layoutTranslateWaitTargetRef.current = null;
+		if (target?.mode === "page") startPageLayoutTranslate(target.pageIndex);
+		else startLayoutTranslate();
+	}, [
+		layoutTranslateJob.status,
+		layoutRawRegions,
+		startLayoutTranslate,
+		startPageLayoutTranslate,
+		t,
+	]);
+
+	// Edge-triggered parse-failure watch while queued: only tasks observed
+	// queued/running during the wait may cancel it — finished rows linger in the
+	// panel store, so a level check would trip on a stale earlier failure.
+	useEffect(() => {
+		if (layoutTranslateJob.status !== "waitingLayout") return;
+		const fail = () => {
+			notifyWarning(t("pdf.layoutTranslate.parseFailedWhileWaiting"), {
+				id: layoutTranslateWaitToastIdRef.current,
+			});
+			cancelWaitingLayout();
+		};
+		const tracked = new Set<string>();
+		const scanTasks = () => {
+			for (const task of backgroundTasksStore.getState().tasks) {
+				if (task.kind !== "layoutAnalyze" && task.kind !== "layoutRun")
+					continue;
+				if (!sameRelPaperPath(task.paperPath, paperRelPath)) continue;
+				if (task.status === "queued" || task.status === "running") {
+					tracked.add(task.id);
+					continue;
+				}
+				if (
+					tracked.has(task.id) &&
+					(task.status === "failed" || task.status === "cancelled")
+				) {
+					fail();
+					return;
+				}
+			}
+		};
+		const unsubTasks = backgroundTasksStore.subscribe(scanTasks);
+		const unsubUi = layoutAnalysisStore.subscribe((s) => {
+			if (s.activeDocumentId !== docId) return;
+			if (s.ui.stage === "error" || s.ui.stage === "cancelled") fail();
+		});
+		scanTasks();
+		return () => {
+			unsubTasks();
+			unsubUi();
+		};
+	}, [layoutTranslateJob.status, docId, paperRelPath, cancelWaitingLayout, t]);
 
 	// A translation pane must show the source pane's completed cache immediately;
 	// it should not depend on starting a second translation job or on the source
@@ -519,21 +707,25 @@ export function usePdfLayoutTranslate({
 	}, [layoutTranslateJob.items]);
 
 	const layoutTranslateRunning = layoutTranslateJob.status === "running";
+	const layoutTranslateWaiting = layoutTranslateJob.status === "waitingLayout";
 	const layoutTranslateActive =
 		layoutTranslateRunning ||
 		layoutTranslateJob.items.some((it) => it.translated);
-	const layoutTranslateLabel = layoutTranslateRunning
-		? t("pdf.layoutTranslate.stop")
-		: layoutTranslateJob.status === "partial"
-			? t("pdf.layoutTranslate.start")
-			: layoutTranslateActive
-				? t("pdf.layoutTranslate.clear")
-				: t("pdf.layoutTranslate.start");
+	const layoutTranslateLabel = layoutTranslateWaiting
+		? t("pdf.layoutTranslate.waiting")
+		: layoutTranslateRunning
+			? t("pdf.layoutTranslate.stop")
+			: layoutTranslateJob.status === "partial"
+				? t("pdf.layoutTranslate.start")
+				: layoutTranslateActive
+					? t("pdf.layoutTranslate.clear")
+					: t("pdf.layoutTranslate.start");
 
 	return {
 		layoutTranslateItemsByPage,
 		layoutTranslatePageStateByPage,
 		layoutTranslateRunning,
+		layoutTranslateWaiting,
 		layoutTranslateActive,
 		layoutTranslateLabel,
 		toggleLayoutTranslate,

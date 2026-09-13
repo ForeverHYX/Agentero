@@ -22,6 +22,7 @@ export function VaultChoiceStep({
 			<ChoiceCard
 				icon={<SiZotero className="size-5 text-[#CC2936]" />}
 				title={t("vault.zotero")}
+				description={t("vault.zoteroDesc")}
 				onClick={onImportZotero}
 			/>
 		</div>

@@ -253,7 +253,9 @@
 	"zoteroMigrate": {
 		"button": "Migrate from Zotero",
 		"title": "Migrate from Zotero",
+		"stepsHint": "Step 1 is complete: this is your new Agentero vault. Step 2: choose the Zotero source folder containing zotero.sqlite.",
 		"chooseFolder": "Choose Zotero data folder…",
+		"vaultIsZotero": "This is a Zotero data folder. Choose a new folder for the Agentero vault.",
 		"scanning": "Scanning library…",
 		"detecting": "Looking for your Zotero library…",
 		"sqliteMissing": "zotero.sqlite not found. Please select your Zotero data folder.",

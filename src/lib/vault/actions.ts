@@ -25,6 +25,7 @@ import {
 	purgeAllTrash,
 	trashPaths,
 } from "@/lib/paper/api";
+import { isZoteroDataDir } from "@/lib/paper/import/zotero-migrate";
 import {
 	bumpTrashReloadSignal,
 	refreshLibrary,
@@ -1008,6 +1009,10 @@ export async function migrateZoteroFromWelcome(): Promise<void> {
 		setVaultBusy(true);
 		const path = await pickCreateVaultDirectory();
 		if (!path) return;
+		if (await isZoteroDataDir(path)) {
+			notifyError(i18n.t("sidebar:zoteroMigrate.vaultIsZotero"));
+			return;
+		}
 		const result = await createVault(path, i18n.language);
 		const root = result.path || path;
 		await activateVault(root);

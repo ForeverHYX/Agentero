@@ -253,7 +253,9 @@
 	"zoteroMigrate": {
 		"button": "从 Zotero 迁移",
 		"title": "从 Zotero 迁移",
+		"stepsHint": "第 1 步已完成：这是新的 Agentero 文献库。第 2 步请选择包含 zotero.sqlite 的 Zotero 来源目录。",
 		"chooseFolder": "选择 Zotero 数据文件夹…",
+		"vaultIsZotero": "这里是 Zotero 数据目录，请为 Agentero 选择一个新的文献库文件夹。",
 		"scanning": "正在扫描文库…",
 		"detecting": "正在查找你的 Zotero 文库…",
 		"sqliteMissing": "未找到 zotero.sqlite，请选择 Zotero 数据目录",

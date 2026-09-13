@@ -589,7 +589,7 @@ async function resolveLayoutTranslateAgentOpts(options: {
 					sessionId: cachedSessionId ?? undefined,
 					vaultPath: vaultPath ?? undefined,
 					workflow: "translate",
-					autoApprove: true,
+					permissionMode: "auto",
 					hideFromChatHistory: true,
 				});
 				const sessionId = accepted.sessionId;

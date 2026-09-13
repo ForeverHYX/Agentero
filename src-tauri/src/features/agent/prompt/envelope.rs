@@ -26,16 +26,15 @@ pub fn build_prompt(
         return format!("{target_line}{USER_REQUEST_MARKER}{user_prompt}");
     }
 
-    let skill_hint = skill_follow_hint(skill_style, skill_ids);
-
     // Vault layout, reading order, citations, and CLI policy live in `AGENTS.md`
     // (cwd = vault root) and selected skills. Envelope only sets the turn role.
+    // Skill activation wording is not duplicated here for free/qa/etc. — that lives in
+    // `skill_activation_prefix` + injected SKILL.md; paper_reader keeps its activation line.
     let system = match workflow {
         "summary" => {
-            format!(
-                "You are helping with a research vault. Summarize the target paper \
-                 (follow vault AGENTS.md for reading order and citations).{skill_hint}"
-            )
+            "You are helping with a research vault. Summarize the target paper \
+             (follow vault AGENTS.md for reading order and citations)."
+                .to_string()
         }
         "paper_reader" => {
             let skill_line = paper_reader_skill_line(skill_style, skill_ids);
@@ -45,22 +44,19 @@ pub fn build_prompt(
             )
         }
         "qa" => {
-            format!(
-                "You are answering questions about a local research vault \
-                 (follow vault AGENTS.md; read only what you need).{skill_hint}"
-            )
+            "You are answering questions about a local research vault \
+             (follow vault AGENTS.md; read only what you need)."
+                .to_string()
         }
         "related_work" => {
-            format!(
-                "Draft a Related Work section from local papers in this Vault \
-                 (prefer each paper's NOTES.md; follow vault AGENTS.md).{skill_hint}"
-            )
+            "Draft a Related Work section from local papers in this Vault \
+             (prefer each paper's NOTES.md; follow vault AGENTS.md)."
+                .to_string()
         }
         _ => {
-            format!(
-                "You are an assistant working inside a Agentero research Vault (cwd is the vault root). \
-                 Follow vault AGENTS.md.{skill_hint}"
-            )
+            "You are an assistant working inside a Agentero research Vault (cwd is the vault root). \
+             Follow vault AGENTS.md."
+                .to_string()
         }
     };
 
@@ -201,28 +197,6 @@ fn personal_preference_directive(personal: Option<&str>) -> String {
     format!("\n\nUser preference instructions (always honor when relevant):\n{text}")
 }
 
-fn skill_follow_hint(style: SkillMentionStyle, skill_ids: &[String]) -> String {
-    if skill_ids.is_empty() {
-        return String::new();
-    }
-    let list = skill_ids
-        .iter()
-        .map(|id| format_skill_mention(id, style))
-        .collect::<Vec<_>>()
-        .join(", ");
-    match style {
-        SkillMentionStyle::Dollar => format!(
-            " Active skills use the $ trigger on this agent ({list}); also honor any Agentero-injected SKILL.md body."
-        ),
-        SkillMentionStyle::Slash => format!(
-            " Active skills use the / trigger on this agent ({list}); also honor any Agentero-injected SKILL.md body."
-        ),
-        SkillMentionStyle::InjectedOnly => format!(
-            " Agentero injects skill instructions for ({list}) into this prompt — follow them; do not expect a separate $ or / activation."
-        ),
-    }
-}
-
 fn paper_reader_skill_line(style: SkillMentionStyle, skill_ids: &[String]) -> String {
     let id = skill_ids
         .first()
@@ -245,231 +219,10 @@ fn paper_reader_skill_line(style: SkillMentionStyle, skill_ids: &[String]) -> St
     }
 }
 
-/// True when `s` looks like a vault-relative file path (not prose).
-fn looks_like_source_path(s: &str) -> bool {
-    let t = s.trim();
-    if t.is_empty() || t.contains(' ') && !t.contains('/') {
-        return false;
-    }
-    // Reject pure prose / parenthetical notes.
-    if t.starts_with('（') || t.starts_with('(') {
-        return false;
-    }
-    let lower = t.to_ascii_lowercase();
-    if lower.ends_with(".md")
-        || lower.ends_with(".tex")
-        || lower.ends_with(".pdf")
-        || lower.ends_with(".png")
-        || lower.ends_with(".jpg")
-        || lower.ends_with(".jpeg")
-        || lower.ends_with(".webp")
-        || lower.ends_with(".gif")
-        || lower.ends_with(".svg")
-        || lower.ends_with(".json")
-        || lower.ends_with(".bib")
-        || lower.ends_with(".csv")
-    {
-        return t.contains('/') || !t.contains(' ');
-    }
-    // Directory-ish vault paths without extension.
-    t.contains('/') && !t.contains('（') && !t.contains('(')
-}
-
-/// Pull the jump target out of a Sources bullet.
-///
-/// Agents often write:
-/// - `` `papers/foo/PAPER.md`（§2.3，Figure 4）``
-/// - `用户批注截图：`assets/image-….png``
-/// - `- 'papers/a/NOTES.md'`
-fn extract_path_from_source_line(raw: &str) -> Option<String> {
-    let trimmed = raw.trim().trim_start_matches(['-', '*', '•']).trim();
-    if trimmed.is_empty() {
-        return None;
-    }
-
-    // 1) First `...` segment that looks like a path (most common agent style).
-    let mut rest = trimmed;
-    while let Some(start) = rest.find('`') {
-        let after = &rest[start + 1..];
-        if let Some(end) = after.find('`') {
-            let inner = after[..end].trim();
-            if looks_like_source_path(inner) {
-                return Some(inner.to_string());
-            }
-            rest = &after[end + 1..];
-        } else {
-            break;
-        }
-    }
-
-    // 2) Wikilink [[path]] or [[path|alias]].
-    if let Some(start) = trimmed.find("[[") {
-        if let Some(rel) = trimmed[start + 2..].find("]]") {
-            let inner = &trimmed[start + 2..start + 2 + rel];
-            let path = inner.split('|').next().unwrap_or(inner).trim();
-            if looks_like_source_path(path) {
-                return Some(path.to_string());
-            }
-        }
-    }
-
-    // 3) Whole-line paired quotes.
-    let mut cleaned = trimmed.to_string();
-    if cleaned.len() >= 2 {
-        let bytes = cleaned.as_bytes();
-        let first = bytes[0];
-        let last = bytes[bytes.len() - 1];
-        if matches!((first, last), (b'\'', b'\'') | (b'"', b'"') | (b'`', b'`')) {
-            cleaned = cleaned[1..cleaned.len() - 1].trim().to_string();
-        }
-    }
-    cleaned = cleaned
-        .trim_matches(|c: char| c == '\'' || c == '"' || c == '`')
-        .trim()
-        .to_string();
-
-    // 4) Path token before Chinese/ASCII parenthetical note:
-    //    papers/foo/PAPER.md（§2.3…）  or  papers/foo/NOTES.md (Experiments)
-    if let Some(idx) = cleaned.find('（').or_else(|| cleaned.find(" (")) {
-        let head = cleaned[..idx].trim();
-        let head = head
-            .trim_matches(|c: char| c == '\'' || c == '"' || c == '`')
-            .trim();
-        if looks_like_source_path(head) {
-            return Some(head.to_string());
-        }
-    }
-
-    // 5) Label prefix: "用户批注截图：assets/…" or "截图: path"
-    for sep in ['：', ':'] {
-        if let Some(idx) = cleaned.find(sep) {
-            let tail = cleaned[idx + sep.len_utf8()..].trim();
-            let tail = tail
-                .trim_matches(|c: char| c == '\'' || c == '"' || c == '`')
-                .trim();
-            if looks_like_source_path(tail) {
-                return Some(tail.to_string());
-            }
-        }
-    }
-
-    if looks_like_source_path(&cleaned) {
-        return Some(cleaned);
-    }
-    None
-}
-
-/// Recognize section headers that introduce agent source lists.
-fn is_sources_section_header(line: &str) -> bool {
-    let trimmed = line.trim();
-    let lower = trimmed.to_lowercase();
-
-    // Markdown headers of any depth that start a Sources section: # Sources,
-    // ## Sources, ### Sources, ## Sources (3), ## Sources: etc.
-    if lower.starts_with('#') {
-        let rest = lower.trim_start_matches('#').trim();
-        return rest == "sources"
-            || rest.starts_with("sources ")
-            || rest.starts_with("sources:")
-            || rest.starts_with("sources(")
-            || rest == "source"
-            || rest.starts_with("source ")
-            || rest.starts_with("source:")
-            || rest.starts_with("source(")
-            || rest == "来源"
-            || rest.starts_with("来源 ")
-            || rest.starts_with("来源(")
-            || rest == "引用"
-            || rest.starts_with("引用 ")
-            || rest.starts_with("引用(")
-            || rest.starts_with("读取文件");
-    }
-
-    // Plain "Sources" / "Source" / "来源" / "引用" line (no leading #).
-    lower == "sources"
-        || lower == "source"
-        || lower == "来源"
-        || lower == "引用"
-        || trimmed.eq_ignore_ascii_case("sources:")
-        || trimmed.eq_ignore_ascii_case("source:")
-}
-
-/// Best-effort extraction of local paths from agent text (Sources section or bare paths).
-pub fn extract_sources(content: &str) -> Vec<String> {
-    let mut sources = Vec::new();
-    let mut in_sources = false;
-    for line in content.lines() {
-        let trimmed = line.trim();
-        if is_sources_section_header(trimmed) {
-            in_sources = true;
-            continue;
-        }
-        if in_sources {
-            if trimmed.starts_with('#') {
-                break;
-            }
-            if trimmed.is_empty() {
-                continue;
-            }
-            if let Some(path) = extract_path_from_source_line(trimmed) {
-                if !sources.iter().any(|s| s == &path) {
-                    sources.push(path);
-                }
-            } else {
-                // Non-source content ends the section.
-                break;
-            }
-        }
-    }
-    sources
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::features::agent::prompt::skills::SkillMentionStyle;
-
-    #[test]
-    fn extracts_sources_section() {
-        let text = "Answer here.\n\n## Sources\n- papers/a/NOTES.md\n- PAPERS.md\n";
-        let s = extract_sources(text);
-        assert!(s.iter().any(|p| p.contains("NOTES.md")));
-        assert!(s.iter().any(|p| p == "PAPERS.md"));
-    }
-
-    #[test]
-    fn extracts_sources_strips_quotes_and_wikilinks() {
-        let text = "Answer.\n\n## Sources\n- 'papers/a/NOTES.md'\n- \"papers/b/PAPER.md\"\n- `papers/c/source/main.tex`\n- [[papers/d/NOTES.md|title]]\n- papers/e/NOTES.md'\n";
-        let s = extract_sources(text);
-        assert_eq!(
-            s,
-            vec![
-                "papers/a/NOTES.md".to_string(),
-                "papers/b/PAPER.md".to_string(),
-                "papers/c/source/main.tex".to_string(),
-                "papers/d/NOTES.md".to_string(),
-                "papers/e/NOTES.md".to_string(),
-            ]
-        );
-    }
-
-    #[test]
-    fn extracts_sources_with_inline_backticks_and_notes() {
-        // Real agent style: path in backticks + Chinese parenthetical, or label：`path`.
-        let text = "Answer.\n\n## Sources\n\
-- `papers/Towards-Long-Horizon-Agent/PAPER.md`（§2.3，Eq. 2 与 Figure 4 上下文）\n\
-- `papers/Towards-Long-Horizon-Agent/NOTES.md`（Experiments / Figure 4 解读）\n\
-- 用户批注截图：`assets/image-38fac94f-4577-46b6-af56-bb4465f2bc13.png`\n";
-        let s = extract_sources(text);
-        assert_eq!(
-            s,
-            vec![
-                "papers/Towards-Long-Horizon-Agent/PAPER.md".to_string(),
-                "papers/Towards-Long-Horizon-Agent/NOTES.md".to_string(),
-                "assets/image-38fac94f-4577-46b6-af56-bb4465f2bc13.png".to_string(),
-            ]
-        );
-    }
 
     #[test]
     fn build_prompt_includes_user() {
@@ -506,6 +259,30 @@ mod tests {
         assert!(!p.contains("Cite sources inline"));
         assert!(!p.contains("[Section 2.3](papers/<id>/<id>.pdf#section=2.3)"));
         assert!(!p.contains("progressive disclosure: AGENTS.md →"));
+    }
+
+    #[test]
+    fn free_and_qa_omit_skill_follow_hint_when_skills_selected() {
+        let skills = ["paper-reader".into()];
+        for workflow in ["free", "qa", "summary", "related_work"] {
+            let p = build_prompt(
+                Some(workflow),
+                "hello",
+                None,
+                SkillMentionStyle::Dollar,
+                &skills,
+                None,
+                None,
+            );
+            assert!(
+                !p.contains("Active skills use the $ trigger"),
+                "{workflow} should not duplicate skill_follow_hint"
+            );
+            assert!(
+                !p.contains("Agentero injects skill instructions for"),
+                "{workflow} should not duplicate skill_follow_hint"
+            );
+        }
     }
 
     #[test]

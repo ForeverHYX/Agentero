@@ -1499,8 +1499,8 @@ Host 作为 ACP Client：按注册表 spawn 用户本机 Agent（`cwd` = 当前 
   reasoningEffort?: string; // 仅写入当前 ACP 会话声明的 thought_level 选项
   fastMode?: boolean; // 仅写入当前 ACP 会话声明的 fast model_config 选项
   skillIds?: string[]; // 已发现的本机 SKILL.md id，最多 5 个
-  autoApprove?: boolean; // 默认 false；true 时选择 ACP 返回的第一个权限选项
-  permissionMode?: string; // "restricted" | "ask" | "auto"；"ask" 时每个 ACP 权限请求转交用户（agent:permission-request）
+  permissionMode?: string; // 首选："restricted" | "ask" | "auto"；"ask" 时每个 ACP 权限请求转交用户（agent:permission-request）
+  // autoApprove?: boolean; // 已弃用；Host 仍兼容旧客户端，新代码请用 permissionMode
   responseLanguage?: string; // 强制回答/笔记语言（如 zh-CN）；省略或 auto 时不注入
   personalPrompt?: string; // 用户个人偏好提示词；省略或空时不注入
   hideFromChatHistory?: boolean; // 默认 false；true 时不写入 Vault Codex 会话索引（精读 / PDF 划词提问等）

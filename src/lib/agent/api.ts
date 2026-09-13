@@ -536,8 +536,6 @@ export async function runOnce(request: {
 	fastMode?: boolean;
 	/** Local SKILL.md identifiers selected through the composer. */
 	skillIds?: string[];
-	/** Select the agent's first ACP permission option for this run. */
-	autoApprove?: boolean;
 	/** ACP permission handling: "restricted" | "ask" | "auto" (from settings). */
 	permissionMode?: string;
 	/**
@@ -591,7 +589,6 @@ export async function runOnce(request: {
 					request.preferHighestReasoningEffort ?? false,
 				fastMode: request.fastMode,
 				skillIds: request.skillIds ?? [],
-				autoApprove: request.autoApprove ?? false,
 				permissionMode: request.permissionMode,
 				responseLanguage,
 				personalPrompt,

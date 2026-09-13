@@ -1,5 +1,28 @@
 import { describe, expect, it } from "vitest";
-import { linkifyBareUrls } from "@/lib/agent/bare-url-link";
+import {
+	linkifyBareUrls,
+	linkifyBareVaultCitations,
+} from "@/lib/agent/bare-url-link";
+
+describe("linkifyBareVaultCitations", () => {
+	it("wraps a bare PDF citation path in a Markdown link", () => {
+		expect(
+			linkifyBareVaultCitations(
+				"Figure 9 (papers/vla/2504.16054/2504.16054.pdf#figure=9)",
+			),
+		).toBe(
+			"Figure 9 ([2504.16054.pdf · figure=9](papers/vla/2504.16054/2504.16054.pdf#figure=9))",
+		);
+	});
+
+	it("leaves Markdown links and inline code unchanged", () => {
+		const href = "papers/vla/2504.16054/2504.16054.pdf#page=1";
+		expect(linkifyBareVaultCitations(`[Figure 1](${href})`)).toBe(
+			`[Figure 1](${href})`,
+		);
+		expect(linkifyBareVaultCitations(`\`${href}\``)).toBe(`\`${href}\``);
+	});
+});
 
 describe("linkifyBareUrls", () => {
 	it("wraps a bare http url in a markdown link", () => {

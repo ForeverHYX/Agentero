@@ -448,6 +448,7 @@ const ChatTranscriptRow = memo(function ChatTranscriptRow({
 						/>
 						<ReasoningContent
 							className={insideProcess ? "mt-2 px-2 pb-2" : undefined}
+							onOpenSource={onOpenSource}
 						>
 							{part.text}
 						</ReasoningContent>

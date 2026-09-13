@@ -26,11 +26,8 @@ import {
 	TooltipProvider,
 	TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { linkifyBareUrls } from "@/lib/agent/bare-url-link";
-import { stripCitationStatusTags } from "@/lib/agent/citation-href";
-import { linkifyWikilinks } from "@/lib/agent/wikilink-citation";
+import { prepareAgentMessageMarkdown } from "@/lib/agent/message-markdown";
 import { cn } from "@/lib/core/utils";
-import { normalizeMarkdownMath } from "@/lib/markdown/math-normalize";
 
 import { AgentCitationLink } from "./agent-citation-link";
 import { PlainCodeBlock } from "./plain-code-block";
@@ -353,11 +350,7 @@ export const MessageResponse = memo(
 	({ className, children, onOpenSource, ...props }: MessageResponseProps) => {
 		const content =
 			typeof children === "string"
-				? linkifyBareUrls(
-						linkifyWikilinks(
-							stripCitationStatusTags(normalizeMarkdownMath(children)),
-						),
-					)
+				? prepareAgentMessageMarkdown(children)
 				: children;
 		return (
 			<Streamdown

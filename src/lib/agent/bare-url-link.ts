@@ -38,3 +38,53 @@ export function linkifyBareUrls(text: string): string {
 	out += text.slice(lastIndex);
 	return out;
 }
+
+/**
+ * Convert bare vault citation paths into Markdown links so they reach the
+ * shared citation-pill renderer. These paths commonly occur in agent prose as
+ * `Figure 1 (papers/.../paper.pdf#figure=1)`.
+ *
+ * Only file paths with a supported citation fragment are linked: ordinary
+ * relative paths should remain prose, while a citation always has an
+ * unambiguous navigation target. As above, existing Markdown links and code
+ * spans are left intact.
+ */
+export function linkifyBareVaultCitations(text: string): string {
+	const citationPattern =
+		/(^|[("'\s])(papers\/(?:[^\s()[\]`<>,;:!?]+\/)*[^\s()[\]`<>,;:!?]+\.(?:pdf|tex|ltx|md|mdx|markdown)#(?:page|section|figure|table|algorithm|formula|region)=[^\s()[\]`<>,;:!?]+)/gi;
+
+	let out = "";
+	let lastIndex = 0;
+	let match: RegExpExecArray | null = citationPattern.exec(text);
+	const inLinkPattern = /\]\([^)]*$/;
+	const inCodePattern = /`[^`]*$/;
+
+	while (match !== null) {
+		const prefix = match[1] ?? "";
+		const href = match[2] ?? "";
+		const hrefStart = match.index + prefix.length;
+		const preceding = text.slice(0, hrefStart);
+
+		if (inLinkPattern.test(preceding) || inCodePattern.test(preceding)) {
+			out += text.slice(lastIndex, hrefStart + href.length);
+			lastIndex = hrefStart + href.length;
+		} else {
+			out += text.slice(lastIndex, hrefStart);
+			out += `[${citationLabel(href)}](${href})`;
+			lastIndex = hrefStart + href.length;
+		}
+
+		match = citationPattern.exec(text);
+	}
+
+	out += text.slice(lastIndex);
+	return out;
+}
+
+function citationLabel(href: string): string {
+	const [path, fragment = ""] = href.split("#", 2);
+	const base = path?.split("/").filter(Boolean).pop() || href;
+	const [key, value] = fragment.split("=", 2);
+	if (key === "page" && value) return `${base} · p.${value}`;
+	return value ? `${base} · ${key}=${value}` : base;
+}

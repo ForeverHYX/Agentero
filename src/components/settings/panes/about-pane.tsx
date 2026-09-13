@@ -217,7 +217,7 @@ export function AboutPane() {
 			});
 		}
 		if (cli.installed && !cli.preferredBinOnPath) {
-			return t("about.cli.pathMissing", { dir: cli.preferredBinDir });
+			return t("about.cli.pathMissing");
 		}
 		if (!cli.canInstall) {
 			return t("about.cli.notBundled");
@@ -233,7 +233,7 @@ export function AboutPane() {
 	const showBrewCliHint = isMac && showInstall && Boolean(cli?.brewAvailable);
 	const cliVerifyCommand =
 		isWin && cli?.installPath
-			? `& "${cli.installPath.replaceAll('"', '""')}" --version`
+			? `& '${cli.installPath.replaceAll("'", "''")}' --version`
 			: `${cli?.commandName ?? "agentero-cli"} --version`;
 
 	const showFinderRow = isMac && isTauri() && finder?.supported !== false;

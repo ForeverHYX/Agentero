@@ -2,11 +2,10 @@
 
 use crate::core::error::AppError;
 use crate::features::agent::acp::client::{
-    client_initialize_request, simplified_agent_cwd, timed_acp_initialize, timed_acp_request,
-    to_acp_agent,
+    acp_terminals, agentero_acp_builder, client_initialize_request, simplified_agent_cwd,
+    timed_acp_initialize, timed_acp_request, to_acp_agent,
 };
 use crate::features::agent::acp::interaction::permission_response;
-use crate::features::agent::acp::terminal::{AcpTerminalHandler, AcpTerminalManager};
 use crate::features::agent::acp::updates::{
     plan_priority_str, plan_status_str, text_from_content_block, tool_kind_str, tool_status_str,
 };
@@ -63,14 +62,9 @@ pub async fn list_acp_sessions(
         cwd = simplified_agent_cwd(&cwd);
     }
     let acp = to_acp_agent(desc, Some(&cwd), remote)?;
-    let terminals = Arc::new(tokio::sync::Mutex::new(AcpTerminalManager::with_cwd(
-        cwd.clone(),
-    )));
+    let terminals = acp_terminals(Some(cwd.clone()));
 
-    let result = agent_client_protocol::Client
-        .builder()
-        .name("agentero")
-        .with_handler(AcpTerminalHandler::new(terminals))
+    let result = agentero_acp_builder!(terminals)
         .on_receive_request(
             async move |request: RequestPermissionRequest, responder, _cx| {
                 let _ = responder.respond(permission_response(&request, false));
@@ -412,14 +406,9 @@ pub async fn load_acp_session(
     let last_replay: Arc<Mutex<std::time::Instant>> =
         Arc::new(Mutex::new(std::time::Instant::now()));
     let last_replay_for_notif = last_replay.clone();
-    let terminals = Arc::new(tokio::sync::Mutex::new(AcpTerminalManager::with_cwd(
-        cwd.clone(),
-    )));
+    let terminals = acp_terminals(Some(cwd.clone()));
 
-    let result = agent_client_protocol::Client
-        .builder()
-        .name("agentero")
-        .with_handler(AcpTerminalHandler::new(terminals))
+    let result = agentero_acp_builder!(terminals)
         .on_receive_notification(
             async move |notification: SessionNotification, _cx| {
                 if let Ok(mut at) = last_replay_for_notif.lock() {

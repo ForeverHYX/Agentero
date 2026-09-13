@@ -1,22 +1,20 @@
 //! Background ACP warm-up (initialize + new_session, no prompt).
 
 use crate::features::agent::acp::client::{
-    client_initialize_request, simplified_agent_cwd, timed_acp_initialize, timed_acp_request,
-    to_acp_agent,
+    acp_terminals, agentero_acp_builder, client_initialize_request, simplified_agent_cwd,
+    timed_acp_initialize, timed_acp_request, to_acp_agent,
 };
 use crate::features::agent::acp::interaction::permission_response;
-use crate::features::agent::acp::terminal::{AcpTerminalHandler, AcpTerminalManager};
 use crate::features::agent::acp::updates::{
-    collaboration_from_config_options, emit_rich_session_update, emit_session_config_options,
-    models_from_config_options,
+    emit_rich_session_update, emit_session_config_options, models_from_config_options,
 };
 use crate::features::agent::models::{
     AgentDescriptor, AgentModelsEvent, AgentUsageEvent, WarmResult,
 };
 use crate::features::agent::runtime::events::AgentEventEmitter;
+use crate::features::agent::session::config::apply_model_and_collaboration_prefs;
 use agent_client_protocol::schema::v1::{
-    NewSessionRequest, RequestPermissionRequest, SessionConfigId, SessionConfigOptionValue,
-    SessionNotification, SessionUpdate, SetSessionConfigOptionRequest,
+    NewSessionRequest, RequestPermissionRequest, SessionNotification, SessionUpdate,
 };
 use agent_client_protocol::{Agent, ConnectionTo};
 use std::path::PathBuf;
@@ -71,14 +69,9 @@ pub async fn warm_agent(
     let app_for_conn = app.clone();
     let session_for_conn = session_id.clone();
     let agent_for_conn = agent_id.clone();
-    let terminals = Arc::new(tokio::sync::Mutex::new(AcpTerminalManager::with_cwd(
-        cwd.clone(),
-    )));
+    let terminals = acp_terminals(Some(cwd.clone()));
 
-    let result = agent_client_protocol::Client
-        .builder()
-        .name("agentero")
-        .with_handler(AcpTerminalHandler::new(terminals))
+    let result = agentero_acp_builder!(terminals)
         .on_receive_notification(
             async move |notification: SessionNotification, _cx| {
                 if let SessionUpdate::UsageUpdate(u) = &notification.update {
@@ -142,79 +135,16 @@ pub async fn warm_agent(
                 .await?;
 
                 let acp_session_id = new_session.session_id;
-                let mut config_options = new_session.config_options.unwrap_or_default();
-                if let Some(ev) =
-                    models_from_config_options(&session_for_conn, &agent_for_conn, &config_options)
-                {
-                    // Attempt preferred model even when not in the advertised catalog
-                    // (third-party / gateway free-form ids).
-                    if let Some(pref) = preferred.clone() {
-                        if pref != ev.current_id {
-                            let listed = ev.models.iter().any(|m| m.id == pref);
-                            match timed_acp_request(
-                                "set model",
-                                connection
-                                    .send_request(SetSessionConfigOptionRequest::new(
-                                        acp_session_id.clone(),
-                                        SessionConfigId::new(ev.config_id.as_str()),
-                                        SessionConfigOptionValue::value_id(pref.clone()),
-                                    ))
-                                    .block_task(),
-                            )
-                            .await
-                            {
-                                Ok(response) => {
-                                    config_options = response.config_options;
-                                }
-                                Err(e) => {
-                                    log::debug!(
-                                        target: "agentero::agent",
-                                        "agent={} warm set model failed (listed={}): pref={} err={}",
-                                        agent_for_conn,
-                                        listed,
-                                        pref,
-                                        e
-                                    );
-                                }
-                            }
-                        }
-                    }
-                }
-                if let Some(pref) = preferred_collaboration.clone() {
-                    if let Some(ev) = collaboration_from_config_options(
-                        &session_for_conn,
-                        &agent_for_conn,
-                        &config_options,
-                    ) {
-                        if pref != ev.current_id && ev.modes.iter().any(|mode| mode.id == pref) {
-                            match timed_acp_request(
-                                "set collaboration mode",
-                                connection
-                                    .send_request(SetSessionConfigOptionRequest::new(
-                                        acp_session_id.clone(),
-                                        SessionConfigId::new(ev.config_id.as_str()),
-                                        SessionConfigOptionValue::value_id(pref.clone()),
-                                    ))
-                                    .block_task(),
-                            )
-                            .await
-                            {
-                                Ok(response) => {
-                                    config_options = response.config_options;
-                                }
-                                Err(e) => {
-                                    log::debug!(
-                                        target: "agentero::agent",
-                                        "agent={} warm set collaboration mode failed: pref={} err={}",
-                                        agent_for_conn,
-                                        pref,
-                                        e
-                                    );
-                                }
-                            }
-                        }
-                    }
-                }
+                let config_options = apply_model_and_collaboration_prefs(
+                    &connection,
+                    &session_for_conn,
+                    &agent_for_conn,
+                    &acp_session_id,
+                    new_session.config_options.unwrap_or_default(),
+                    preferred.clone(),
+                    preferred_collaboration.clone(),
+                )
+                .await;
                 emit_session_config_options(
                     &app_for_conn,
                     &session_for_conn,

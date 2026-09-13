@@ -172,6 +172,7 @@ export {
 	runDocumentLayoutAnalysis,
 } from "@/lib/pdf/layout/run-analysis";
 export {
+	CITATION_FOCUS_FLASH_MS,
 	clearLayoutDocumentResult,
 	expandFocusBboxForOverlay,
 	type FocusedLayoutSnapshot,

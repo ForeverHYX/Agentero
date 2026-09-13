@@ -187,11 +187,16 @@ export function usePdfViewerHandle({
 						? { pageCoordinates, alignX: 0, alignY: 18 }
 						: {}),
 				});
-				setFocusedLayoutRegion(docId, region.id, {
-					pageIndex: region.pageIndex,
-					bbox,
-					kind,
-				});
+				setFocusedLayoutRegion(
+					docId,
+					region.id,
+					{
+						pageIndex: region.pageIndex,
+						bbox,
+						kind,
+					},
+					{ flash: true },
+				);
 			},
 			renderRegion: async ({ pageIndex, bbox, maxEdgePx }) => {
 				const eng = engineRef.current;

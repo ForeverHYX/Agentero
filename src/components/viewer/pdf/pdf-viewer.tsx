@@ -415,6 +415,13 @@ function PdfViewerInner({
 			null
 		);
 	});
+	const focusedLayoutFlash = useStore(
+		layoutAnalysisStore,
+		(s) => s.focused?.documentId === docId && Boolean(s.focused.flash),
+	);
+	const focusedLayoutFlashToken = useStore(layoutAnalysisStore, (s) =>
+		s.focused?.documentId === docId ? (s.focused.flashToken ?? 0) : 0,
+	);
 	const zoomLevel = zoomState.currentZoomLevel || 1;
 
 	const { pdfTone, setPdfTone } = usePdfPaperTone();
@@ -1246,6 +1253,8 @@ function PdfViewerInner({
 			visualDraftRegion: null,
 			visualCropRegion,
 			focusedLayoutRegion,
+			focusedLayoutFlash,
+			focusedLayoutFlashToken,
 			pinsByPage,
 			commentsByPage,
 			editingCommentId: railEdit?.id ?? null,
@@ -1263,6 +1272,8 @@ function PdfViewerInner({
 			activeVisualTrace,
 			visualCropRegion,
 			focusedLayoutRegion,
+			focusedLayoutFlash,
+			focusedLayoutFlashToken,
 			pinsByPage,
 			commentsByPage,
 			railEdit?.id,

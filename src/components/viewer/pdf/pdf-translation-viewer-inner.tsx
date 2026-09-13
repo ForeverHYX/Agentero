@@ -38,6 +38,8 @@ const EMPTY_MARKS: PdfPageMarksSlice = {
 	visualDraftRegion: null,
 	visualCropRegion: null,
 	focusedLayoutRegion: null,
+	focusedLayoutFlash: false,
+	focusedLayoutFlashToken: 0,
 	pinsByPage: EMPTY_PAGE_MAP,
 	commentsByPage: EMPTY_PAGE_MAP,
 	editingCommentId: null,

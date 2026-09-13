@@ -29,7 +29,19 @@ export type FocusedLayoutState = {
 	 * does not infinite-loop.
 	 */
 	region?: PdfLayoutRegion;
+	/**
+	 * Citation-jump attention flash: bright yellow block that auto-clears.
+	 * Figures sidebar selection leaves this unset (persistent kind outline).
+	 */
+	flash?: boolean;
+	/** Bumps when the same region is flashed again so the CSS animation restarts. */
+	flashToken?: number;
 };
+
+/** How long a citation focus flash stays visible before clearing. */
+export const CITATION_FOCUS_FLASH_MS = 1600;
+
+let citationFlashClearTimer: ReturnType<typeof setTimeout> | null = null;
 
 type LayoutStoreState = {
 	/** Last successful result per document. */
@@ -178,7 +190,13 @@ export function setFocusedLayoutRegion(
 	documentId: string,
 	regionId: string | null,
 	snapshot?: FocusedLayoutSnapshot,
+	options?: { flash?: boolean },
 ): void {
+	if (citationFlashClearTimer) {
+		clearTimeout(citationFlashClearTimer);
+		citationFlashClearTimer = null;
+	}
+
 	const current = layoutAnalysisStore.getState().focused;
 	if (!regionId) {
 		if (current == null) return;
@@ -186,10 +204,13 @@ export function setFocusedLayoutRegion(
 		return;
 	}
 
+	const flash = Boolean(options?.flash);
 	const region = snapshot ? regionFromSnapshot(regionId, snapshot) : undefined;
 	if (
+		!flash &&
 		current?.documentId === documentId &&
 		current.regionId === regionId &&
+		!current.flash &&
 		current.region?.kind === region?.kind &&
 		current.region?.pageIndex === region?.pageIndex &&
 		sameFocusedBbox(current.region?.bbox, region?.bbox) &&
@@ -199,13 +220,29 @@ export function setFocusedLayoutRegion(
 		return;
 	}
 
+	const flashToken = flash ? (current?.flashToken ?? 0) + 1 : undefined;
 	layoutAnalysisStore.setState({
 		focused: {
 			documentId,
 			regionId,
 			...(region ? { region } : {}),
+			...(flash ? { flash: true, flashToken } : {}),
 		},
 	});
+
+	if (flash) {
+		citationFlashClearTimer = setTimeout(() => {
+			citationFlashClearTimer = null;
+			const still = layoutAnalysisStore.getState().focused;
+			if (
+				still?.documentId === documentId &&
+				still.regionId === regionId &&
+				still.flash
+			) {
+				layoutAnalysisStore.setState({ focused: null });
+			}
+		}, CITATION_FOCUS_FLASH_MS);
+	}
 }
 
 export function getFocusedLayoutRegion(documentId: string): string | null {

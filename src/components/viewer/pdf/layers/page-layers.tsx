@@ -98,6 +98,10 @@ export type PdfPageMarksSlice = {
 	/** Region whose crop is in flight; gets a spinner frame. */
 	visualCropRegion: PageRegion;
 	focusedLayoutRegion: PdfLayoutRegion | null;
+	/** Citation jump: yellow flash that auto-clears (vs persistent figures selection). */
+	focusedLayoutFlash: boolean;
+	/** Restarts the flash CSS animation when the same region is jumped again. */
+	focusedLayoutFlashToken: number;
 	pinsByPage: ReadonlyMap<number, SelectionPin[]>;
 	/** Annotated highlights per page for the right-edge comment rail. */
 	commentsByPage: ReadonlyMap<number, PageAnnotationComment[]>;
@@ -726,24 +730,35 @@ export const PdfPageLayers = memo(function PdfPageLayers({
 						/>
 					</div>
 				) : null}
-				{/* Figures sidebar / citation jump focus: EmbedPDF layout hue. */}
+				{/* Figures selection outline, or citation yellow flash block. */}
 				{focusedLayoutOnPage ? (
 					<div
-						key={`${focusedLayoutOnPage.id}:${focusedLayoutOnPage.pageIndex}:${focusedLayoutOnPage.bbox.y}`}
+						key={`${focusedLayoutOnPage.id}:${focusedLayoutOnPage.pageIndex}:${focusedLayoutOnPage.bbox.y}:${marks.focusedLayoutFlashToken}`}
 						className={cn(
-							"pointer-events-none absolute z-[2] rounded-none border shadow-[0_0_0_1px_rgba(255,255,255,0.55)] dark:shadow-[0_0_0_1px_rgba(0,0,0,0.5)] motion-safe:animate-[pulse_1.2s_ease-in-out_1]",
+							"pointer-events-none absolute rounded-sm border",
+							marks.focusedLayoutFlash
+								? "citation-focus-flash z-[6] border-amber-400/90 bg-amber-300/55 shadow-[0_0_0_1px_rgba(251,191,36,0.55)] dark:bg-amber-300/40"
+								: "z-[2] shadow-[0_0_0_1px_rgba(255,255,255,0.55)] dark:shadow-[0_0_0_1px_rgba(0,0,0,0.5)]",
 							PDF_PRIVACY_HIDE_CLASS,
 						)}
-						style={{
-							left: `${focusedLayoutOnPage.bbox.x * 100}%`,
-							top: `${focusedLayoutOnPage.bbox.y * 100}%`,
-							width: `${focusedLayoutOnPage.bbox.w * 100}%`,
-							height: `${focusedLayoutOnPage.bbox.h * 100}%`,
-							borderColor: layoutKindHex(focusedLayoutOnPage.kind),
-							backgroundColor: layoutKindFill(focusedLayoutOnPage.kind),
-							// Keep a slightly stronger edge for visibility.
-							outline: `1px solid ${layoutKindBorder(focusedLayoutOnPage.kind)}`,
-						}}
+						style={
+							marks.focusedLayoutFlash
+								? {
+										left: `${focusedLayoutOnPage.bbox.x * 100}%`,
+										top: `${focusedLayoutOnPage.bbox.y * 100}%`,
+										width: `${focusedLayoutOnPage.bbox.w * 100}%`,
+										height: `${focusedLayoutOnPage.bbox.h * 100}%`,
+									}
+								: {
+										left: `${focusedLayoutOnPage.bbox.x * 100}%`,
+										top: `${focusedLayoutOnPage.bbox.y * 100}%`,
+										width: `${focusedLayoutOnPage.bbox.w * 100}%`,
+										height: `${focusedLayoutOnPage.bbox.h * 100}%`,
+										borderColor: layoutKindHex(focusedLayoutOnPage.kind),
+										backgroundColor: layoutKindFill(focusedLayoutOnPage.kind),
+										outline: `1px solid ${layoutKindBorder(focusedLayoutOnPage.kind)}`,
+									}
+						}
 						aria-hidden="true"
 					/>
 				) : null}

@@ -715,7 +715,7 @@
 			"versionMismatch": "CLI {{cli}} 与应用 {{app}} 不一致，请重新安装以对齐",
 			"pathMissing": "已安装到 {{dir}}，但该目录不在 PATH 中",
 			"verifyHint": "在新终端中验证：",
-			"windowsVerifyHint": "该目录已自动加入用户 PATH——打开新终端即可生效（无需重启），验证：",
+			"windowsVerifyHint": "请在 PowerShell 中运行下面的已安装路径即可立即验证；新终端也可以直接使用 agentero-cli：",
 			"verifyCopy": "复制验证命令",
 			"verifyCopied": "已复制验证命令",
 			"verifyCopyFailed": "无法复制命令",

@@ -715,7 +715,7 @@
 			"versionMismatch": "CLI {{cli}} ≠ app {{app}}; reinstall to match",
 			"pathMissing": "Installed in {{dir}}, but that folder is not on your PATH",
 			"verifyHint": "Verify in a new terminal:",
-			"windowsVerifyHint": "The folder was added to your user PATH automatically — open a new terminal (no restart needed) to verify:",
+			"windowsVerifyHint": "In PowerShell, run the installed path below to verify immediately. New terminals can also use agentero-cli:",
 			"verifyCopy": "Copy verification command",
 			"verifyCopied": "Verification command copied",
 			"verifyCopyFailed": "Could not copy the command",

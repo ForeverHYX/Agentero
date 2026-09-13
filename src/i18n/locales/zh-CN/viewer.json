@@ -23,6 +23,7 @@
 			"dark": "暗色"
 		},
 		"remoteMode": "远程模式",
+		"jumpBack": "返回第 {{page}} 页",
 		"importToLibrary": "导入本地库",
 		"findPlaceholder": "在文档中查找",
 		"findPrev": "上一个",

@@ -23,6 +23,7 @@
 			"dark": "Dark"
 		},
 		"remoteMode": "Remote mode",
+		"jumpBack": "Back to p. {{page}}",
 		"importToLibrary": "Import to library",
 		"findPlaceholder": "Find in document",
 		"findPrev": "Previous match",

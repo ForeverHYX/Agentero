@@ -51,6 +51,7 @@ import { PdfBottomBar } from "@/components/viewer/pdf/chrome/pdf-bottom-bar";
 import { PdfCardStack } from "@/components/viewer/pdf/chrome/pdf-card-stack";
 import { PdfFiguresPanel } from "@/components/viewer/pdf/chrome/pdf-figures-panel";
 import { PdfFindBar } from "@/components/viewer/pdf/chrome/pdf-find-bar";
+import { PdfJumpBackChip } from "@/components/viewer/pdf/chrome/pdf-jump-back-chip";
 import { PdfLeftToolbar } from "@/components/viewer/pdf/chrome/pdf-left-toolbar";
 import { PdfOutlinePanel } from "@/components/viewer/pdf/chrome/pdf-outline-panel";
 import { PdfReferencesPanel } from "@/components/viewer/pdf/chrome/pdf-references-panel";
@@ -65,6 +66,7 @@ import { usePdfCitations } from "@/components/viewer/pdf/hooks/use-pdf-citations
 import { usePdfCrossrefPreview } from "@/components/viewer/pdf/hooks/use-pdf-crossref-preview";
 import { usePdfFind } from "@/components/viewer/pdf/hooks/use-pdf-find";
 import { usePdfHighlights } from "@/components/viewer/pdf/hooks/use-pdf-highlights";
+import { usePdfJumpBack } from "@/components/viewer/pdf/hooks/use-pdf-jump-back";
 import { usePdfLayoutCluster } from "@/components/viewer/pdf/hooks/use-pdf-layout-cluster";
 import { usePdfMarkActions } from "@/components/viewer/pdf/hooks/use-pdf-mark-actions";
 import { usePdfMarksIo } from "@/components/viewer/pdf/hooks/use-pdf-marks-io";
@@ -741,6 +743,14 @@ function PdfViewerInner({
 	const clearCrossrefPreviewRef = useRef<() => void>(() => {});
 	const clearCitationPreviewRef = useRef<() => void>(() => {});
 
+	// Origin stack behind the bottom-right "jump back" chip (#505).
+	const {
+		backTarget: jumpBackTarget,
+		captureJumpOrigin,
+		commitJumpOrigin,
+		goBack: goBackToJumpOrigin,
+	} = usePdfJumpBack({ docId });
+
 	const {
 		citationPreview,
 		scheduleCitationHide,
@@ -761,6 +771,8 @@ function PdfViewerInner({
 		isRemotePaper,
 		importIdentifier,
 		onPreviewShow: () => clearCrossrefPreviewRef.current(),
+		onBeforeInternalJump: captureJumpOrigin,
+		onInternalJump: commitJumpOrigin,
 	});
 
 	// Cross-reference (\ref) hover: preview the figure/table/equation crop.
@@ -1487,6 +1499,12 @@ function PdfViewerInner({
 					onToggleFigures={handleToggleFigures}
 					visible={leftChromeVisible}
 					isRemotePaper={isRemotePaper}
+				/>
+			)}
+			{!translationOnly && jumpBackTarget && (
+				<PdfJumpBackChip
+					page={jumpBackTarget.page}
+					onGoBack={goBackToJumpOrigin}
 				/>
 			)}
 			{!translationOnly && (

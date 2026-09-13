@@ -6,7 +6,7 @@ import {
 } from "@/lib/paper/api";
 import { isPlazaVirtualPath, plazaTitleForPath } from "@/lib/plaza";
 import { basenameOf, normalizePathKey } from "@/lib/vault/path";
-import type { DocTab } from "@/lib/workspace/tabs/types";
+import type { DocTab, TabResources } from "@/lib/workspace/tabs/types";
 import type { CenterViewMode } from "@/lib/workspace/viewer";
 
 export { basenameOf, normalizePathKey as normalizeTabPath };
@@ -173,6 +173,37 @@ export function ensureFullLibraryTab(prev: DocTab[]): {
 		loaded: true,
 	};
 	return { tabs: [...prev, tab], activeId: tab.id, inserted: true };
+}
+
+/**
+ * Fields a freshly loaded `TabResources` fills in on top of a tab. When the
+ * tab already renders this paper as PDF (restored placeholder, ⇧⌘T reopen,
+ * doc popout), a single failed local-PDF probe must not downgrade it to an
+ * empty Markdown editor — keep `pdf` and let the viewer surface the state.
+ */
+export function patchFromTabResources(
+	res: TabResources,
+	current?: DocTab | null,
+): Partial<DocTab> {
+	const keepPdfMode =
+		current?.mode === "pdf" &&
+		res.mode === "markdown" &&
+		(current.kind === "paper" || res.kind === "paper");
+	return {
+		kind: res.kind,
+		title: res.title,
+		mode: keepPdfMode ? "pdf" : res.mode,
+		paperMeta: res.paperMeta,
+		pdfUrl: res.pdfUrl,
+		pdfBytes: res.pdfBytes ?? null,
+		htmlUrl: res.htmlUrl,
+		imageUrl: res.imageUrl,
+		notesPath: res.notesPath,
+		notesSeed: res.notesSeed,
+		markdownSeed: res.markdownSeed,
+		seedKey: 1,
+		loaded: true,
+	};
 }
 
 /** Insert a placeholder tab for `path` unless a tab for it already exists. */

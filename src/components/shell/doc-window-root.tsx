@@ -28,6 +28,7 @@ import {
 	createPlaceholderTab,
 	type DocTab,
 	loadTabResources,
+	patchFromTabResources,
 	reseedMarkdownTab,
 	reseedNotesTab,
 	syncTabSeedsForPath,
@@ -137,21 +138,11 @@ export function DocWindowRoot() {
 			if (cancelled) return;
 			if (res.error) setError(res.error);
 
+			// The placeholder carries the URL-param mode: a PDF popout must not
+			// flip to a Markdown editor on a single failed local-PDF probe.
 			const next: DocTab = {
 				...placeholder,
-				kind: res.kind,
-				title: res.title,
-				mode: res.mode,
-				paperMeta: res.paperMeta,
-				pdfUrl: res.pdfUrl,
-				pdfBytes: res.pdfBytes ?? null,
-				htmlUrl: res.htmlUrl,
-				imageUrl: res.imageUrl,
-				notesPath: res.notesPath,
-				notesSeed: res.notesSeed,
-				markdownSeed: res.markdownSeed,
-				seedKey: 1,
-				loaded: true,
+				...patchFromTabResources(res, placeholder),
 			};
 			setTab(next);
 			setReady(true);

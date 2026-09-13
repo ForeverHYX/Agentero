@@ -9,6 +9,7 @@ import {
 	loadPersistedTabs,
 	panelPersistParams,
 	paperReadingPlacements,
+	patchFromTabResources,
 	patchTab,
 	readingPairCloseIds,
 	remapPathUnder,
@@ -19,6 +20,7 @@ import {
 	reseedNotesTab,
 	savePersistedTabs,
 	syncTabSeedsForPath,
+	type TabResources,
 	tabHasNotesSplit,
 	tabIsPaperNotes,
 	tabNotesEligible,
@@ -26,6 +28,24 @@ import {
 
 function makeTab(path: string, overrides: Partial<DocTab> = {}): DocTab {
 	return { ...createPlaceholderTab(path), ...overrides };
+}
+
+function makeResources(overrides: Partial<TabResources> = {}): TabResources {
+	return {
+		kind: "paper",
+		title: "A Paper",
+		mode: "pdf",
+		paperMeta: null,
+		pdfUrl: null,
+		pdfBytes: null,
+		htmlUrl: null,
+		imageUrl: null,
+		notesPath: "/vault/papers/a/NOTES.md",
+		notesSeed: "",
+		markdownSeed: "",
+		loaded: true,
+		...overrides,
+	};
 }
 
 describe("createPlaceholderTab", () => {
@@ -70,6 +90,58 @@ describe("patchTab", () => {
 		expect(next[0]?.loaded).toBe(true);
 		expect(next[0]?.title).toBe("A");
 		expect(next[1]?.loaded).toBe(false);
+	});
+});
+
+describe("patchFromTabResources", () => {
+	const probeMissed = makeResources({ mode: "markdown", pdfBytes: null });
+
+	it("keeps pdf mode for a paper tab when the PDF probe missed once", () => {
+		// Restored / reopened placeholder: kind "file" until hydration resolves.
+		const placeholder = makeTab("/vault/papers/a", { mode: "pdf" });
+		const patch = patchFromTabResources(probeMissed, placeholder);
+		expect(patch.mode).toBe("pdf");
+		expect(patch.kind).toBe("paper");
+		expect(patch.loaded).toBe(true);
+		expect(patch.seedKey).toBe(1);
+	});
+
+	it("keeps pdf mode for an already-loaded paper tab on rehydrate", () => {
+		const loadedPaper = makeTab("/vault/papers/a", {
+			kind: "paper",
+			mode: "pdf",
+			loaded: true,
+		});
+		expect(patchFromTabResources(probeMissed, loadedPaper).mode).toBe("pdf");
+	});
+
+	it("applies the loaded mode when the tab has no pdf intent to preserve", () => {
+		const markdownTab = makeTab("/vault/papers/a", { mode: "markdown" });
+		expect(patchFromTabResources(probeMissed, markdownTab).mode).toBe(
+			"markdown",
+		);
+	});
+
+	it("does not second-guess a non-markdown fallback (e.g. remote html)", () => {
+		const placeholder = makeTab("/vault/papers/a", { mode: "pdf" });
+		const htmlFallback = makeResources({
+			mode: "html",
+			htmlUrl: "https://arxiv.org/html/2508.05004",
+		});
+		expect(patchFromTabResources(htmlFallback, placeholder).mode).toBe("html");
+	});
+
+	it("passes resource fields through", () => {
+		const res = makeResources({
+			title: "A Paper",
+			notesPath: "/vault/papers/a/NOTES.md",
+			notesSeed: "# Notes\n",
+			markdownSeed: "",
+		});
+		const patch = patchFromTabResources(res, null);
+		expect(patch.title).toBe("A Paper");
+		expect(patch.notesPath).toBe("/vault/papers/a/NOTES.md");
+		expect(patch.notesSeed).toBe("# Notes\n");
 	});
 });
 

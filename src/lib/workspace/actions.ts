@@ -116,6 +116,7 @@ import {
 	normalizeTabPath,
 	type OpenPlacement,
 	paperReadingPlacements,
+	patchFromTabResources,
 	patchTab,
 	readingPairCloseIds,
 	removeTab,
@@ -123,7 +124,6 @@ import {
 	revokeTabMediaSources,
 	splitPaneIdForPath,
 	syncTabSeedsForPath,
-	type TabResources,
 	tabHasNotesSplit,
 	tabIdForPath,
 	tabIsPaperNotes,
@@ -139,31 +139,6 @@ import { type CenterViewMode, preferredModeForPath } from "./viewer";
 function withLibraryIfEmpty(next: DocTab[]): DocTab[] {
 	if (next.length > 0 || !getVaultPath()) return next;
 	return ensureFullLibraryTab([]).tabs;
-}
-
-function patchFromTabResources(
-	res: TabResources,
-	current?: DocTab | null,
-): Partial<DocTab> {
-	const keepPdfMode =
-		current?.mode === "pdf" &&
-		res.mode === "markdown" &&
-		(current.kind === "paper" || res.kind === "paper");
-	return {
-		kind: res.kind,
-		title: res.title,
-		mode: keepPdfMode ? "pdf" : res.mode,
-		paperMeta: res.paperMeta,
-		pdfUrl: res.pdfUrl,
-		pdfBytes: res.pdfBytes ?? null,
-		htmlUrl: res.htmlUrl,
-		imageUrl: res.imageUrl,
-		notesPath: res.notesPath,
-		notesSeed: res.notesSeed,
-		markdownSeed: res.markdownSeed,
-		seedKey: 1,
-		loaded: true,
-	};
 }
 
 /**
@@ -334,7 +309,10 @@ export function openTab(
 					: res.error,
 			);
 		}
-		const patch = patchFromTabResources(res, existing);
+		// Guard against a transient PDF-probe miss with the placeholder's
+		// preferMode (⇧⌘T reopen of a closed PDF tab), not `existing` — an
+		// existing tab returned early above and is never patched here.
+		const patch = patchFromTabResources(res, placeholder);
 		updateTab(id, patch);
 
 		// Paper default: NOTES in the notes column (or first-time right split).

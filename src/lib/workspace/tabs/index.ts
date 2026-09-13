@@ -4,6 +4,7 @@ export {
 	ensureFullLibraryTab,
 	insertPlaceholderTab,
 	normalizeTabPath,
+	patchFromTabResources,
 	patchTab,
 	remapPathUnder,
 	remapTabsUnderPath,

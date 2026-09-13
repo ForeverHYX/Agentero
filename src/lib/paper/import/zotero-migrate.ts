@@ -3,7 +3,15 @@
  * + storage/) via the Host and write papers into the catalog. Fully local.
  */
 import { Channel } from "@tauri-apps/api/core";
+import {
+	appDataDir,
+	configDir,
+	dataDir,
+	homeDir,
+	join,
+} from "@tauri-apps/api/path";
 import { open } from "@tauri-apps/plugin-dialog";
+import { exists } from "@tauri-apps/plugin-fs";
 import i18n from "@/i18n";
 import {
 	commands,
@@ -29,6 +37,39 @@ export async function pickZoteroDir(): Promise<string | null> {
 	const selected = await open({ directory: true, multiple: false });
 	if (!selected) return null;
 	return Array.isArray(selected) ? (selected[0] ?? null) : selected;
+}
+
+/** Return existing platform-default Zotero data directories in preference order. */
+export async function discoverZoteroDirs(): Promise<string[]> {
+	if (!isTauri()) return [];
+	const [home, appData, config, data] = await Promise.all([
+		homeDir(),
+		appDataDir(),
+		configDir(),
+		dataDir(),
+	]);
+	const candidates = [
+		await join(home, "Library", "Zotero"),
+		await join(home, "Zotero"),
+		await join(appData, "Zotero"),
+		await join(config, "zotero"),
+		await join(data, "zotero"),
+		await join(home, ".zotero", "zotero"),
+		await join(home, ".local", "share", "zotero"),
+	];
+	const found: string[] = [];
+	for (const candidate of [...new Set(candidates)]) {
+		if (await exists(await join(candidate, "zotero.sqlite"))) {
+			found.push(candidate);
+		}
+	}
+	return found;
+}
+
+/** Guard the onboarding vault picker against selecting Zotero's data directory. */
+export async function isZoteroDataDir(path: string): Promise<boolean> {
+	if (!isTauri()) return false;
+	return exists(await join(path, "zotero.sqlite"));
 }
 
 /** Backend scan error when the picked folder holds no zotero.sqlite. */

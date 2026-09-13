@@ -45,7 +45,11 @@ describe("getLinkDestination", () => {
 			mode: PdfZoomMode.XYZ,
 			params: { x: 0, y: 500, zoom: 1 },
 		};
-		expect(getLinkDestination(target(d))).toEqual({ pageIndex: 2, pdfY: 500 });
+		expect(getLinkDestination(target(d))).toEqual({
+			pageIndex: 2,
+			pdfX: 0,
+			pdfY: 500,
+		});
 	});
 
 	it("reads /XYZ y from GoTo action", () => {
@@ -60,28 +64,45 @@ describe("getLinkDestination", () => {
 		};
 		expect(getLinkDestination(actionTarget(d))).toEqual({
 			pageIndex: 2,
+			pdfX: 0,
 			pdfY: 600,
 		});
 	});
 
-	it("reads /FitR top from view array", () => {
+	it("reads /FitR top and left from view array", () => {
 		const d = dest(PdfZoomMode.FitRectangle, [0, 10, 500, 800]);
-		expect(getLinkDestination(target(d))).toEqual({ pageIndex: 2, pdfY: 800 });
+		expect(getLinkDestination(target(d))).toEqual({
+			pageIndex: 2,
+			pdfX: 0,
+			pdfY: 800,
+		});
 	});
 
-	it("reads /FitH top from view array", () => {
+	it("reads /FitH top with no x anchor", () => {
 		const d = dest(PdfZoomMode.FitHorizontal, [750]);
-		expect(getLinkDestination(target(d))).toEqual({ pageIndex: 2, pdfY: 750 });
+		expect(getLinkDestination(target(d))).toEqual({
+			pageIndex: 2,
+			pdfX: null,
+			pdfY: 750,
+		});
 	});
 
 	it("falls back to pdfY 0 for page-only destinations", () => {
 		const d = dest(PdfZoomMode.FitPage, []);
-		expect(getLinkDestination(target(d))).toEqual({ pageIndex: 2, pdfY: 0 });
+		expect(getLinkDestination(target(d))).toEqual({
+			pageIndex: 2,
+			pdfX: null,
+			pdfY: 0,
+		});
 	});
 
 	it("falls back to pdfY 0 when /FitR view is incomplete", () => {
 		const d = dest(PdfZoomMode.FitRectangle, [0, 10]);
-		expect(getLinkDestination(target(d))).toEqual({ pageIndex: 2, pdfY: 0 });
+		expect(getLinkDestination(target(d))).toEqual({
+			pageIndex: 2,
+			pdfX: null,
+			pdfY: 0,
+		});
 	});
 });
 

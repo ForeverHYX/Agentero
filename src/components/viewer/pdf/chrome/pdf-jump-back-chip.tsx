@@ -18,20 +18,14 @@ import { PDF_CHROME_CHIP } from "@/components/viewer/pdf/chrome/pdf-chrome-surfa
 import { cn } from "@/lib/core/utils";
 
 export type PdfJumpBackChipProps = {
-	/** 1-based page the chip would restore. */
-	page: number;
 	onGoBack: () => void;
 	/** Extra positioning when the viewer composes it inside another layer. */
 	className?: string;
 };
 
-export function PdfJumpBackChip({
-	page,
-	onGoBack,
-	className,
-}: PdfJumpBackChipProps) {
+export function PdfJumpBackChip({ onGoBack, className }: PdfJumpBackChipProps) {
 	const { t } = useTranslation("viewer");
-	const label = t("pdf.jumpBack", { page });
+	const label = t("pdf.jumpBack");
 
 	return (
 		<div
@@ -63,7 +57,7 @@ export function PdfJumpBackChip({
 				onClick={onGoBack}
 			>
 				<Undo2 className="size-3.5 shrink-0" aria-hidden />
-				<span className="whitespace-nowrap tabular-nums">{label}</span>
+				<span className="whitespace-nowrap">{label}</span>
 			</button>
 		</div>
 	);

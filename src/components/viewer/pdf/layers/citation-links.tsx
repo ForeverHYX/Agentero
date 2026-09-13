@@ -198,10 +198,14 @@ export const CitationLinkLayer = memo(function CitationLinkLayer({
 	);
 });
 
-/** Extract the destination page + vertical position from a link target, if any. */
+/**
+ * Extract the destination page + anchor position from a link target, if any.
+ * Coordinates are PDF-native (origin bottom-left). `pdfX` is null when the
+ * destination only pins a row (FitH) or the viewer does not expose x.
+ */
 export function getLinkDestination(
 	target: PdfLinkTarget | undefined,
-): { pageIndex: number; pdfY: number } | null {
+): { pageIndex: number; pdfX: number | null; pdfY: number } | null {
 	if (!target) return null;
 	let destination: PdfDestinationObject | null = null;
 	if (target.type === "destination") {
@@ -217,6 +221,7 @@ export function getLinkDestination(
 		// PDF-native coordinate: origin bottom-left, y grows upward.
 		return {
 			pageIndex: destination.pageIndex,
+			pdfX: destination.zoom.params.x ?? null,
 			pdfY: destination.zoom.params.y,
 		};
 	}
@@ -225,10 +230,10 @@ export function getLinkDestination(
 	// the coordinate key matches the value parsed by pdf-lib in citation-dest-keys.
 	const view = destination.view;
 	if (destination.zoom.mode === PdfZoomMode.FitRectangle && view.length >= 4) {
-		return { pageIndex: destination.pageIndex, pdfY: view[3] };
+		return { pageIndex: destination.pageIndex, pdfX: view[0], pdfY: view[3] };
 	}
 	if (destination.zoom.mode === PdfZoomMode.FitHorizontal && view.length >= 1) {
-		return { pageIndex: destination.pageIndex, pdfY: view[0] };
+		return { pageIndex: destination.pageIndex, pdfX: null, pdfY: view[0] };
 	}
-	return { pageIndex: destination.pageIndex, pdfY: 0 };
+	return { pageIndex: destination.pageIndex, pdfX: null, pdfY: 0 };
 }

@@ -26,17 +26,24 @@
   现有 `onPreviewShow` 同样的 ref 镜像风格，不改变 handler 身份。
 - 新增 `chrome/pdf-jump-back-chip`：左上角工具栏正下方的浮动小 chip（与底部栏
   同用 `PDF_CHROME_CHIP` 材质，双层结构：材质层不响应 hover，反馈是按钮上的
-  accent 叠加 + `active:scale` 按下反馈，遵循 apple-design），显示“返回第 N 页”，
+  accent 叠加 + `active:scale` 按下反馈，遵循 apple-design），显示“返回跳转前”，
   点击恢复。渲染在侧面板之前的 DOM 上，面板展开时自然让位。
+- 跳转落点注意力反馈：`getLinkDestination` 补充返回目标锚点的 x 坐标
+  （XYZ `params.x` / FitR `view[0]`，仅有纵向锚点时为 null）；跳转成功后由
+  `flashJumpTarget` 把目标行构造成归一化窄条（锚点 x → 右边距，一行高），交给
+  现有 `setFocusedLayoutRegion(..., { flash: true })` 琥珀闪烁（保持 ~0.9s 后
+  1.6s 内淡出），读者一眼看到落点。区域型跳转（图/表 cross-ref 走
+  `scrollToLayoutRegion`）本就有区域高亮，两类落点都有视觉锚。
 - 行为设计：**滚动不清除 chip**——跳到 Appendix 后长时间阅读、翻页，返回入口仍在；
   连续跳转形成栈，可逐级返回（浏览器式）；文档切换（docId 变化）清空。
-- i18n：`viewer:pdf.jumpBack`（en "Back to p. {{page}}" / zh “返回第 {{page}} 页”）。
+- i18n：`viewer:pdf.jumpBack`（en "Jump back" / zh “返回跳转前”）。
 
 ## 验证点
 
-- 点击正文 "Appendix A" 等内部链接后，左上角工具栏下方出现“返回第 N 页”chip。
+- 点击正文 "Appendix A" 等内部链接后，落点行出现琥珀色高亮闪烁并淡出，
+  同时左上角工具栏下方出现“返回跳转前”chip。
 - 在 Appendix 中滚动阅读多页后点击 chip，视口回到跳转前的精确位置（含页内偏移）。
-- 多次连续跳转可逐级返回；URI 外链不产生 chip；切换文档后 chip 消失。
+- 多次连续跳转可逐级返回；URI 外链不产生 chip 与闪烁；切换文档后 chip 消失。
 - 双栏翻译视图由 `usePdfScrollSync` 自动跟随返回滚动，无需额外处理。
 
 Roadmap 与 TODO 已检查：这是已实现内部链接跳转能力的体验缺陷修复，不新增未完成产品项。

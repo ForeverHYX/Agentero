@@ -119,7 +119,12 @@ export type UsePdfCitationsOptions = {
 	 * commit, so external opens do not pollute the origin stack.
 	 */
 	onBeforeInternalJump?: () => void;
-	onInternalJump?: () => void;
+	/** Fired with the destination anchor when a link actually navigated. */
+	onInternalJump?: (target: {
+		pageIndex: number;
+		pdfX: number | null;
+		pdfY: number;
+	}) => void;
 };
 
 export type PdfCitations = {
@@ -432,6 +437,7 @@ export function usePdfCitations({
 			if (!target || !annotationCap) return;
 			// Capture the pre-jump position before the scroll starts.
 			onBeforeInternalJumpRef.current?.();
+			const destination = getLinkDestination(target);
 			annotationCap
 				.navigateTarget(target, docId)
 				.toPromise()
@@ -440,7 +446,9 @@ export function usePdfCitations({
 						openExternalUrl(result.uri);
 						return;
 					}
-					if (result.outcome === "navigated") onInternalJumpRef.current?.();
+					if (result.outcome === "navigated" && destination) {
+						onInternalJumpRef.current?.(destination);
+					}
 				})
 				.catch(() => {});
 		},

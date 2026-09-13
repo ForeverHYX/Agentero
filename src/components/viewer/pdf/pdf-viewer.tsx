@@ -129,6 +129,7 @@ import {
 	getPdfAiRuntime,
 	layoutAnalysisStore,
 	type PdfLayoutRegion,
+	setFocusedLayoutRegion,
 } from "@/lib/pdf/layout";
 import type { ActiveSelectionCard } from "@/lib/pdf/selection";
 import { PDF_ZOOM_MAX, PDF_ZOOM_MIN } from "@/lib/pdf/zoom";
@@ -743,13 +744,44 @@ function PdfViewerInner({
 	const clearCrossrefPreviewRef = useRef<() => void>(() => {});
 	const clearCitationPreviewRef = useRef<() => void>(() => {});
 
-	// Origin stack behind the bottom-right "jump back" chip (#505).
+	// Origin stack behind the "jump back" chip (#505).
 	const {
 		backTarget: jumpBackTarget,
 		captureJumpOrigin,
 		commitJumpOrigin,
 		goBack: goBackToJumpOrigin,
 	} = usePdfJumpBack({ docId });
+
+	// Attention flash at the jump destination: reuse the citation focus flash
+	// (amber hold + fade) over the destination line, so the reader sees where
+	// the link landed. Destinations are point anchors, so the flash covers the
+	// anchored row from the anchor x to the right margin.
+	const flashJumpTarget = useCallback(
+		(target: { pageIndex: number; pdfX: number | null; pdfY: number }) => {
+			const page =
+				docCapRef.current?.getDocument(docId)?.pages[target.pageIndex];
+			if (!page) return;
+			const yTop = 1 - target.pdfY / page.size.height;
+			const anchorX =
+				target.pdfX != null && Number.isFinite(target.pdfX)
+					? Math.min(Math.max(target.pdfX / page.size.width - 0.005, 0.02), 0.9)
+					: 0.05;
+			// One text row tall; "text" keeps the header preview expansion off.
+			const h = 0.022;
+			const y = Math.min(Math.max(yTop - h / 2, 0), 1 - h);
+			setFocusedLayoutRegion(
+				docId,
+				`jump:${target.pageIndex}:${target.pdfY.toFixed(1)}`,
+				{
+					pageIndex: target.pageIndex,
+					bbox: { x: anchorX, y, w: Math.max(0.06, 0.95 - anchorX), h },
+					kind: "text",
+				},
+				{ flash: true },
+			);
+		},
+		[docId],
+	);
 
 	const {
 		citationPreview,
@@ -772,7 +804,10 @@ function PdfViewerInner({
 		importIdentifier,
 		onPreviewShow: () => clearCrossrefPreviewRef.current(),
 		onBeforeInternalJump: captureJumpOrigin,
-		onInternalJump: commitJumpOrigin,
+		onInternalJump: (target) => {
+			commitJumpOrigin();
+			flashJumpTarget(target);
+		},
 	});
 
 	// Cross-reference (\ref) hover: preview the figure/table/equation crop.
@@ -1502,10 +1537,7 @@ function PdfViewerInner({
 				/>
 			)}
 			{!translationOnly && jumpBackTarget && (
-				<PdfJumpBackChip
-					page={jumpBackTarget.page}
-					onGoBack={goBackToJumpOrigin}
-				/>
+				<PdfJumpBackChip onGoBack={goBackToJumpOrigin} />
 			)}
 			{!translationOnly && (
 				<PdfOutlinePanel

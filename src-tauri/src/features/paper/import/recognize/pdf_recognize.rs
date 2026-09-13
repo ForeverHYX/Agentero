@@ -304,6 +304,10 @@ pub struct PdfIdentProbe {
     pub publisher: Option<String>,
     #[serde(skip_serializing_if = "String::is_empty")]
     pub source: String,
+    /// Soft warning code for the UI (e.g. `arxiv_rate_limited`) when
+    /// recognition partially succeeded but an authoritative lookup failed.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub warning: Option<String>,
 }
 
 impl PdfIdentProbe {
@@ -324,6 +328,7 @@ impl PdfIdentProbe {
             pages: meta.pages.clone(),
             publisher: meta.publisher.clone(),
             source: source.to_string(),
+            warning: None,
         }
     }
 
@@ -344,6 +349,7 @@ impl PdfIdentProbe {
             pages: None,
             publisher: None,
             source: String::new(),
+            warning: None,
         }
     }
 
@@ -410,6 +416,9 @@ pub(crate) async fn recognize_and_resolve(
                 log::debug!(target: "agentero::recognize", "arXiv {arxiv} resolve failed: {e}");
                 let mut probe = title_fallback(&file_path, &hit);
                 probe.arxiv_id = Some(arxiv.to_string());
+                if e.code() == "rate_limited" {
+                    probe.warning = Some("arxiv_rate_limited".into());
+                }
                 return probe;
             }
         }

@@ -146,6 +146,7 @@
 		"importPdfMerged": "Merged PDF into existing entry: “{{title}}”",
 		"importPdfMergedMany": "Merged {{count}} PDFs into existing entries",
 		"recognizeMerged": "Matched PDF merged into existing entry: {{id}}",
+		"recognizeArxivRateLimited": "arXiv is rate-limiting metadata lookups ({{id}}). Title/authors were not filled — try Refresh metadata later.",
 		"importFailed": "Import failed",
 		"exportFailed": "Export failed",
 		"backfillPublication": "Backfill venues",

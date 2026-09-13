@@ -237,6 +237,28 @@ fn recognize_metadata_runner(
         cache.invalidate(&vault, &path);
         cache.invalidate(&vault, &final_path);
 
+        // Soft warning for the frontend: arXiv id found, Atom lookup hit 429,
+        // recognizer had no title — keep filename placeholder; Toast via
+        // `job:changed` params (no new lifecycle event).
+        if probe.warning.as_deref() == Some("arxiv_rate_limited")
+            && probe
+                .title
+                .as_deref()
+                .map(str::trim)
+                .filter(|t| !t.is_empty())
+                .is_none()
+        {
+            center
+                .merge_running_job_params(
+                    &snapshot.id,
+                    serde_json::json!({
+                        "warning": "arxiv_rate_limited",
+                        "arxivId": probe.arxiv_id,
+                    }),
+                )
+                .await;
+        }
+
         let final_caps = cache.caps_for(&vault, &final_path);
         if final_caps.needs_paper_md() {
             let snap = center

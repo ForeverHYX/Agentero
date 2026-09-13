@@ -416,6 +416,7 @@ mod tests {
             pages: None,
             publisher: None,
             source: "crossref".into(),
+            warning: None,
         }
     }
 

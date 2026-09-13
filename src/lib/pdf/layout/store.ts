@@ -50,6 +50,12 @@ type LayoutStoreState = {
 	ui: LayoutAnalysisUiStatus;
 	activeDocumentId: string | null;
 	/**
+	 * Paper folder for the active run (normalized abs path). Headless jobs use a
+	 * synthetic documentId (`headless-layout-…`); the Figures sidebar matches on
+	 * this path so the open paper still shows progress.
+	 */
+	activePaperAbsPath: string | null;
+	/**
 	 * Focused region for PDF overlay + sidebar selection.
 	 * `documentId` scopes the highlight to the owning PDF tab.
 	 * Optional `region` paints the overlay without a store region lookup
@@ -63,23 +69,47 @@ type LayoutStoreState = {
 	overlayVisible: Record<string, boolean>;
 };
 
+/** Normalize paper folder paths for layout progress attribution. */
+export function normalizeLayoutPaperKey(path: string): string {
+	return path.replace(/[/\\]+$/, "").replace(/\\/g, "/");
+}
+
 export const layoutAnalysisStore = createStore<LayoutStoreState>(() => ({
 	byDocument: {},
 	ui: { stage: "idle" },
 	activeDocumentId: null,
+	activePaperAbsPath: null,
 	focused: null,
 	overlayVisible: {},
 }));
 
+/**
+ * Update analysis UI. Pass `paperAbsPath` on the first `running` tick of a run
+ * so headless and viewer-bound jobs attribute progress to the same paper; later
+ * progress ticks may omit it and keep the association until a non-running stage.
+ */
 export function setLayoutAnalysisUi(
 	ui: LayoutAnalysisUiStatus,
 	documentId?: string | null,
+	paperAbsPath?: string | null,
 ): void {
-	layoutAnalysisStore.setState((state) => ({
-		ui,
-		activeDocumentId:
-			documentId === undefined ? state.activeDocumentId : documentId,
-	}));
+	layoutAnalysisStore.setState((state) => {
+		const nextDocumentId =
+			documentId === undefined ? state.activeDocumentId : documentId;
+		let nextPaper = state.activePaperAbsPath;
+		if (ui.stage === "running") {
+			if (paperAbsPath !== undefined) {
+				nextPaper = paperAbsPath ? normalizeLayoutPaperKey(paperAbsPath) : null;
+			}
+		} else {
+			nextPaper = null;
+		}
+		return {
+			ui,
+			activeDocumentId: nextDocumentId,
+			activePaperAbsPath: nextPaper,
+		};
+	});
 }
 
 export function setLayoutDocumentResult(result: PdfLayoutDocumentResult): void {
@@ -301,6 +331,7 @@ export function clearLayoutVaultState(): void {
 		byDocument: {},
 		ui: { stage: "idle" },
 		activeDocumentId: null,
+		activePaperAbsPath: null,
 		focused: null,
 		overlayVisible: {},
 	});

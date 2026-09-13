@@ -1506,6 +1506,8 @@ function PdfViewerInner({
 			{!translationOnly && (
 				<PdfFiguresPanel
 					documentId={docId}
+					paperAbsPath={paperAbsPath}
+					paperRelPath={paperRelPath}
 					showFigures={showFigures}
 					onAnalyze={handleAnalyzeLayout}
 					onJump={handleJumpToLayoutRegion}

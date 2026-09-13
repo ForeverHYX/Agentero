@@ -183,6 +183,7 @@
 		"analyze": "Detect figures, tables, and formulas",
 		"reanalyze": "Re-run layout analysis",
 		"analyzing": "Analyzing layout…",
+		"queued": "Waiting to analyze layout…",
 		"progressPages": "{{page}} / {{total}} pages",
 		"progressPct": "{{pct}}%",
 		"clickAnnotateAria": "Annotate this {{kind}}",

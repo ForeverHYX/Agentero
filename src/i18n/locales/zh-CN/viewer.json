@@ -183,6 +183,7 @@
 		"analyze": "检测插图、表格与公式",
 		"reanalyze": "重新运行版面分析",
 		"analyzing": "正在分析版面…",
+		"queued": "版面分析排队中…",
 		"progressPages": "{{page}} / {{total}} 页",
 		"progressPct": "{{pct}}%",
 		"clickAnnotateAria": "批注此{{kind}}",

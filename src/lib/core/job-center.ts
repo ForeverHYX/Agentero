@@ -474,11 +474,16 @@ export function projectJobToBackgroundTask(job: JobChangedSnapshot): void {
 			);
 			const remembered = resolveTaskSubject(job.id);
 			const rowDetail = joinTaskDetail(remembered, status ?? detail);
+			const paperPath =
+				job.kind === "import" || job.kind === "connectorSync"
+					? null
+					: (job.paperPath ?? null);
 			startBackgroundTask({
 				id: job.id,
 				kind: job.kind,
 				title,
 				detail: rowDetail,
+				paperPath,
 				icon,
 				running: job.state === "running",
 				progress,
@@ -488,6 +493,7 @@ export function projectJobToBackgroundTask(job: JobChangedSnapshot): void {
 				job.id,
 				{
 					status: job.state === "running" ? "running" : "queued",
+					paperPath,
 					// Byte progress (`job:progress`) owns the bar for
 					// download/import rows, so an absent job progress must not
 					// reset it to indeterminate.

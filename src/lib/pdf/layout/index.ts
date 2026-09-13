@@ -183,6 +183,7 @@ export {
 	layoutAnalysisStore,
 	layoutKindFromCitationFragment,
 	layoutKindFromRegionId,
+	normalizeLayoutPaperKey,
 	setFocusedLayoutRegion,
 	setLayoutAnalysisUi,
 	setLayoutDocumentResult,

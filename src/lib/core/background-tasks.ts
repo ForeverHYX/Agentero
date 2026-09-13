@@ -46,6 +46,12 @@ export type BackgroundTask = {
 	title: string;
 	/** Secondary line (path, phase, …) */
 	detail?: string;
+	/**
+	 * Vault-relative paper folder when the row targets one paper (e.g.
+	 * `layoutAnalyze`). Used by the Figures sidebar to show loading for the
+	 * open paper while a headless job is queued/running.
+	 */
+	paperPath?: string | null;
 	/** Params-dependent icon override; defaults derive from `kind`. */
 	icon?: BackgroundTaskIcon;
 	status: BackgroundTaskStatus;
@@ -187,6 +193,7 @@ export function startBackgroundTask(input: {
 	kind: BackgroundTaskKind;
 	title: string;
 	detail?: string;
+	paperPath?: string | null;
 	icon?: BackgroundTaskIcon;
 	/** Start as running immediately (default true). */
 	running?: boolean;
@@ -201,6 +208,12 @@ export function startBackgroundTask(input: {
 		existing &&
 		(existing.status === "queued" || existing.status === "running")
 	) {
+		if (
+			input.paperPath !== undefined &&
+			existing.paperPath !== input.paperPath
+		) {
+			updateBackgroundTask(id, { paperPath: input.paperPath });
+		}
 		return id;
 	}
 	const task: BackgroundTask = {
@@ -208,6 +221,7 @@ export function startBackgroundTask(input: {
 		kind: input.kind,
 		title: input.title,
 		detail: input.detail,
+		paperPath: input.paperPath,
 		icon: input.icon,
 		status: input.running === false ? "queued" : "running",
 		progress: input.progress === undefined ? null : input.progress,
@@ -224,7 +238,10 @@ export function startBackgroundTask(input: {
 export function updateBackgroundTask(
 	id: string,
 	patch: Partial<
-		Pick<BackgroundTask, "title" | "detail" | "status" | "progress" | "error">
+		Pick<
+			BackgroundTask,
+			"title" | "detail" | "paperPath" | "status" | "progress" | "error"
+		>
 	>,
 	opts?: {
 		/**

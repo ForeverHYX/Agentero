@@ -5,6 +5,8 @@ import type { PdfLayoutRegion } from "@/lib/pdf/layout";
 
 type PdfFiguresPanelProps = {
 	documentId: string;
+	paperAbsPath?: string | null;
+	paperRelPath?: string | null;
 	showFigures: boolean;
 	analyzing?: boolean;
 	onAnalyze: () => void;
@@ -18,6 +20,8 @@ type PdfFiguresPanelProps = {
 /** Left-side layout analysis panel. The toggle button lives in PdfLeftToolbar. */
 export function PdfFiguresPanel({
 	documentId,
+	paperAbsPath,
+	paperRelPath,
 	showFigures,
 	analyzing,
 	onAnalyze,
@@ -30,6 +34,8 @@ export function PdfFiguresPanel({
 		<aside data-pdf-chrome className={cn("overflow-hidden", PDF_SIDE_PANEL)}>
 			<FiguresPanel
 				documentId={documentId}
+				paperAbsPath={paperAbsPath}
+				paperRelPath={paperRelPath}
 				viewerReady
 				analyzing={analyzing}
 				onAnalyze={onAnalyze}

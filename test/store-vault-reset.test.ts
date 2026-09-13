@@ -114,6 +114,7 @@ describe("vault-scoped store clears", () => {
 			byDocument: { doc1: {} as never },
 			ui: { stage: "analyzing" } as never,
 			activeDocumentId: "doc1",
+			activePaperAbsPath: "/vault/papers/a",
 			focused: { documentId: "doc1", regionId: "r1" },
 			overlayVisible: { doc1: true },
 		});
@@ -124,6 +125,7 @@ describe("vault-scoped store clears", () => {
 			byDocument: {},
 			ui: { stage: "idle" },
 			activeDocumentId: null,
+			activePaperAbsPath: null,
 			focused: null,
 			overlayVisible: {},
 		});

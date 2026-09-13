@@ -26,6 +26,7 @@ import {
 	TooltipTrigger,
 } from "@/components/ui/tooltip";
 import type { PromptImage } from "@/lib/agent";
+import { backgroundTasksStore } from "@/lib/core/background-tasks";
 import { cn } from "@/lib/core/utils";
 import {
 	compareLayoutReadingOrder,
@@ -38,6 +39,7 @@ import {
 	isTableLayoutKind,
 	LAYOUT_SIDEBAR_MIN_SCORE,
 	layoutAnalysisStore,
+	normalizeLayoutPaperKey,
 	type PdfLayoutKind,
 	type PdfLayoutRegion,
 	toggleLayoutOverlayVisible,
@@ -46,6 +48,10 @@ import {
 type FiguresPanelProps = {
 	/** EmbedPDF documentId / PDF tab id used as layout store key. */
 	documentId: string | null;
+	/** Paper folder abs path — matches headless layoutAnalyze progress. */
+	paperAbsPath?: string | null;
+	/** Vault-relative paper path — matches JobCenter projected task rows. */
+	paperRelPath?: string | null;
 	/** Whether a PDF viewer handle is currently registered for this doc. */
 	viewerReady: boolean;
 	/** Layout analysis in progress (from toolbar / handle). */
@@ -58,6 +64,18 @@ type FiguresPanelProps = {
 	/** Hide the pane header for use inside a floating PDF panel. */
 	compact?: boolean;
 };
+
+function normalizeRelPaperPath(path: string): string {
+	return path.replace(/\\/g, "/").replace(/^\/+|\/+$/g, "");
+}
+
+function sameRelPaperPath(
+	a: string | null | undefined,
+	b: string | null | undefined,
+): boolean {
+	if (!a || !b) return false;
+	return normalizeRelPaperPath(a) === normalizeRelPaperPath(b);
+}
 
 type SidebarKind = "image" | "chart" | "table" | "algorithm" | "formula";
 
@@ -221,6 +239,8 @@ function Section({
  */
 export function FiguresPanel({
 	documentId,
+	paperAbsPath = null,
+	paperRelPath = null,
 	viewerReady,
 	analyzing = false,
 	onAnalyze,
@@ -242,6 +262,26 @@ export function FiguresPanel({
 	const activeDocumentId = useStore(
 		layoutAnalysisStore,
 		(s) => s.activeDocumentId,
+	);
+	const activePaperAbsPath = useStore(
+		layoutAnalysisStore,
+		(s) => s.activePaperAbsPath,
+	);
+	const layoutJobPending = useStore(backgroundTasksStore, (s) =>
+		s.tasks.some(
+			(task) =>
+				(task.kind === "layoutAnalyze" || task.kind === "layoutRun") &&
+				(task.status === "queued" || task.status === "running") &&
+				sameRelPaperPath(task.paperPath, paperRelPath),
+		),
+	);
+	const layoutJobQueued = useStore(backgroundTasksStore, (s) =>
+		s.tasks.some(
+			(task) =>
+				task.kind === "layoutAnalyze" &&
+				task.status === "queued" &&
+				sameRelPaperPath(task.paperPath, paperRelPath),
+		),
 	);
 	const [thumbs, setThumbs] = useState<Record<string, PromptImage | null>>({});
 
@@ -360,9 +400,15 @@ export function FiguresPanel({
 		documentId ? (s.overlayVisible[documentId] ?? false) : false,
 	);
 
-	const layoutUiActive = !documentId || activeDocumentId === documentId;
-	const runningUi = ui.stage === "running" && layoutUiActive ? ui : null;
-	const running = analyzing || runningUi != null;
+	const paperKey = paperAbsPath ? normalizeLayoutPaperKey(paperAbsPath) : null;
+	const storeRunningForPaper =
+		ui.stage === "running" &&
+		(Boolean(documentId && activeDocumentId === documentId) ||
+			Boolean(paperKey && activePaperAbsPath === paperKey) ||
+			// Loose PDF / no paper folder: only documentId can attribute the run.
+			(!documentId && !paperKey));
+	const runningUi = storeRunningForPaper ? ui : null;
+	const running = analyzing || runningUi != null || layoutJobPending;
 
 	const empty = gallery.length === 0;
 	const hasRaw = rawSidebarCount > 0;
@@ -381,7 +427,11 @@ export function FiguresPanel({
 			: runningUi && typeof runningUi.completed === "number"
 				? runningUi.completed
 				: null;
-	const analysisMessage = runningUi?.message?.trim() || t("figures.analyzing");
+	const analysisMessage = runningUi?.message?.trim()
+		? runningUi.message
+		: layoutJobQueued
+			? t("figures.queued")
+			: t("figures.analyzing");
 	const analysisProgressLabel =
 		analysisPageTotal != null && analysisPageCurrent != null
 			? t("figures.progressPages", {
@@ -392,7 +442,7 @@ export function FiguresPanel({
 				? t("figures.progressPct", { pct: Math.round(analysisProgress) })
 				: null;
 
-	const analyzeTooltip = runningUi
+	const analyzeTooltip = running
 		? analysisMessage
 		: ui.stage === "error"
 			? ui.message

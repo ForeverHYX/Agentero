@@ -42,4 +42,5 @@ export type {
 	DocTab,
 	OpenPlacement,
 	SplitDirection,
+	TabResources,
 } from "@/lib/workspace/tabs/types";

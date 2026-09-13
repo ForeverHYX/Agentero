@@ -123,6 +123,7 @@ import {
 	revokeTabMediaSources,
 	splitPaneIdForPath,
 	syncTabSeedsForPath,
+	type TabResources,
 	tabHasNotesSplit,
 	tabIdForPath,
 	tabIsPaperNotes,
@@ -138,6 +139,31 @@ import { type CenterViewMode, preferredModeForPath } from "./viewer";
 function withLibraryIfEmpty(next: DocTab[]): DocTab[] {
 	if (next.length > 0 || !getVaultPath()) return next;
 	return ensureFullLibraryTab([]).tabs;
+}
+
+function patchFromTabResources(
+	res: TabResources,
+	current?: DocTab | null,
+): Partial<DocTab> {
+	const keepPdfMode =
+		current?.mode === "pdf" &&
+		res.mode === "markdown" &&
+		(current.kind === "paper" || res.kind === "paper");
+	return {
+		kind: res.kind,
+		title: res.title,
+		mode: keepPdfMode ? "pdf" : res.mode,
+		paperMeta: res.paperMeta,
+		pdfUrl: res.pdfUrl,
+		pdfBytes: res.pdfBytes ?? null,
+		htmlUrl: res.htmlUrl,
+		imageUrl: res.imageUrl,
+		notesPath: res.notesPath,
+		notesSeed: res.notesSeed,
+		markdownSeed: res.markdownSeed,
+		seedKey: 1,
+		loaded: true,
+	};
 }
 
 /**
@@ -308,21 +334,7 @@ export function openTab(
 					: res.error,
 			);
 		}
-		const patch: Partial<DocTab> = {
-			kind: res.kind,
-			title: res.title,
-			mode: res.mode,
-			paperMeta: res.paperMeta,
-			pdfUrl: res.pdfUrl,
-			pdfBytes: res.pdfBytes ?? null,
-			htmlUrl: res.htmlUrl,
-			imageUrl: res.imageUrl,
-			notesPath: res.notesPath,
-			notesSeed: res.notesSeed,
-			markdownSeed: res.markdownSeed,
-			seedKey: 1,
-			loaded: true,
-		};
+		const patch = patchFromTabResources(res, existing);
 		updateTab(id, patch);
 
 		// Paper default: NOTES in the notes column (or first-time right split).
@@ -331,7 +343,7 @@ export function openTab(
 			!opts?.placement &&
 			res.kind === "paper" &&
 			Boolean(res.notesPath) &&
-			(res.mode === "pdf" || res.mode === "html") &&
+			(patch.mode === "pdf" || patch.mode === "html") &&
 			(opts?.forceNotes || loadSettings().autoOpenPaperNotes);
 		if (wantDefaultNotes && res.notesPath) {
 			openNotesForPaper(id, patch, path);
@@ -1389,31 +1401,18 @@ export function hydratePlaceholderTabs(tabIds: readonly string[]): void {
 							: res.error,
 					);
 				}
-				updateTab(id, {
-					kind: res.kind,
-					title: res.title,
-					mode: res.mode,
-					paperMeta: res.paperMeta,
-					pdfUrl: res.pdfUrl,
-					pdfBytes: res.pdfBytes ?? null,
-					htmlUrl: res.htmlUrl,
-					imageUrl: res.imageUrl,
-					notesPath: res.notesPath,
-					notesSeed: res.notesSeed,
-					markdownSeed: res.markdownSeed,
-					seedKey: 1,
-					loaded: true,
-				});
+				const patch = patchFromTabResources(res, current);
+				updateTab(id, patch);
 				// A restored paper body hydrates after its NOTES panel was
 				// pruned from the layout — open the companion now, otherwise
 				// the first click shows the PDF without notes beside it.
 				if (
 					res.kind === "paper" &&
-					(res.mode === "pdf" || res.mode === "html") &&
+					(patch.mode === "pdf" || patch.mode === "html") &&
 					res.notesPath &&
 					loadSettings().autoOpenPaperNotes
 				) {
-					openNotesForPaper(id);
+					openNotesForPaper(id, patch, tab.path);
 				}
 			} finally {
 				placeholderLoads.delete(id);

@@ -173,10 +173,14 @@ export {
 } from "@/lib/pdf/layout/run-analysis";
 export {
 	clearLayoutDocumentResult,
+	type FocusedLayoutSnapshot,
+	type FocusedLayoutState,
 	getFocusedLayoutRegion,
 	getLayoutDocumentResult,
 	isLayoutOverlayVisible,
 	layoutAnalysisStore,
+	layoutKindFromCitationFragment,
+	layoutKindFromRegionId,
 	setFocusedLayoutRegion,
 	setLayoutAnalysisUi,
 	setLayoutDocumentResult,

@@ -137,7 +137,11 @@ export function usePdfLayoutCluster({
 				pageNumber: region.pageIndex + 1,
 				behavior: "instant",
 			});
-			setFocusedLayoutRegion(docId, region.id);
+			setFocusedLayoutRegion(docId, region.id, {
+				pageIndex: region.pageIndex,
+				bbox: region.bbox,
+				kind: region.kind,
+			});
 		},
 		[docId],
 	);

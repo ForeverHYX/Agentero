@@ -144,6 +144,8 @@ export {
 	layoutAnalysisStore,
 	layoutKindBorder,
 	layoutKindFill,
+	layoutKindFromCitationFragment,
+	layoutKindFromRegionId,
 	layoutKindHex,
 	layoutKindI18nKey,
 	layoutSidecarPath,

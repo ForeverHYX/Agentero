@@ -16,6 +16,7 @@ import {
 } from "@/lib/pdf/annotation-ref";
 import type { PdfAskNormalizedRect } from "@/lib/pdf/ask";
 import type { PdfHighlight } from "@/lib/pdf/highlight/types";
+import type { PdfLayoutKind } from "@/lib/pdf/layout";
 import { getVaultPath, vaultStore } from "@/lib/vault/store";
 import { getActiveTab } from "@/lib/workspace/store";
 
@@ -40,6 +41,8 @@ export type PdfViewerHandle = {
 		id: string;
 		pageIndex: number;
 		bbox: PdfAskNormalizedRect;
+		/** When set, paints the focus outline without a layout-store id lookup. */
+		kind?: PdfLayoutKind;
 	}) => void;
 	/** Crop a normalized page region (for figure sidebar thumbnails). */
 	renderRegion: (args: {

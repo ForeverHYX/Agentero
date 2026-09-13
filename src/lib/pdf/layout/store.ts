@@ -5,10 +5,25 @@
 
 import { createStore } from "zustand/vanilla";
 
+import type { PdfAskNormalizedRect } from "@/lib/pdf/ask/types";
 import type {
 	LayoutAnalysisUiStatus,
 	PdfLayoutDocumentResult,
+	PdfLayoutKind,
 } from "@/lib/pdf/layout/types";
+
+/** Inline geometry when focus id is absent from sidebar `regions` (citation jumps). */
+export type FocusedLayoutSnapshot = {
+	pageIndex: number;
+	bbox: PdfAskNormalizedRect;
+	kind: PdfLayoutKind;
+};
+
+export type FocusedLayoutState = {
+	documentId: string;
+	regionId: string;
+	snapshot?: FocusedLayoutSnapshot;
+};
 
 type LayoutStoreState = {
 	/** Last successful result per document. */
@@ -19,8 +34,10 @@ type LayoutStoreState = {
 	/**
 	 * Focused region for PDF overlay + sidebar selection.
 	 * `documentId` scopes the highlight to the owning PDF tab.
+	 * Optional `snapshot` paints the overlay without a store region lookup
+	 * (section headers / page fragments / citation jumps before layout loads).
 	 */
-	focused: { documentId: string; regionId: string } | null;
+	focused: FocusedLayoutState | null;
 	/**
 	 * Whether the EmbedPDF layout bbox overlay is shown per document.
 	 * Figures rail toggles this; PDF viewer mirrors into the plugin.
@@ -105,9 +122,16 @@ export function isLayoutOverlayVisible(documentId: string): boolean {
 export function setFocusedLayoutRegion(
 	documentId: string,
 	regionId: string | null,
+	snapshot?: FocusedLayoutSnapshot,
 ): void {
 	layoutAnalysisStore.setState({
-		focused: regionId ? { documentId, regionId } : null,
+		focused: regionId
+			? {
+					documentId,
+					regionId,
+					...(snapshot ? { snapshot } : {}),
+				}
+			: null,
 	});
 }
 
@@ -115,6 +139,47 @@ export function getFocusedLayoutRegion(documentId: string): string | null {
 	const focused = layoutAnalysisStore.getState().focused;
 	if (!focused || focused.documentId !== documentId) return null;
 	return focused.regionId;
+}
+
+/** Infer a layout kind for citation / synthetic region ids. */
+export function layoutKindFromCitationFragment(
+	fragment: string,
+): PdfLayoutKind {
+	const key = (fragment.split("=")[0] ?? "").toLowerCase();
+	switch (key) {
+		case "figure":
+			return "image";
+		case "table":
+			return "table";
+		case "algorithm":
+			return "algorithm";
+		case "formula":
+			return "formula";
+		case "section":
+			return "header";
+		case "page":
+			return "text";
+		case "region":
+			return layoutKindFromRegionId(fragment.slice("region=".length));
+		default:
+			return "header";
+	}
+}
+
+export function layoutKindFromRegionId(regionId: string): PdfLayoutKind {
+	const id = regionId.toLowerCase();
+	if (
+		id.startsWith("figure") ||
+		id.startsWith("image") ||
+		id.startsWith("chart")
+	) {
+		return id.startsWith("chart") ? "chart" : "image";
+	}
+	if (id.startsWith("table")) return "table";
+	if (id.startsWith("algorithm")) return "algorithm";
+	if (id.startsWith("formula")) return "formula";
+	if (id.startsWith("page-")) return "text";
+	return "header";
 }
 
 /**

@@ -726,11 +726,12 @@ export const PdfPageLayers = memo(function PdfPageLayers({
 						/>
 					</div>
 				) : null}
-				{/* Figures sidebar selection: EmbedPDF layout hue for kind. */}
+				{/* Figures sidebar / citation jump focus: EmbedPDF layout hue. */}
 				{focusedLayoutOnPage ? (
 					<div
+						key={`${focusedLayoutOnPage.id}:${focusedLayoutOnPage.pageIndex}:${focusedLayoutOnPage.bbox.y}`}
 						className={cn(
-							"pointer-events-none absolute z-[2] rounded-none border shadow-[0_0_0_1px_rgba(255,255,255,0.55)] dark:shadow-[0_0_0_1px_rgba(0,0,0,0.5)]",
+							"pointer-events-none absolute z-[2] rounded-none border shadow-[0_0_0_1px_rgba(255,255,255,0.55)] dark:shadow-[0_0_0_1px_rgba(0,0,0,0.5)] motion-safe:animate-[pulse_1.2s_ease-in-out_1]",
 							PDF_PRIVACY_HIDE_CLASS,
 						)}
 						style={{

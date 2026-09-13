@@ -46,6 +46,7 @@ import { removeTabAnnotations } from "@/lib/pdf/annotations-store";
 import {
 	buildLayoutDocumentResult,
 	getLayoutDocumentResult,
+	layoutKindFromCitationFragment,
 	mergeCaptionsIntoHosts,
 	setLayoutDocumentResult,
 } from "@/lib/pdf/layout";
@@ -889,6 +890,7 @@ function scheduleCitationJump(paperAbs: string, target: CitationTarget): void {
 		for (const id of retryTimeoutIds) window.clearTimeout(id);
 	};
 
+	const kind = layoutKindFromCitationFragment(target.fragment);
 	const tryJump = () => {
 		if (stopped) return;
 		const handle = pdfHandleFor(tabId);
@@ -897,6 +899,7 @@ function scheduleCitationJump(paperAbs: string, target: CitationTarget): void {
 			id: target.regionId,
 			pageIndex: target.pageIndex,
 			bbox: target.bbox,
+			kind,
 		});
 	};
 

@@ -32,7 +32,10 @@ import type { PdfVisualSessionTrace } from "@/lib/pdf/agent-trace";
 import { deletePdfAskThread, type PdfAskThread } from "@/lib/pdf/ask";
 import { isHighlightObject } from "@/lib/pdf/highlight/annotation-store";
 import type { PdfHighlight } from "@/lib/pdf/highlight/types";
-import { setFocusedLayoutRegion } from "@/lib/pdf/layout";
+import {
+	layoutKindFromRegionId,
+	setFocusedLayoutRegion,
+} from "@/lib/pdf/layout";
 import type { ActiveSelectionCard } from "@/lib/pdf/selection";
 
 /** Longest edge of a figure-rail thumbnail crop (px). */
@@ -169,7 +172,11 @@ export function usePdfViewerHandle({
 					pageNumber: region.pageIndex + 1,
 					behavior: "instant",
 				});
-				setFocusedLayoutRegion(docId, region.id);
+				setFocusedLayoutRegion(docId, region.id, {
+					pageIndex: region.pageIndex,
+					bbox: region.bbox,
+					kind: region.kind ?? layoutKindFromRegionId(region.id),
+				});
 			},
 			renderRegion: async ({ pageIndex, bbox, maxEdgePx }) => {
 				const eng = engineRef.current;

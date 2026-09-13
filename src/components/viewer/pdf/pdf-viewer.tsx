@@ -401,12 +401,30 @@ function PdfViewerInner({
 	const currentPage = scrollState.currentPage || 1;
 	const totalPages = scrollState.totalPages || 0;
 
-	/** Sidebar-selected layout region → PDF focus outline. */
+	/** Sidebar / citation focus → PDF outline (snapshot or regions / rawRegions). */
 	const focusedLayoutRegion = useStore(layoutAnalysisStore, (s) => {
 		if (s.focused?.documentId !== docId) return null;
+		const focused = s.focused;
+		if (!focused) return null;
+		if (focused.snapshot) {
+			return {
+				id: focused.regionId,
+				pageIndex: focused.snapshot.pageIndex,
+				kind: focused.snapshot.kind,
+				label: focused.snapshot.kind,
+				score: 1,
+				readingOrder: 0,
+				rect: { x: 0, y: 0, w: 0, h: 0 },
+				bbox: focused.snapshot.bbox,
+			};
+		}
 		const result = s.byDocument[docId];
-		if (!result || !s.focused) return null;
-		return result.regions.find((r) => r.id === s.focused?.regionId) ?? null;
+		if (!result) return null;
+		return (
+			result.regions.find((r) => r.id === focused.regionId) ??
+			result.rawRegions.find((r) => r.id === focused.regionId) ??
+			null
+		);
 	});
 	const zoomLevel = zoomState.currentZoomLevel || 1;
 

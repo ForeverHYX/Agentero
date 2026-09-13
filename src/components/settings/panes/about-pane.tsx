@@ -231,10 +231,14 @@ export function AboutPane() {
 	const canInstallCli = Boolean(cli?.canInstall) && !cliBusy;
 	const showInstall = !cli?.installed || needsCliUpdate;
 	const showBrewCliHint = isMac && showInstall && Boolean(cli?.brewAvailable);
-	const cliVerifyCommand =
-		isWin && cli?.installPath
-			? `& '${cli.installPath.replaceAll("'", "''")}' --version`
-			: `${cli?.commandName ?? "agentero-cli"} --version`;
+	const cliPath = cli?.installPath?.replaceAll("'", "''");
+	const cliVerifyCommand = `${cli?.commandName ?? "agentero-cli"} --version`;
+	const cliPowerShellCommand = cliPath
+		? `& '${cliPath}' --version`
+		: cliVerifyCommand;
+	const cliCmdCommand = cli?.installPath
+		? `call "${cli.installPath.replaceAll('"', '""')}" --version`
+		: cliVerifyCommand;
 
 	const showFinderRow = isMac && isTauri() && finder?.supported !== false;
 	const needsFinderUpdate = Boolean(finder?.installed && !finder.current);
@@ -399,17 +403,46 @@ export function AboutPane() {
 									? t("about.cli.windowsVerifyHint")
 									: t("about.cli.verifyHint")}
 							</p>
-							<CompactCodeBlock
-								code={cliVerifyCommand}
-								language="shell"
-								wrap
-								className="[&_pre]:opacity-75"
-								copyButtonProps={{
-									"aria-label": t("about.cli.verifyCopy"),
-									onCopy: () => notifySuccess(t("about.cli.verifyCopied")),
-									onError: () => notifyError(t("about.cli.verifyCopyFailed")),
-								}}
-							/>
+							{isWin ? (
+								<div className="space-y-2">
+									<CompactCodeBlock
+										code={cliPowerShellCommand}
+										language="shell"
+										wrap
+										className="[&_pre]:opacity-75"
+										copyButtonProps={{
+											"aria-label": t("about.cli.verifyPowerShellCopy"),
+											onCopy: () => notifySuccess(t("about.cli.verifyCopied")),
+											onError: () =>
+												notifyError(t("about.cli.verifyCopyFailed")),
+										}}
+									/>
+									<CompactCodeBlock
+										code={cliCmdCommand}
+										language="shell"
+										wrap
+										className="[&_pre]:opacity-75"
+										copyButtonProps={{
+											"aria-label": t("about.cli.verifyCmdCopy"),
+											onCopy: () => notifySuccess(t("about.cli.verifyCopied")),
+											onError: () =>
+												notifyError(t("about.cli.verifyCopyFailed")),
+										}}
+									/>
+								</div>
+							) : (
+								<CompactCodeBlock
+									code={cliVerifyCommand}
+									language="shell"
+									wrap
+									className="[&_pre]:opacity-75"
+									copyButtonProps={{
+										"aria-label": t("about.cli.verifyCopy"),
+										onCopy: () => notifySuccess(t("about.cli.verifyCopied")),
+										onError: () => notifyError(t("about.cli.verifyCopyFailed")),
+									}}
+								/>
+							)}
 						</div>
 					) : null}
 				</SettingsGroup>

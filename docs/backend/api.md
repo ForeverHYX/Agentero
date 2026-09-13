@@ -1010,7 +1010,7 @@ Agent：`agent_run_once` / `agent_warm` 在 vault 为 `remote:…` 时经 SSH `b
 
 #### `paper_import_local_pdf`
 
-把本地 PDF 导入为 paper 文件夹（复制 + catalog + liteparse）。入口：魔棒弹层原生 PDF 选择器；或将 PDF **拖到左侧树 `papers/` 组织夹 / Library 表** → 直接后台导入（无确认对话框，元数据由识别链路自动补全）。
+把本地 PDF 导入为 paper 文件夹（复制 + catalog + liteparse）。入口：魔棒弹层原生 PDF 选择器；或将 PDF **拖到窗口任意区域** → 直接后台导入（无确认对话框，元数据由识别链路自动补全）。拖到左侧树 `papers/` 组织夹或 Library 表时，优先使用对应目标目录；其它区域使用当前 Papers 目标。
 
 - **参数**（invoke 字段名 `args`）：
 

@@ -197,7 +197,7 @@ export default function App() {
 	useLayoutModelPrefetch();
 	// Soft-probe catalog ACP agents at open (sidebar panel is lazy-mounted).
 	useAgentCatalogPrefetch();
-	// Cancel WebView navigation on any OS file drop (PDF import is tree-only).
+	// Cancel WebView navigation and route unclaimed external PDF drops globally.
 	useExternalFileDrop();
 	// First-vault highlight tour (driver.js) + Settings replay listener.
 	useFeatureTour();

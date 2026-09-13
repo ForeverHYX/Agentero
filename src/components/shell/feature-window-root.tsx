@@ -15,6 +15,7 @@ import {
 	useSettings,
 	useVaultStore,
 } from "@/hooks/use-app-stores";
+import { useExternalFileDrop } from "@/hooks/use-external-file-drop";
 import { useNativeSelectAllGuard } from "@/hooks/use-native-select-all-guard";
 import { applyAgentSessionHandoffOnce } from "@/lib/agent/agent-session-store";
 import { normalizeAgentSourcePath } from "@/lib/agent/sources";
@@ -250,6 +251,8 @@ function FeatureAnnotations({
 }
 
 export function FeatureWindowRoot() {
+	useExternalFileDrop();
+
 	const { t } = useTranslation(["app"]);
 	const view = useMemo(() => readFeatureWindowView() ?? "agent", []);
 	const bootQuery = useMemo(() => readFeatureQuery(), []);

@@ -11,6 +11,7 @@ import {
 	type DocViewPdfProps,
 } from "@/components/workspace/doc-view";
 import { useSettings, useVaultStore } from "@/hooks/use-app-stores";
+import { useExternalFileDrop } from "@/hooks/use-external-file-drop";
 import { useNativeSelectAllGuard } from "@/hooks/use-native-select-all-guard";
 import { useVaultFileEvents } from "@/hooks/use-vault-file-events";
 import { isMacOS, isTauri } from "@/lib/core/tauri";
@@ -88,6 +89,7 @@ export function DocWindowRoot() {
 	const interfaceFontFamily = useSettings((s) => s.interfaceFontFamily);
 	const monoFontFamily = useSettings((s) => s.monoFontFamily);
 	const fontFamily = resolveFontFamilyCss(textFontFamily, "text");
+	useExternalFileDrop();
 
 	useEffect(() => {
 		applyDocumentChrome({

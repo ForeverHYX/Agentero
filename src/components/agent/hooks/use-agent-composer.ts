@@ -68,6 +68,7 @@ import {
 import type { PdfVisualDraft } from "@/lib/agent/visual-context-store";
 import {
 	dataTransferLooksLikeImages,
+	dataTransferLooksLikePdfs,
 	dataTransferLooksLikeVaultMove,
 	dataTransferTypes,
 } from "@/lib/core/file-accept";
@@ -531,6 +532,14 @@ export function useAgentComposer({
 
 	const handleComposerDrop = useCallback(
 		(e: ReactDragEvent) => {
+			// PDF drops belong to the app-wide importer, even when the composer
+			// receives a text/plain path alongside the file payload.
+			if (
+				!dataTransferLooksLikeVaultMove(e.dataTransfer) &&
+				dataTransferLooksLikePdfs(e.dataTransfer)
+			) {
+				return;
+			}
 			// Finder / Preview / other-app image drops include text/plain paths
 			// AND Files. Those belong to PromptInput, not @ context chips.
 			// In-app tree moves always stay path chips.

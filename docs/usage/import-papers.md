@@ -7,7 +7,7 @@ Agentero 提供多种入库入口。选择哪一种取决于你手上的资料�
 | DOI、arXiv ID、PMID、ISBN 或论文链接 | 魔棒（可批量粘贴） |
 | GitHub Skill 链接或 `npx skills add …` | 魔棒（Skill 导入） |
 | 浏览器中正在打开的论文网页 | [Zotero Connector](zotero.md) |
-| 本地 PDF 文件 | 魔棒本地导入，拖到 Library 表，或拖到 `papers/` 组织夹 |
+| 本地 PDF 文件 | 魔棒本地导入，或直接拖入应用窗口 |
 | 已有 Zotero 文库 | 欢迎页「从 Zotero 迁移」 |
 | BibTeX / RIS 等 | Library 导入 |
 
@@ -127,17 +127,18 @@ Windows 创建软链接可能需要开发者模式或管理员权限。创建后
 
 1. 打开中间栏论文库（全库或某个 `papers/` 子文件夹作用域）。
 2. 把一个或多个 PDF 从访达拖到表格上；仅 PDF 会显示「松开以导入」overlay。
-3. 在弹出的元数据确认框中检查标题等信息后确认。
+3. 松手后直接后台导入；元数据识别继续在后台运行。
 
 文件夹作用域下会导入到当前文件夹；全库则落到左侧选中的 Papers 组织夹，否则 `papers/`。
 
 **方式 C — 拖到文件树**
 
 1. 把 PDF 拖到文件树中的 `papers/` 或其组织子文件夹。
-2. 在弹出的元数据确认框中检查标题等信息。
-3. 确认后复制 PDF 并写入 catalog；无 TeX 时会尝试生成 `PAPER.md`。
+2. 松手后直接后台导入并复制 PDF、写入 catalog；无 TeX 时会尝试生成 `PAPER.md`。
 
-注意：拖到窗口其它区域不会入库（仅取消 WebView 导航）。图片等非 PDF 拖到 Library 不会出现 overlay。
+PDF 拖到窗口任意区域都会导入当前 Papers 目标目录；Library 表和文件树中的
+`papers/` 组织夹会优先使用它们各自的目标目录。识别元数据、重命名和版面分析在
+后台任务中继续。图片等非 PDF 拖到 Library 不会出现 overlay。
 
 本地 PDF 文件名不一定含完整信息。导入后请在 Paper Info 中检查标题、作者、年份和标签。
 

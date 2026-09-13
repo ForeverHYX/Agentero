@@ -2,7 +2,7 @@ import type { ComponentType } from "react";
 import type { PaperMetadata } from "@/lib/paper/types";
 
 /** Export format chosen in the dialog. */
-export type MarkdownExportFormat = "pdf" | "png";
+export type MarkdownExportFormat = "pdf" | "png" | "md";
 
 /** Options applied for a single export run. */
 export type MarkdownExportOptions = {

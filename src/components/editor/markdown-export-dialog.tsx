@@ -1,6 +1,6 @@
 "use client";
 
-import { FileImage, FileText, Loader2 } from "lucide-react";
+import { FileCode2, FileImage, FileText, Loader2 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
@@ -30,10 +30,11 @@ import type {
 const FORMAT_OPTIONS: {
 	value: MarkdownExportFormat;
 	icon: typeof FileText;
-	labelKey: "export.formatPdf" | "export.formatPng";
+	labelKey: "export.formatPdf" | "export.formatPng" | "export.formatMarkdown";
 }[] = [
 	{ value: "pdf", icon: FileText, labelKey: "export.formatPdf" },
 	{ value: "png", icon: FileImage, labelKey: "export.formatPng" },
+	{ value: "md", icon: FileCode2, labelKey: "export.formatMarkdown" },
 ];
 
 export type MarkdownExportDialogProps = {
@@ -97,7 +98,9 @@ export function MarkdownExportDialog({
 							value={format}
 							disabled={busy}
 							onValueChange={(value) => {
-								if (value === "pdf" || value === "png") setFormat(value);
+								if (value === "pdf" || value === "png" || value === "md") {
+									setFormat(value);
+								}
 							}}
 						>
 							<SelectTrigger aria-labelledby="export-format-label">
@@ -119,34 +122,36 @@ export function MarkdownExportDialog({
 						</Select>
 					</div>
 
-					<div className="flex flex-col gap-3">
-						<OptionRow
-							id="export-expand-embeds"
-							checked={expandEmbeds}
-							disabled={busy}
-							label={t("export.expandEmbeds")}
-							description={t("export.expandEmbedsHint")}
-							onCheckedChange={setExpandEmbeds}
-						/>
-						{paperHeader ? (
+					{format === "md" ? null : (
+						<div className="flex flex-col gap-3">
 							<OptionRow
-								id="export-paper-header"
-								checked={includePaperHeader}
+								id="export-expand-embeds"
+								checked={expandEmbeds}
 								disabled={busy}
-								label={t("export.includePaperHeader")}
-								description={t("export.includePaperHeaderHint")}
-								onCheckedChange={setIncludePaperHeader}
+								label={t("export.expandEmbeds")}
+								description={t("export.expandEmbedsHint")}
+								onCheckedChange={setExpandEmbeds}
 							/>
-						) : null}
-						<OptionRow
-							id="export-watermark"
-							checked={watermark}
-							disabled={busy}
-							label={t("export.watermarkOption")}
-							description={t("export.watermarkOptionHint")}
-							onCheckedChange={setWatermark}
-						/>
-					</div>
+							{paperHeader ? (
+								<OptionRow
+									id="export-paper-header"
+									checked={includePaperHeader}
+									disabled={busy}
+									label={t("export.includePaperHeader")}
+									description={t("export.includePaperHeaderHint")}
+									onCheckedChange={setIncludePaperHeader}
+								/>
+							) : null}
+							<OptionRow
+								id="export-watermark"
+								checked={watermark}
+								disabled={busy}
+								label={t("export.watermarkOption")}
+								description={t("export.watermarkOptionHint")}
+								onCheckedChange={setWatermark}
+							/>
+						</div>
+					)}
 				</div>
 
 				<DialogFooter>

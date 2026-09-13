@@ -18,7 +18,7 @@ import type {
 	MarkdownExportResult,
 	MarkdownExportSurfaceComponent,
 } from "@/lib/markdown/export/types";
-import { writeVaultBytes } from "@/lib/vault/fs";
+import { writeVaultBytes, writeVaultFile } from "@/lib/vault/fs";
 import { WikiNavContext } from "@/lib/wiki/nav-context";
 
 const EXPORT_WIDTH_PX = 800;
@@ -54,6 +54,18 @@ export async function runMarkdownExport(
 ): Promise<MarkdownExportResult> {
 	if (!isTauri()) {
 		throw new Error("export-desktop-only");
+	}
+
+	if (request.options.format === "md") {
+		const { save } = await import("@tauri-apps/plugin-dialog");
+		const path = await save({
+			defaultPath: `${request.defaultName}.md`,
+			filters: [{ name: "Markdown", extensions: ["md"] }],
+		});
+		if (!path) return { status: "cancelled" };
+
+		await writeVaultFile(path, request.markdown);
+		return { status: "saved", path, format: "md" };
 	}
 
 	const host = document.createElement("div");

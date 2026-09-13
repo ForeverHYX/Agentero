@@ -3,25 +3,13 @@ import {
 	getScrollSyncPartner,
 	getScrollSyncPeer,
 	getScrollSyncRole,
-	isScrollSyncApplying,
-	isZoomSyncApplying,
-	mapScrollPosition,
+	mapScrollByContent,
 	registerScrollSyncPair,
 	registerScrollSyncPeer,
-	runSyncedScroll,
-	runSyncedZoom,
 	type ScrollSyncPeer,
 	type SyncScrollMetrics,
 	unregisterScrollSyncPair,
 } from "@/lib/pdf/scroll-sync";
-
-const g = globalThis as typeof globalThis & {
-	requestAnimationFrame?: (cb: FrameRequestCallback) => number;
-};
-if (typeof g.requestAnimationFrame !== "function") {
-	g.requestAnimationFrame = (cb) =>
-		setTimeout(() => cb(Date.now()), 0) as unknown as number;
-}
 
 function metrics(
 	partial: Partial<SyncScrollMetrics> &
@@ -84,26 +72,39 @@ function createPeer(initial: {
 	};
 }
 
-describe("mapScrollPosition", () => {
-	it("maps relative scroll ratios across differently sized viewports", () => {
-		const mapped = mapScrollPosition(
+describe("mapScrollByContent", () => {
+	it("keeps both viewport centers on the same content point across differently sized panes", () => {
+		// Same document in two panes with different viewport heights. The
+		// source center sits on content y = 700; the target must aim its
+		// center there too (700 - 150). The old ratio mapping landed the
+		// target center on y = 675 instead.
+		const mapped = mapScrollByContent(
 			metrics({
-				scrollTop: 400,
+				scrollTop: 600,
 				scrollHeight: 1000,
 				clientHeight: 200,
 			}),
 			metrics({
 				scrollTop: 0,
-				scrollHeight: 2000,
-				clientHeight: 400,
+				scrollHeight: 1000,
+				clientHeight: 300,
 			}),
 		);
-		expect(mapped).toEqual({ x: 0, y: 800 });
+		expect(mapped).toEqual({ x: 0, y: 550 });
+	});
+
+	it("clamps to the target's scrollable range", () => {
+		const mapped = mapScrollByContent(
+			metrics({ scrollTop: 0, scrollHeight: 1000, clientHeight: 200 }),
+			metrics({ scrollTop: 0, scrollHeight: 1000, clientHeight: 400 }),
+		);
+		// Source center is content y = 100; target top would be -100.
+		expect(mapped).toEqual({ x: 0, y: 0 });
 	});
 
 	it("returns null while either viewport has no layout yet", () => {
 		expect(
-			mapScrollPosition(
+			mapScrollByContent(
 				metrics({ scrollTop: 0, scrollHeight: 0, clientHeight: 200 }),
 				metrics({ scrollTop: 0, scrollHeight: 1000, clientHeight: 200 }),
 			),
@@ -134,20 +135,5 @@ describe("scroll sync registry", () => {
 		expect(getScrollSyncPeer("paper-a")).toBe(peer);
 		dispose();
 		expect(getScrollSyncPeer("paper-a")).toBeNull();
-	});
-});
-
-describe("runSyncedScroll / runSyncedZoom", () => {
-	it("marks the target while the synced action runs", () => {
-		expect(isScrollSyncApplying("doc")).toBe(false);
-		runSyncedScroll("doc", () => {
-			expect(isScrollSyncApplying("doc")).toBe(true);
-		});
-	});
-
-	it("marks zoom sync targets while applying", () => {
-		runSyncedZoom("doc", () => {
-			expect(isZoomSyncApplying("doc")).toBe(true);
-		});
 	});
 });

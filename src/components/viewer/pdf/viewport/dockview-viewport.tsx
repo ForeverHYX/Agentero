@@ -14,6 +14,7 @@ import {
 	useState,
 } from "react";
 import { createPdfViewportResizeGate } from "@/lib/pdf/dockview-resize";
+import { registerScrollSyncElement } from "@/lib/pdf/scroll-sync";
 import { isDockviewSashTarget } from "@/lib/workspace/dockview-sash";
 
 type DockviewViewportProps = HTMLAttributes<HTMLDivElement> & {
@@ -63,6 +64,14 @@ export function DockviewViewport({
 		} catch {
 			return;
 		}
+
+		// Dual-pane scroll sync reads / writes this element directly so the
+		// follower pane does not inherit the scroll-request pipeline's extra
+		// animation frame (and so pan-drag writes propagate immediately).
+		const unregisterScrollSyncElement = registerScrollSyncElement(
+			documentId,
+			viewport,
+		);
 
 		const ownerDocument = viewport.ownerDocument;
 		const ownerWindow = ownerDocument.defaultView;
@@ -169,6 +178,7 @@ export function DockviewViewport({
 			if (scrollFrame != null) cancelFrame(scrollFrame);
 			viewport.removeEventListener("scroll", handleScroll);
 			unsubscribeScrollRequest();
+			unregisterScrollSyncElement();
 			viewportPlugin.unregisterViewport(documentId);
 		};
 	}, [documentId, hostRef, viewportPlugin, rightGutter]);

@@ -4,6 +4,8 @@
  * Dual-pane translation mounts two independent `<EmbedPDF>` providers, so
  * plugin scopes cannot see each other. Peers publish themselves into this
  * module-level registry; the pair's source viewer wires the listeners.
+ * Positions are exchanged in content coordinates (see mapScrollByContent) so
+ * panes with different viewport sizes still show the same region.
  */
 
 type ScrollSyncPair = { source: string; target: string };
@@ -62,6 +64,30 @@ export function registerExternalScrollSyncViewport(
 
 export function getScrollSyncPeer(docId: string): ScrollSyncPeer | null {
 	return peers.get(docId) ?? null;
+}
+
+/**
+ * Live scrolling elements by docId, registered by each pane's viewport host.
+ *
+ * Sync writes go directly to the element instead of through the viewport
+ * plugin's scroll-request pipeline, which defers every programmatic scroll by
+ * an extra animation frame (see DockviewViewport's onScrollRequest) — on top
+ * of our own frame coalescing that put the follower 2-3 frames behind.
+ */
+const scrollElements = new Map<string, HTMLElement>();
+
+export function registerScrollSyncElement(
+	docId: string,
+	element: HTMLElement,
+): () => void {
+	scrollElements.set(docId, element);
+	return () => {
+		if (scrollElements.get(docId) === element) scrollElements.delete(docId);
+	};
+}
+
+export function getScrollSyncElement(docId: string): HTMLElement | null {
+	return scrollElements.get(docId) ?? null;
 }
 
 /** @deprecated Use {@link getScrollSyncPeer}. */
@@ -131,45 +157,29 @@ export function getScrollSyncRole(docId: string): "source" | "target" | null {
 	return null;
 }
 
-/** Track document IDs that are being scrolled programmatically by a partner. */
-const syncingDocIds = new Set<string>();
-
-export function isScrollSyncApplying(docId: string): boolean {
-	return syncingDocIds.has(docId);
-}
-
-export function runSyncedScroll(docId: string, action: () => void): void {
-	syncingDocIds.add(docId);
-	action();
-	requestAnimationFrame(() => syncingDocIds.delete(docId));
-}
-
-/** Track document IDs whose zoom is being changed by their partner. */
-const syncingZoomDocIds = new Set<string>();
-
-export function isZoomSyncApplying(docId: string): boolean {
-	return syncingZoomDocIds.has(docId);
-}
-
-export function runSyncedZoom(docId: string, action: () => void): void {
-	syncingZoomDocIds.add(docId);
-	action();
-	requestAnimationFrame(() => syncingZoomDocIds.delete(docId));
-}
-
-/** Map scroll position from one viewport onto another by relative ratios. */
-export function mapScrollPosition(
+/**
+ * Map scroll position from one viewport onto another in content coordinates.
+ *
+ * Paired panes render the same document at the same zoom, so their content
+ * coordinate systems are identical. Instead of mirroring the scroll *ratio*
+ * (which lands on a different region whenever the panes have different client
+ * sizes — comment rail, split ratio, scrollbar), keep both viewport centers
+ * aimed at the same content point.
+ */
+export function mapScrollByContent(
 	from: SyncScrollMetrics,
 	to: SyncScrollMetrics,
 ): { x: number; y: number } | null {
 	if (from.scrollHeight <= 0 || from.scrollWidth <= 0) return null;
+	if (from.clientHeight <= 0 || from.clientWidth <= 0) return null;
 	if (to.scrollHeight <= 0 || to.scrollWidth <= 0) return null;
-	const fromMaxY = Math.max(0, from.scrollHeight - from.clientHeight);
-	const fromMaxX = Math.max(0, from.scrollWidth - from.clientWidth);
+	if (to.clientHeight <= 0 || to.clientWidth <= 0) return null;
+	const fromCenterY = from.scrollTop + from.clientHeight / 2;
+	const fromCenterX = from.scrollLeft + from.clientWidth / 2;
 	const toMaxY = Math.max(0, to.scrollHeight - to.clientHeight);
 	const toMaxX = Math.max(0, to.scrollWidth - to.clientWidth);
 	return {
-		x: fromMaxX > 0 ? (from.scrollLeft / fromMaxX) * toMaxX : 0,
-		y: fromMaxY > 0 ? (from.scrollTop / fromMaxY) * toMaxY : 0,
+		x: Math.min(Math.max(fromCenterX - to.clientWidth / 2, 0), toMaxX),
+		y: Math.min(Math.max(fromCenterY - to.clientHeight / 2, 0), toMaxY),
 	};
 }

@@ -68,6 +68,7 @@ export function OnboardingRoot() {
 	const recentVaults = useVaultStore((s) => s.recentVaults);
 	const open = useStore(onboardingStore, (s) => s.open);
 	const forceOpen = useStore(onboardingStore, (s) => s.forceOpen);
+	const [zoteroOfferOpen, setZoteroOfferOpen] = useState(false);
 
 	// Settings → main event: force the wizard open on demand.
 	useEffect(() => {
@@ -109,12 +110,31 @@ export function OnboardingRoot() {
 		if (vaultPath) closeOnboarding();
 	}, [vaultPath]);
 
-	if (!open) return null;
+	if (!open && !zoteroOfferOpen) return null;
 
-	return <OnboardingDialog />;
+	return (
+		<>
+			{open ? (
+				<OnboardingDialog onVaultCreated={() => setZoteroOfferOpen(true)} />
+			) : null}
+			<ZoteroImportOfferDialog
+				open={zoteroOfferOpen}
+				onOpenChange={setZoteroOfferOpen}
+				onImport={() => {
+					setZoteroOfferOpen(false);
+					closeOnboarding();
+					setZoteroOpen(true);
+				}}
+				onLater={() => {
+					setZoteroOfferOpen(false);
+					patchSettings({ onboardingDone: true });
+				}}
+			/>
+		</>
+	);
 }
 
-function OnboardingDialog() {
+function OnboardingDialog({ onVaultCreated }: { onVaultCreated: () => void }) {
 	const { t } = useTranslation("onboarding");
 	const stepper = useOnboardingStepper();
 	const settings = useSettings((s) => s);
@@ -126,7 +146,6 @@ function OnboardingDialog() {
 		id: OnboardingStepId;
 		allowed: boolean;
 	} | null>(null);
-	const [zoteroOfferOpen, setZoteroOfferOpen] = useState(false);
 	const reportGate = useCallback((id: OnboardingStepId, allowed: boolean) => {
 		setGate((prev) =>
 			prev?.id === id && prev.allowed === allowed ? prev : { id, allowed },
@@ -165,15 +184,7 @@ function OnboardingDialog() {
 		void (async () => {
 			await createNewVault();
 			// The vault must exist before the user can choose a Zotero source.
-			if (vaultStore.getState().vaultPath) setZoteroOfferOpen(true);
-		})();
-	};
-
-	const onImportZotero = () => {
-		void (async () => {
-			setZoteroOfferOpen(false);
-			closeOnboarding();
-			setZoteroOpen(true);
+			if (vaultStore.getState().vaultPath) onVaultCreated();
 		})();
 	};
 
@@ -228,111 +239,125 @@ function OnboardingDialog() {
 	const stepDesc = currentCopy?.desc;
 
 	return (
-		<>
-			<div className="fixed inset-0 z-40 flex select-none items-center justify-center bg-background p-6">
-				<div
-					aria-hidden
-					className="pointer-events-none absolute inset-0 overflow-hidden"
-				>
-					<div className="absolute -top-32 -left-24 size-96 rounded-full bg-primary/10 blur-3xl" />
-					<div className="absolute -right-24 -bottom-32 size-96 rounded-full bg-primary/10 blur-3xl" />
+		<div className="fixed inset-0 z-40 flex select-none items-center justify-center bg-background p-6">
+			<div
+				aria-hidden
+				className="pointer-events-none absolute inset-0 overflow-hidden"
+			>
+				<div className="absolute -top-32 -left-24 size-96 rounded-full bg-primary/10 blur-3xl" />
+				<div className="absolute -right-24 -bottom-32 size-96 rounded-full bg-primary/10 blur-3xl" />
+			</div>
+
+			<div className="relative flex w-full max-w-xl flex-col overflow-hidden rounded-2xl border bg-card shadow-2xl">
+				{/* Header: current step title + per-step action */}
+				<div className="flex items-start justify-between gap-3 px-6 pt-5">
+					<div className="min-w-0 max-w-md">
+						{stepper.current.id === "welcome" ? null : (
+							<>
+								<span className="font-medium text-sm">{stepTitle}</span>
+								{stepDesc ? (
+									<p className="mt-1 text-muted-foreground text-xs leading-relaxed">
+										{stepDesc}
+									</p>
+								) : null}
+							</>
+						)}
+					</div>
+					{stepper.current.id === "theme" ? (
+						<ThemeModeSwitch
+							value={settings.theme}
+							onChange={(next) => patch({ theme: next })}
+						/>
+					) : null}
+					{stepper.current.id === "agent" ? (
+						<Button
+							type="button"
+							variant="ghost"
+							size="sm"
+							onClick={() => agentStepRef.current?.rescan()}
+						>
+							<RefreshCw data-icon="inline-start" />
+							{t("agent.rescan")}
+						</Button>
+					) : null}
 				</div>
 
-				<div className="relative flex w-full max-w-xl flex-col overflow-hidden rounded-2xl border bg-card shadow-2xl">
-					{/* Header: current step title + per-step action */}
-					<div className="flex items-start justify-between gap-3 px-6 pt-5">
-						<div className="min-w-0 max-w-md">
-							{stepper.current.id === "welcome" ? null : (
-								<>
-									<span className="font-medium text-sm">{stepTitle}</span>
-									{stepDesc ? (
-										<p className="mt-1 text-muted-foreground text-xs leading-relaxed">
-											{stepDesc}
-										</p>
-									) : null}
-								</>
-							)}
-						</div>
-						{stepper.current.id === "theme" ? (
-							<ThemeModeSwitch
-								value={settings.theme}
-								onChange={(next) => patch({ theme: next })}
-							/>
-						) : null}
-						{stepper.current.id === "agent" ? (
-							<Button
-								type="button"
-								variant="ghost"
-								size="sm"
-								onClick={() => agentStepRef.current?.rescan()}
-							>
-								<RefreshCw data-icon="inline-start" />
-								{t("agent.rescan")}
-							</Button>
-						) : null}
-					</div>
+				<div
+					className={cn(
+						"px-6 py-5",
+						stepper.current.id !== "agent" &&
+							"agentero-scroll max-h-[24rem] overflow-y-auto",
+					)}
+				>
+					<AnimatePresence mode="wait" initial={false}>
+						<motion.div
+							key={stepper.current.id}
+							initial={{ opacity: 0, y: 10 }}
+							animate={{ opacity: 1, y: 0 }}
+							exit={{ opacity: 0, y: -10 }}
+							transition={{ duration: 0.16, ease: "easeOut" }}
+						>
+							{renderStep()}
+						</motion.div>
+					</AnimatePresence>
+				</div>
 
-					<div
-						className={cn(
-							"px-6 py-5",
-							stepper.current.id !== "agent" &&
-								"agentero-scroll max-h-[24rem] overflow-y-auto",
-						)}
-					>
-						<AnimatePresence mode="wait" initial={false}>
-							<motion.div
-								key={stepper.current.id}
-								initial={{ opacity: 0, y: 10 }}
-								animate={{ opacity: 1, y: 0 }}
-								exit={{ opacity: 0, y: -10 }}
-								transition={{ duration: 0.16, ease: "easeOut" }}
-							>
-								{renderStep()}
-							</motion.div>
-						</AnimatePresence>
-					</div>
-
-					{/* Footer: back + progress + next */}
-					<div className="relative flex items-center justify-between gap-3 border-t px-6 py-4">
-						{stepper.isFirst ? (
-							<div className="w-20" aria-hidden />
-						) : (
-							<Button
-								type="button"
-								variant="ghost"
-								onClick={() => void stepper.prev()}
-							>
-								{t("actions.back")}
-							</Button>
-						)}
-						{stepper.isFirst ? null : (
-							<div className="absolute left-1/2 flex -translate-x-1/2 items-center">
-								<FlowDots index={stepper.index} labels={stepLabels} />
-							</div>
-						)}
-						<Button type="button" disabled={!canNext} onClick={onNext}>
-							{nextLabel}
-							{stepper.isFirst ? <ArrowRight data-icon="inline-end" /> : null}
+				{/* Footer: back + progress + next */}
+				<div className="relative flex items-center justify-between gap-3 border-t px-6 py-4">
+					{stepper.isFirst ? (
+						<div className="w-20" aria-hidden />
+					) : (
+						<Button
+							type="button"
+							variant="ghost"
+							onClick={() => void stepper.prev()}
+						>
+							{t("actions.back")}
 						</Button>
-					</div>
+					)}
+					{stepper.isFirst ? null : (
+						<div className="absolute left-1/2 flex -translate-x-1/2 items-center">
+							<FlowDots index={stepper.index} labels={stepLabels} />
+						</div>
+					)}
+					<Button type="button" disabled={!canNext} onClick={onNext}>
+						{nextLabel}
+						{stepper.isFirst ? <ArrowRight data-icon="inline-end" /> : null}
+					</Button>
 				</div>
 			</div>
-			<Dialog open={zoteroOfferOpen} onOpenChange={setZoteroOfferOpen}>
-				<DialogContent>
-					<DialogHeader>
-						<DialogTitle>{t("vault.zoteroOfferTitle")}</DialogTitle>
-						<DialogDescription>{t("vault.zoteroOfferDesc")}</DialogDescription>
-					</DialogHeader>
-					<DialogFooter>
-						<Button type="button" variant="ghost" onClick={finish}>
-							{t("vault.zoteroLater")}
-						</Button>
-						<Button type="button" onClick={onImportZotero}>
-							{t("vault.zotero")}
-						</Button>
-					</DialogFooter>
-				</DialogContent>
-			</Dialog>
-		</>
+		</div>
+	);
+}
+
+function ZoteroImportOfferDialog({
+	open,
+	onOpenChange,
+	onImport,
+	onLater,
+}: {
+	open: boolean;
+	onOpenChange: (open: boolean) => void;
+	onImport: () => void;
+	onLater: () => void;
+}) {
+	const { t } = useTranslation("onboarding");
+	return (
+		<Dialog open={open} onOpenChange={onOpenChange}>
+			<DialogContent>
+				<DialogHeader>
+					<DialogTitle>{t("vault.zoteroOfferTitle")}</DialogTitle>
+					<DialogDescription>{t("vault.zoteroOfferDesc")}</DialogDescription>
+				</DialogHeader>
+				<DialogFooter>
+					<Button type="button" variant="ghost" onClick={onLater}>
+						{t("vault.zoteroLater")}
+					</Button>
+					<Button type="button" onClick={onImport}>
+						{t("vault.zotero")}
+					</Button>
+				</DialogFooter>
+			</DialogContent>
+		</Dialog>
 	);
 }

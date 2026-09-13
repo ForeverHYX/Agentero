@@ -101,8 +101,12 @@ export function useAgentPanel({
 	const sessionHistory = useAgentSessionStore((s) => s.sessions);
 	const setSessionHistory = useAgentSessionStore((s) => s.setSessions);
 	const activeTabId = useAgentSessionStore((s) => s.activeTabId);
+	const hydratingSessionId = useAgentSessionStore((s) => s.hydratingSessionId);
 	const setActiveTabId = useAgentSessionStore((s) => s.setActiveTabId);
 	const startDraft = useAgentSessionStore((s) => s.startDraft);
+	const setHydratingSessionId = useAgentSessionStore(
+		(s) => s.setHydratingSessionId,
+	);
 	const hydrateAndActivateSession = useAgentSessionStore(
 		(s) => s.hydrateAndActivateSession,
 	);
@@ -400,6 +404,7 @@ export function useAgentPanel({
 		setMentionActiveIndex(0);
 		setSkillActiveIndex(0);
 		setActiveTabId("draft");
+		setHydratingSessionId(null);
 		activeTabRef.current = "draft";
 		activeConversationRef.current = null;
 		clearMessageQueue();
@@ -409,6 +414,7 @@ export function useAgentPanel({
 		setLines,
 		setSessionHistory,
 		setActiveTabId,
+		setHydratingSessionId,
 		resetSessionContext,
 		setUsage,
 		setUsageBySession,
@@ -492,6 +498,7 @@ export function useAgentPanel({
 			activateComposerSession("draft");
 			activeTabRef.current = "draft";
 			setActiveTabId("draft");
+			setHydratingSessionId(null);
 			setLines([]);
 			setSessionHistory([]);
 			clearMessageQueue();
@@ -526,6 +533,7 @@ export function useAgentPanel({
 		setSessionHistory,
 		setLines,
 		hydrateAndActivateSession,
+		setHydratingSessionId,
 		activateComposerSession,
 		setHistoryOpen,
 		historyOpen,
@@ -537,6 +545,7 @@ export function useAgentPanel({
 		// Transcript
 		lines,
 		activeTabId,
+		hydratingSessionId,
 		selected,
 		activeTabIsRunning,
 		submitting,

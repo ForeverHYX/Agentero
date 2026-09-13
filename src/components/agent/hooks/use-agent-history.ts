@@ -342,6 +342,7 @@ export type UseAgentHistoryOptions = {
 		lines: ChatLine[],
 		title?: string,
 	) => void;
+	setHydratingSessionId: (id: string | null) => void;
 	activateComposerSession: (sessionId: string) => void;
 	setHistoryOpen: Dispatch<SetStateAction<boolean>>;
 	/** When true, finish hydrating any still-untitled rows in the open drawer. */
@@ -373,6 +374,7 @@ export function useAgentHistory({
 	setSessionHistory,
 	setLines,
 	hydrateAndActivateSession,
+	setHydratingSessionId,
 	activateComposerSession,
 	setHistoryOpen,
 	historyOpen,
@@ -491,6 +493,7 @@ export function useAgentHistory({
 		clearMessageQueue();
 		if (!supportsResume || item.lines.length > 0) {
 			const localLines = sanitizeChatLines(item.lines);
+			setHydratingSessionId(null);
 			activateComposerSession(item.id);
 			activeTabRef.current = item.id;
 			hydrateAndActivateSession(item, localLines);
@@ -506,6 +509,17 @@ export function useAgentHistory({
 		const requestAgentId = selectedAgentId;
 		const requestVaultPath = vaultPath;
 		if (!requestAgentId) return;
+		setHydratingSessionId(item.id);
+		activateComposerSession(item.id);
+		activeTabRef.current = item.id;
+		activeConversationRef.current = providerSessionId;
+		agentSessionStore.getState().upsertSession(
+			{
+				...item,
+				lines: [],
+			},
+			{ activate: true },
+		);
 		void (async () => {
 			try {
 				const history = await loadSession({
@@ -619,6 +633,7 @@ export function useAgentHistory({
 				) {
 					return;
 				}
+				setHydratingSessionId(null);
 				setLines((prev) => [...prev, errorChatLine(errorText(error))]);
 			}
 		})();

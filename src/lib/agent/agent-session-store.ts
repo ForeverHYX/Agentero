@@ -68,6 +68,8 @@ export function getActiveLines(
 type AgentSessionStore = {
 	sessions: AgentSessionRecord[];
 	activeTabId: string;
+	/** Active session id whose transcript is being restored via session/load. */
+	hydratingSessionId: string | null;
 	/**
 	 * Optimistic transcript while activeTabId is still "draft" (before runOnce
 	 * returns a runtime session id). Cleared when leaving draft.
@@ -84,6 +86,7 @@ type AgentSessionStore = {
 			| ((prev: AgentSessionRecord[]) => AgentSessionRecord[]),
 	) => void;
 	setActiveTabId: (id: string) => void;
+	setHydratingSessionId: (id: string | null) => void;
 	/** Start an empty draft without mutating the transcript of the active session. */
 	startDraft: () => void;
 	/** Replace/update lines for the active tab (draft or session row). */
@@ -134,6 +137,7 @@ let sendHandlerSlot: ((req: AgentTurnRequest) => Promise<boolean>) | null =
 export const agentSessionStore = createStore<AgentSessionStore>((set, get) => ({
 	sessions: [],
 	activeTabId: "draft",
+	hydratingSessionId: null,
 	draftLines: EMPTY_CHAT_LINES,
 	submitting: false,
 	runningSessionIds: [],
@@ -158,7 +162,15 @@ export const agentSessionStore = createStore<AgentSessionStore>((set, get) => ({
 			return { activeTabId: id };
 		}),
 
-	startDraft: () => set({ activeTabId: "draft", draftLines: EMPTY_CHAT_LINES }),
+	setHydratingSessionId: (id) =>
+		set((s) => (s.hydratingSessionId === id ? s : { hydratingSessionId: id })),
+
+	startDraft: () =>
+		set({
+			activeTabId: "draft",
+			hydratingSessionId: null,
+			draftLines: EMPTY_CHAT_LINES,
+		}),
 
 	setLines: (update) =>
 		set((s) => {
@@ -231,6 +243,7 @@ export const agentSessionStore = createStore<AgentSessionStore>((set, get) => ({
 			return {
 				sessions,
 				activeTabId: hydrated.id,
+				hydratingSessionId: null,
 				draftLines: EMPTY_CHAT_LINES,
 			};
 		});
@@ -333,6 +346,7 @@ export function applyAgentSessionHandoff(payload: {
 	agentSessionStore.setState({
 		sessions,
 		activeTabId,
+		hydratingSessionId: null,
 		draftLines,
 	});
 }
@@ -362,6 +376,7 @@ export function clearAgentVaultState(): void {
 	agentSessionStore.setState({
 		sessions: [],
 		activeTabId: "draft",
+		hydratingSessionId: null,
 		draftLines: EMPTY_CHAT_LINES,
 		submitting: false,
 		runningSessionIds: [],

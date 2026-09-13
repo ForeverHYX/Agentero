@@ -39,6 +39,7 @@
 		"title": "会话历史",
 		"description": "此对话中最近的 ACP 会话。",
 		"empty": "暂无会话。",
+		"restoring": "正在恢复会话……",
 		"includeExternal": "外部会话",
 		"includeExternalToggle": "显示所有会话",
 		"status": {

@@ -181,6 +181,7 @@ export const AgentPanel = memo(function AgentPanel({
 	const {
 		lines,
 		activeTabId,
+		hydratingSessionId,
 		selected,
 		activeTabIsRunning,
 		submitting,
@@ -351,6 +352,7 @@ export const AgentPanel = memo(function AgentPanel({
 					<ChatTranscript
 						lines={lines}
 						activeTabId={activeTabId}
+						hydratingSessionId={hydratingSessionId}
 						compact={composerCompact}
 						activeTabIsRunning={activeTabIsRunning}
 						submitting={submitting}

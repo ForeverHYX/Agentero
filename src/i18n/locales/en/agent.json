@@ -39,6 +39,7 @@
 		"title": "Session history",
 		"description": "Recent ACP sessions in this chat.",
 		"empty": "No sessions yet.",
+		"restoring": "Restoring session…",
 		"includeExternal": "External",
 		"includeExternalToggle": "Include all sessions",
 		"status": {

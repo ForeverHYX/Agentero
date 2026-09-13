@@ -70,6 +70,7 @@ import {
 	CollapsibleContent,
 	CollapsibleTrigger,
 } from "@/components/ui/collapsible";
+import { Skeleton } from "@/components/ui/skeleton";
 import {
 	type AgentPart,
 	agentTextFromParts,
@@ -116,6 +117,30 @@ function TabScrollToBottom({ activeTabId }: { activeTabId: string }) {
 	}, [activeTabId, scrollToBottom]);
 
 	return null;
+}
+
+function HistorySessionShimmer() {
+	const { t } = useTranslation("agent");
+	return (
+		<div className="flex w-full flex-col gap-6 pt-2" aria-live="polite">
+			<div className="flex justify-end">
+				<div className="flex w-[78%] max-w-[32rem] flex-col gap-2 rounded-lg bg-muted px-3 py-2.5">
+					<Skeleton className="h-4 w-11/12 bg-muted-foreground/15" />
+					<Skeleton className="h-4 w-7/12 bg-muted-foreground/15" />
+				</div>
+			</div>
+			<div className="flex w-full max-w-[38rem] flex-col gap-3">
+				<Shimmer className="text-sm" as="p">
+					{t("history.restoring")}
+				</Shimmer>
+				<div className="flex flex-col gap-2">
+					<Skeleton className="h-4 w-10/12" />
+					<Skeleton className="h-4 w-full" />
+					<Skeleton className="h-4 w-8/12" />
+				</div>
+			</div>
+		</div>
+	);
 }
 
 type AgentProcessCollapsibleProps = {
@@ -740,6 +765,7 @@ function TranscriptBody({
 export function ChatTranscript({
 	lines,
 	activeTabId,
+	hydratingSessionId,
 	compact = false,
 	forceVirtualize = false,
 	activeTabIsRunning,
@@ -759,6 +785,7 @@ export function ChatTranscript({
 }: {
 	lines: ChatLine[];
 	activeTabId: string;
+	hydratingSessionId: string | null;
 	compact?: boolean;
 	/** Storybook / tests: windowed rendering even below the line threshold. */
 	forceVirtualize?: boolean;
@@ -782,6 +809,8 @@ export function ChatTranscript({
 	onOpenSource?: (source: string) => void;
 }) {
 	const { t } = useTranslation("agent");
+	const restoringHistorySession =
+		hydratingSessionId === activeTabId && lines.length === 0;
 
 	// Lifted Reasoning/Tool/Plan open state so virtualized rows keep their
 	// fold state across unmount/remount. Keyed by `${rowKey}:${part.id}`.
@@ -859,7 +888,9 @@ export function ChatTranscript({
 				}
 			>
 				<TabScrollToBottom activeTabId={activeTabId} />
-				{lines.length === 0 ? (
+				{restoringHistorySession ? (
+					<HistorySessionShimmer />
+				) : lines.length === 0 ? (
 					<div className="flex w-full flex-col gap-6">
 						<ConversationEmptyState
 							title={t("empty.title")}

@@ -10,6 +10,7 @@ import type {
 	LayoutAnalysisUiStatus,
 	PdfLayoutDocumentResult,
 	PdfLayoutKind,
+	PdfLayoutRegion,
 } from "@/lib/pdf/layout/types";
 
 /** Inline geometry when focus id is absent from sidebar `regions` (citation jumps). */
@@ -22,7 +23,12 @@ export type FocusedLayoutSnapshot = {
 export type FocusedLayoutState = {
 	documentId: string;
 	regionId: string;
-	snapshot?: FocusedLayoutSnapshot;
+	/**
+	 * Stable overlay region built once at focus time. Selectors must return this
+	 * reference (not a fresh object) so `useStore` / `useSyncExternalStore`
+	 * does not infinite-loop.
+	 */
+	region?: PdfLayoutRegion;
 };
 
 type LayoutStoreState = {
@@ -34,7 +40,7 @@ type LayoutStoreState = {
 	/**
 	 * Focused region for PDF overlay + sidebar selection.
 	 * `documentId` scopes the highlight to the owning PDF tab.
-	 * Optional `snapshot` paints the overlay without a store region lookup
+	 * Optional `region` paints the overlay without a store region lookup
 	 * (section headers / page fragments / citation jumps before layout loads).
 	 */
 	focused: FocusedLayoutState | null;
@@ -119,19 +125,62 @@ export function isLayoutOverlayVisible(documentId: string): boolean {
 	return layoutAnalysisStore.getState().overlayVisible[documentId] ?? false;
 }
 
+function sameFocusedBbox(
+	a: PdfAskNormalizedRect | undefined,
+	b: PdfAskNormalizedRect | undefined,
+): boolean {
+	if (a === b) return true;
+	if (!a || !b) return false;
+	return a.x === b.x && a.y === b.y && a.w === b.w && a.h === b.h;
+}
+
+function regionFromSnapshot(
+	regionId: string,
+	snapshot: FocusedLayoutSnapshot,
+): PdfLayoutRegion {
+	return {
+		id: regionId,
+		pageIndex: snapshot.pageIndex,
+		kind: snapshot.kind,
+		label: snapshot.kind,
+		score: 1,
+		readingOrder: 0,
+		rect: { x: 0, y: 0, w: 0, h: 0 },
+		bbox: snapshot.bbox,
+	};
+}
+
 export function setFocusedLayoutRegion(
 	documentId: string,
 	regionId: string | null,
 	snapshot?: FocusedLayoutSnapshot,
 ): void {
+	const current = layoutAnalysisStore.getState().focused;
+	if (!regionId) {
+		if (current == null) return;
+		layoutAnalysisStore.setState({ focused: null });
+		return;
+	}
+
+	const region = snapshot ? regionFromSnapshot(regionId, snapshot) : undefined;
+	if (
+		current?.documentId === documentId &&
+		current.regionId === regionId &&
+		current.region?.kind === region?.kind &&
+		current.region?.pageIndex === region?.pageIndex &&
+		sameFocusedBbox(current.region?.bbox, region?.bbox) &&
+		// Both missing region (id-only focus) or both present — treat as no-op.
+		Boolean(current.region) === Boolean(region)
+	) {
+		return;
+	}
+
 	layoutAnalysisStore.setState({
-		focused: regionId
-			? {
-					documentId,
-					regionId,
-					...(snapshot ? { snapshot } : {}),
-				}
-			: null,
+		focused: {
+			documentId,
+			regionId,
+			...(region ? { region } : {}),
+		},
 	});
 }
 

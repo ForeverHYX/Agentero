@@ -19,10 +19,12 @@ pub(crate) trait PaperResolver: Send + Sync {
     fn catalog_column(&self) -> Option<&'static str>;
     /// Recognize the identifier in `text` (already trimmed, non-empty).
     fn extract(&self, text: &str) -> Option<ResolvedIdentifier>;
-    /// Translator Runtime request for a resolved value. Default:
-    /// `{base}/search` + value.
-    fn translator_target(&self, value: &str, base: &str) -> (String, String) {
-        (format!("{base}/search"), value.to_string())
+    /// Translator Runtime request for a resolved value, as a **relative
+    /// endpoint** (e.g. `web` / `search`) plus the POST body. The base URL is
+    /// owned by `TranslatorApi`, which joins the endpoint onto it — returning
+    /// an absolute URL here would get the base prefixed twice (#518).
+    fn translator_target(&self, value: &str) -> (String, String) {
+        ("search".to_string(), value.to_string())
     }
 }
 
@@ -44,8 +46,8 @@ impl PaperResolver for UrlResolver {
             catalog_column: self.catalog_column(),
         })
     }
-    fn translator_target(&self, value: &str, base: &str) -> (String, String) {
-        (format!("{base}/web"), value.to_string())
+    fn translator_target(&self, value: &str) -> (String, String) {
+        ("web".to_string(), value.to_string())
     }
 }
 
@@ -90,11 +92,8 @@ impl PaperResolver for ArxivResolver {
     /// arXiv PDF endpoints are binary resources the Runtime cannot parse as
     /// web pages; every recognized form is canonicalized to its abstract
     /// page (direct IDs and URLs get the same metadata path).
-    fn translator_target(&self, value: &str, base: &str) -> (String, String) {
-        (
-            format!("{base}/web"),
-            format!("https://arxiv.org/abs/{value}"),
-        )
+    fn translator_target(&self, value: &str) -> (String, String) {
+        ("web".to_string(), format!("https://arxiv.org/abs/{value}"))
     }
 }
 
@@ -229,36 +228,25 @@ mod tests {
 
     #[test]
     fn translator_targets_per_kind() {
-        let base = "https://t.example";
+        // Targets are relative endpoints — `TranslatorApi` owns the base URL.
         assert_eq!(
-            find(URL)
-                .unwrap()
-                .translator_target("https://a.com/p", base),
-            (
-                "https://t.example/web".to_string(),
-                "https://a.com/p".to_string(),
-            )
+            find(URL).unwrap().translator_target("https://a.com/p"),
+            ("web".to_string(), "https://a.com/p".to_string())
         );
         // Default target: /search + value.
         assert_eq!(
-            find(DOI).unwrap().translator_target("10.1038/x", base),
-            (
-                "https://t.example/search".to_string(),
-                "10.1038/x".to_string(),
-            )
+            find(DOI).unwrap().translator_target("10.1038/x"),
+            ("search".to_string(), "10.1038/x".to_string())
         );
         assert_eq!(
-            find(PMID).unwrap().translator_target("24297125", base),
-            (
-                "https://t.example/search".to_string(),
-                "24297125".to_string(),
-            )
+            find(PMID).unwrap().translator_target("24297125"),
+            ("search".to_string(), "24297125".to_string())
         );
         // arXiv canonicalizes every form to the abstract page.
         assert_eq!(
-            find(ARXIV).unwrap().translator_target("1706.03762", base),
+            find(ARXIV).unwrap().translator_target("1706.03762"),
             (
-                "https://t.example/web".to_string(),
+                "web".to_string(),
                 "https://arxiv.org/abs/1706.03762".to_string(),
             )
         );

@@ -912,7 +912,7 @@ async fn translator_fetch(
     base: &str,
     task_id: Option<&str>,
 ) -> Result<PaperRecord, AppError> {
-    let (endpoint, body) = translator_request(text, base);
+    let (endpoint, body) = translator_request(text);
     let api = TranslatorApi::new(base);
 
     let items = api
@@ -929,33 +929,37 @@ async fn translator_fetch(
     api_mapper::map_zotero_item_to_record(&item)
 }
 
-/// Build a Translator Runtime request from an identifier.
+/// Build a Translator Runtime request from an identifier: a **relative
+/// endpoint** (`web` / `search`) plus the POST body. `TranslatorApi`
+/// (`translator_fetch`) joins the endpoint onto its base URL — returning an
+/// absolute URL here got the base prefixed twice and 404'd every request
+/// (#518 regression from the scholar_api refactor).
 ///
 /// arXiv's PDF endpoints are binary resources, which the Translator Runtime
 /// cannot parse as web pages. Canonicalizing every recognized arXiv form to
 /// its abstract page (the arXiv resolver's target) also gives direct IDs and
 /// URLs the same metadata path — so it runs ahead of the generic table probe,
 /// where arXiv URLs would classify as `url`.
-fn translator_request(text: &str, base: &str) -> (String, String) {
+fn translator_request(text: &str) -> (String, String) {
     use crate::features::scholar_api::identifiers::{find, ARXIV};
 
     if let Some(arxiv_id) = extract_arxiv_id(text) {
         return find(ARXIV)
             .expect("arxiv resolver is registered")
-            .translator_target(&arxiv_id, base);
+            .translator_target(&arxiv_id);
     }
 
     let ident = extract_primary_identifier(text);
     match ident {
         Some(ident) => find(ident.kind)
-            .map(|r| r.translator_target(&ident.value, base))
-            .unwrap_or_else(|| (format!("{base}/search"), ident.value.clone())),
+            .map(|r| r.translator_target(&ident.value))
+            .unwrap_or_else(|| ("search".to_string(), ident.value.clone())),
         None => {
             // Treat as search raw text / possible URL.
             if text.starts_with("http://") || text.starts_with("https://") {
-                (format!("{base}/web"), text.to_string())
+                ("web".to_string(), text.to_string())
             } else {
-                (format!("{base}/search"), text.to_string())
+                ("search".to_string(), text.to_string())
             }
         }
     }
@@ -1301,6 +1305,43 @@ pub fn normalize_parent_dir(raw: &str) -> Result<String, AppError> {
 mod tests {
     use super::*;
 
+    /// Manual e2e repro for #518 (magic-wand import of a plain web page URL).
+    /// Verifies the real Translator `/web` request through the full pipeline.
+    /// Run: cargo test -p agentero-core wand_web_url -- --nocapture --ignored
+    #[tokio::test]
+    #[ignore = "hits the real translator service"]
+    async fn wand_web_url_import_e2e() {
+        let vault = std::env::temp_dir().join(format!(
+            "agentero-wand-url-{}",
+            uuid::Uuid::new_v4().simple()
+        ));
+        fs::create_dir_all(vault.join("papers")).unwrap();
+        let args = LookupImportBatchArgs {
+            vault_path: vault.to_string_lossy().to_string(),
+            parent_dir: "papers".into(),
+            texts: vec!["https://www.nature.com/articles/s41586-020-2649-2".into()],
+            translator_base_url: None,
+            task_id: None,
+            concurrency: None,
+        };
+        let result = import_by_identifier_batch(args, None, None, NoteShellMode::Standard)
+            .await
+            .expect("batch should not error");
+        assert!(
+            result.errors.is_empty(),
+            "unexpected errors: {:?}",
+            result.errors
+        );
+        let paper = result
+            .imported
+            .first()
+            .expect("web URL import should create a paper");
+        assert_eq!(paper.title, "Array programming with NumPy");
+        assert_eq!(paper.id, "10_1038_s41586-020-2649-2");
+        assert!(result.skipped.is_empty());
+        let _ = fs::remove_dir_all(&vault);
+    }
+
     #[test]
     fn slug_from_stem_basic() {
         assert_eq!(
@@ -1373,8 +1414,6 @@ mod tests {
 
     #[test]
     fn translator_request_canonicalizes_arxiv_to_abs() {
-        let base = "https://translator.example";
-
         for input in [
             "2508.05004",
             "arXiv:2508.05004v2",
@@ -1383,12 +1422,43 @@ mod tests {
             "https://arxiv.org/html/2508.05004",
         ] {
             assert_eq!(
-                translator_request(input, base),
+                translator_request(input),
                 (
-                    "https://translator.example/web".to_string(),
+                    "web".to_string(),
                     "https://arxiv.org/abs/2508.05004".to_string(),
                 ),
                 "input: {input}"
+            );
+        }
+    }
+
+    /// #518: wand inputs must map to *relative* translator endpoints so
+    /// `TranslatorApi::fetch_raw_items` (which joins the base itself) does
+    /// not double-prefix the URL. Absolute URLs here 404'd every request.
+    #[test]
+    fn translator_request_returns_relative_endpoints() {
+        assert_eq!(
+            translator_request("https://www.nature.com/articles/s41586-020-2649-2"),
+            (
+                "web".to_string(),
+                "https://www.nature.com/articles/s41586-020-2649-2".to_string(),
+            )
+        );
+        assert_eq!(
+            translator_request("10.1038/nature12373"),
+            ("search".to_string(), "10.1038/nature12373".to_string())
+        );
+        // All shapes stay relative (no `https://translator…` prefix).
+        for input in [
+            "1706.03762",
+            "https://doi.org/10.1038/nature12373",
+            "PMID:24297125",
+            "978-0-262-03384-8",
+        ] {
+            let (endpoint, _) = translator_request(input);
+            assert!(
+                !endpoint.starts_with("http"),
+                "endpoint must be relative for {input}: {endpoint}"
             );
         }
     }

@@ -192,7 +192,8 @@ pub(crate) fn map_zotero_item(item: &Value) -> Option<ApiPaper> {
 
     let publication = str_field(item, "publicationTitle")
         .or_else(|| str_field(item, "proceedingsTitle"))
-        .or_else(|| str_field(item, "bookTitle"));
+        .or_else(|| str_field(item, "bookTitle"))
+        .or_else(|| str_field(item, "conferenceName"));
 
     let mut pdf_url = None;
     if let Some(atts) = item.get("attachments").and_then(|v| v.as_array()) {
@@ -355,5 +356,30 @@ mod tests {
         });
         let paper = map_zotero_item(&item).expect("mapped");
         assert_eq!(paper.identifiers.arxiv_id.as_deref(), Some("2101.00001"));
+    }
+
+    #[test]
+    fn maps_zotero_conference_paper_with_conference_name() {
+        let item = json!({
+            "title": "Harmonizing Efficiency and Practicability: Optimizing Resource Utilization in Serverless Computing with Jiagu",
+            "creators": [
+                { "creatorType": "author", "firstName": "Qingyuan", "lastName": "Liu" }
+            ],
+            "date": "2024",
+            "conferenceName": "2024 USENIX Annual Technical Conference (USENIX ATC 24)",
+            "ISBN": "9781939133410"
+        });
+        let paper = map_zotero_item(&item).expect("mapped");
+        assert_eq!(
+            paper.title,
+            "Harmonizing Efficiency and Practicability: Optimizing Resource Utilization in Serverless Computing with Jiagu"
+        );
+        assert_eq!(paper.authors, vec!["Qingyuan Liu"]);
+        assert_eq!(paper.year, Some(2024));
+        assert_eq!(
+            paper.venue.as_deref(),
+            Some("2024 USENIX Annual Technical Conference (USENIX ATC 24)")
+        );
+        assert_eq!(paper.identifiers.isbn.as_deref(), Some("9781939133410"));
     }
 }

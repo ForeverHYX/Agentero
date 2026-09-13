@@ -49,15 +49,9 @@ Do not list the whole catalog first.
 - Keep `[[wikilinks]]` and `![[embeds]]` as written; preserve ` ```mermaid ` fences.
 - Math (KaTeX): inline `$…$`, display `$$…$$` on their own lines; prefer `$`/`$$`
   over `\(...\)` / bare TeX in prose; escape a literal dollar as `\$`.
-- Cite sources inline **without wrapping parentheses**. Reading may use TeX /
-  `PAPER.md`, but citation **hrefs should target the local PDF** with a fragment
-  so pills can jump in the viewer, e.g.
+- Cite sources inline **without wrapping parentheses**. citation **hrefs should target the local PDF**
   `[Section 2.3](papers/<id>/<id>.pdf#section=2.3)`,
   `[Figure 1](papers/<id>/<id>.pdf#figure=1)`,
   `[p.11](papers/<id>/<id>.pdf#page=11)`,
-  or notes `[[papers/<id>/NOTES]]` / `[[papers/<id>/NOTES|short title]]`.
-  Do **not** put `source/**/*.tex` in citation hrefs. Prefer vault-relative
-  paths. For web pages use `[domain](https://...)`.
-  Do not wrap citations as `([…])`, and do not end with a separate `## Sources`
-  block. The UI turns these links into pills and resolves PDF fragments.
+  or notes `[[papers/<id>/NOTES]]` / `[[papers/<id>/NOTES|short title]]`.For web pages use `[domain](https://...)`.
 - Never overwrite user notes without an explicit draft + confirmation path.

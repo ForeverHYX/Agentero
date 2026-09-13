@@ -188,8 +188,8 @@ ACP **没有**统一的 ask-user tool 规范：各 harness 的字段名、挂载
 - `translate`：**不套 envelope**（无 `## Sources`、无 CLI 政策、不注入回答语言与个人偏好）。翻译 prompt 自己已指定目标语言并要求「只返回译文」，envelope 会与之冲突。
 - Skill：Claude 倾向 `/id`；其它注入 `SKILL.md` 文本（`SkillMentionStyle`）。激活语法**只由 Host 判定**（`skill_mention_style` + `paper_reader_skill_line`）；前端不得重复推断，否则同一条 prompt 的两半会互相矛盾。
 - paper-reader：写 NOTES + `paper_set_is_read`；前端任务条编排。
-- 输出约定：工作流要求行内引用（**不加外层括号**）。**阅读**可用 TeX/`PAPER.md`，但 citation **href 优先指向本地 PDF + fragment**（`#section=` / `#figure=` / `#page=`），例如 `[Section 2.3](papers/<id>/<id>.pdf#section=2.3)`、`[Figure 1](papers/<id>/<id>.pdf#figure=1)`；笔记可用 `[[papers/<id>/NOTES]]`。不要把 `source/**/*.tex` 写进 href。Agent 只按格式输出；前端负责把链接/`[[papers/…]]` 渲成 pill，并把残留的 `.tex` href 回退到同论文 `{id}.pdf` 再打开/跳转。若仍出现 `path [blocked]` 或 `[blocked](…)`（常见于 Restricted 下读文件被拒），前端会剥离 status tag 并用 href 派生 pill 文案。不再使用独立的 `## Sources` 块。
-- `AGENTS.md` 已作为 progressive disclosure 系统上下文注入所有工作流 prompt（优先级：Vault 根 `AGENTS.md` → 当前 paper `NOTES.md` → marks）。
+- 输出约定（引用格式）：写在 vault 根 **`AGENTS.md`** 与相关 skill（如 `paper-reader`），**不**再塞进 Host `build_prompt` envelope。cwd 为 vault 根时由 Agent 自载 `AGENTS.md`；选中的 skill 仍由 Host 注入 `SKILL.md` 正文。约定本身：**阅读**可用 TeX/`PAPER.md`，citation **href 优先本地 PDF + fragment**（`#section=` / `#figure=` / `#page=`）；笔记用 `[[papers/<id>/NOTES]]`；不要把 `source/**/*.tex` 写进 href；不加外层 `([…])`、不用文末 `## Sources`。前端负责 pill 渲染、`.tex`→PDF 回退，以及残留 `path [blocked]` / `[blocked](…)` 的显示兜底。
+- `AGENTS.md`：progressive disclosure 的 L0 地图（优先级：Vault 根 `AGENTS.md` → 当前 paper `NOTES.md` → marks）。Host envelope 只提示「按此顺序读」，**不**把 `AGENTS.md` 全文复制进 prompt。
 - 自由模型选择：`preferred_model_id` 可指向 ACP catalog 外的任意模型 id；Warm / Run 时始终尝试 `session/set_config_option`，失败不阻断会话。
 
 ## 模型协商

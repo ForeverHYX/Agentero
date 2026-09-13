@@ -28,26 +28,15 @@ pub fn build_prompt(
 
     let skill_hint = skill_follow_hint(skill_style, skill_ids);
 
-    // Reading may use TeX/PAPER.md; citation hrefs target the local PDF + fragment
-    // so the frontend can render pills and jump. No status-tag vocabulary here —
-    // agents just emit the formats below.
-    let citation_directive = "Cite sources inline (no wrapping parentheses) as Markdown \
-        links or vault wikilinks. Prefer the paper PDF with a fragment, e.g. \
-        `[Section 2.3](papers/<id>/<id>.pdf#section=2.3)`, \
-        `[Figure 1](papers/<id>/<id>.pdf#figure=1)`, or `[p.11](papers/<id>/<id>.pdf#page=11)`. \
-        Notes: `[[papers/<id>/NOTES]]`. Do not cite `source/**/*.tex` in hrefs \
-        (read TeX for accuracy, link the PDF). For web pages use `[domain](https://...)`. \
-        Do not wrap citations as `([…])`, do not end with a separate `## Sources` block, \
-        and never use status words like `blocked` / `read` / `failed` as the link label \
-        or as a trailing `[blocked]` tag — if a file was unreadable, omit it or explain in prose.";
-
+    // Citation / pill formats live in vault `AGENTS.md` and skills (e.g. paper-reader).
+    // Do not re-inject them here — cwd is the vault root so agents already load AGENTS.md.
     let system = match workflow {
         "summary" => {
             format!(
                 "You are helping with a research vault. Summarize the target paper using \
                  progressive disclosure: AGENTS.md → papers/<id>/NOTES.md → marks/ → \
                  PAPER.md → source/ (there is usually no root PAPERS.md; paper list lives in the app catalog). \
-                 Keep [[wikilinks]]. {citation_directive}{skill_hint}"
+                 Keep [[wikilinks]].{skill_hint}"
             )
         }
         "paper_reader" => {
@@ -55,27 +44,25 @@ pub fn build_prompt(
             format!(
                 "You are running the Agentero paper-reader workflow. {skill_line} \
                  Target is a paper folder under papers/. Prefer TeX under source/, else PAPER.md, \
-                 else local PDF. Write structured lecture notes into that paper's NOTES.md. Keep [[wikilinks]]. \
-                 {citation_directive}"
+                 else local PDF. Write structured lecture notes into that paper's NOTES.md. Keep [[wikilinks]]."
             )
         }
         "qa" => {
             format!(
                 "You are answering questions about a local research vault. Read only what you need \
-                 (AGENTS.md → papers/*/NOTES.md → …; root PAPERS.md is optional export only). \
-                 {citation_directive}{skill_hint}"
+                 (AGENTS.md → papers/*/NOTES.md → …; root PAPERS.md is optional export only).{skill_hint}"
             )
         }
         "related_work" => {
             format!(
                 "Draft a Related Work section from local papers in this Vault. Prefer each paper's NOTES.md \
-                 under papers/; open PAPER.md/source only when needed. Keep [[wikilinks]]. {citation_directive}{skill_hint}"
+                 under papers/; open PAPER.md/source only when needed. Keep [[wikilinks]].{skill_hint}"
             )
         }
         _ => {
             format!(
                 "You are an assistant working inside a Agentero research Vault (cwd is the vault root). \
-                 Prefer progressive disclosure of local Markdown. {citation_directive}{skill_hint}"
+                 Prefer progressive disclosure of local Markdown.{skill_hint}"
             )
         }
     };
@@ -534,7 +521,9 @@ mod tests {
     }
 
     #[test]
-    fn citation_directive_prefers_pdf_fragments_without_wrapping_parens() {
+    fn envelope_omits_citation_format_owned_by_agents_md() {
+        // Pill / PDF-fragment citation rules belong in vault AGENTS.md (and skills),
+        // not the per-turn Host envelope.
         let p = build_prompt(
             Some("qa"),
             "What is the claim?",
@@ -544,14 +533,11 @@ mod tests {
             None,
             None,
         );
-        assert!(p.contains("[[papers/<id>/NOTES]]"));
-        assert!(p.contains("[Section 2.3](papers/<id>/<id>.pdf#section=2.3)"));
-        assert!(p.contains("Do **not** cite") || p.contains("source/**/*.tex"));
-        assert!(p.contains("no wrapping parentheses") || p.contains("Do not wrap citations"));
-        assert!(p.contains("never use status words like `blocked`"));
-        assert!(!p.contains("([Section 2.3]"));
-        assert!(!p.contains("([Figure 1]"));
-        assert!(!p.contains("PAPER.md#section=2.3)"));
+        assert!(p.contains("AGENTS.md"));
+        assert!(p.contains("What is the claim?"));
+        assert!(!p.contains("Cite sources inline"));
+        assert!(!p.contains("[Section 2.3](papers/<id>/<id>.pdf#section=2.3)"));
+        assert!(!p.contains("never use status words like `blocked`"));
     }
 
     #[test]

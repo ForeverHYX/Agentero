@@ -12,7 +12,7 @@ AI Elements (Conversation / Message / PromptInput / InlineCitation / Reasoning)
 
 流式：`agent:stream`（message | thought）→ 完成 / 失败事件。写 NOTES 后统一 Diff（Keep / Revert）。
 
-**行内 citation pill / 统一跳转**：Agent 按格式输出 `[label](papers/…/<id>.pdf#section|figure|page=…)` 或 `[[papers/…/NOTES]]`。`prepareAgentMessageMarkdown` 会给 vault 相对 href 加 `./` 前缀——Streamdown 内置 rehype-harden 只把 `/` `./` `../` 当相对路径，裸 `papers/…` 会被标成 Blocked；点击时再剥掉 `./`。`MessageResponse` / `ReasoningContent` 把 `<a>` 渲成同一 citation pill：`http(s)` 开系统浏览器，vault 路径走 `openCitation`。裸 `papers/…#page|section|figure=…` 也会补成链接。`.tex` href 回退到同论文 `{id}.pdf`。残留 status tag / `blocked` 标签有显示兜底。约定不加外层 `([…])`，不用文末 `## Sources`。
+**行内 citation pill / 统一跳转**：Agent 按格式输出 `[label](papers/…/<id>.pdf#section|figure|page=…)` 或 `[[papers/…/NOTES]]`。`prepareAgentMessageMarkdown` 会给 vault 相对 href 加 `./` 前缀——Streamdown 内置 rehype-harden 只把 `/` `./` `../` 当相对路径，裸 `papers/…` 会被标成 Blocked；点击时再剥掉 `./`。`MessageResponse` / `ReasoningContent` 把 `<a>` 渲成同一 citation pill：`http(s)` 开系统浏览器，vault 路径走 `openCitation`。裸 `papers/…#page|section|figure=…` 也会补成链接。`.tex` href 回退到同论文 `{id}.pdf`。残留 status tag / `blocked` 标签有显示兜底。约定不加外层 `([…])`，不用文末 `## Sources`。Host 解析：`#figure=N` 在 caption 任意位置匹配 `Fig./Figure N`（避免 OCR 把标签挤到标题中间）；`#section=N` 同时认阿拉伯与 IEEE 罗马章节号（如 `3` ↔ `III.`），并抬高短数字的相似度门槛以免误命中页眉噪声。解析失败 Toast 按 fragment 类型短提示（如「找不到 Figure：…#figure=7」）并带上 source。
 
 ## 面板行为
 

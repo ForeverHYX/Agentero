@@ -915,6 +915,26 @@ function scheduleCitationJump(paperAbs: string, target: CitationTarget): void {
 	);
 }
 
+/** Short category toast for a failed citation resolve (e.g. figure / section). */
+function citationResolveFailedMessage(source: string): string {
+	const hash = source.indexOf("#");
+	const frag = hash >= 0 ? source.slice(hash + 1) : "";
+	const key = (frag.split("=")[0] ?? "").toLowerCase();
+	const i18nKey =
+		(
+			{
+				figure: "agent:citation.figureNotFound",
+				section: "agent:citation.sectionNotFound",
+				table: "agent:citation.tableNotFound",
+				algorithm: "agent:citation.algorithmNotFound",
+				formula: "agent:citation.formulaNotFound",
+				page: "agent:citation.pageNotFound",
+				region: "agent:citation.regionNotFound",
+			} as Record<string, string>
+		)[key] ?? "agent:citation.resolveFailed";
+	return i18n.t(i18nKey, { source });
+}
+
 /**
  * Open a citation link from agent output.
  *
@@ -975,9 +995,7 @@ export function openCitation(source: string): void {
 				void resolvePdfCitation(vaultPath, trimmed)
 					.then((target) => scheduleCitationJump(full, target))
 					.catch((e) => {
-						notifyError(
-							i18n.t("agent:citation.resolveFailed", { source: trimmed }),
-						);
+						notifyError(citationResolveFailedMessage(trimmed));
 						console.warn("resolve citation failed", e);
 					});
 				return;
@@ -991,7 +1009,7 @@ export function openCitation(source: string): void {
 	void resolvePdfCitation(vaultPath, trimmed)
 		.then((target) => scheduleCitationJump(paperAbs, target))
 		.catch((e) => {
-			notifyError(i18n.t("agent:citation.resolveFailed", { source: trimmed }));
+			notifyError(citationResolveFailedMessage(trimmed));
 			console.warn("resolve citation failed", e);
 		});
 }

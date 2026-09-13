@@ -154,7 +154,14 @@
 	},
 	"citation": {
 		"vaultPath": "Agent 引用的知识库路径",
-		"resolveFailed": "无法打开引用：{{source}}"
+		"resolveFailed": "无法打开引用：{{source}}",
+		"figureNotFound": "找不到 Figure：{{source}}",
+		"sectionNotFound": "找不到章节：{{source}}",
+		"tableNotFound": "找不到表格：{{source}}",
+		"algorithmNotFound": "找不到算法：{{source}}",
+		"formulaNotFound": "找不到公式：{{source}}",
+		"pageNotFound": "找不到页码：{{source}}",
+		"regionNotFound": "找不到区域：{{source}}"
 	},
 	"models": {
 		"currentSelection": "当前选择",

@@ -152,8 +152,30 @@ fn resolve_section(
     heading: &str,
 ) -> Result<ResolvedFragment, AppError> {
     let raw = read_raw_layout(vault, paper_path)?;
-    let headers = raw.regions.iter().filter(|r| r.kind == "header");
+    let headers: Vec<&LayoutRegion> = raw.regions.iter().filter(|r| r.kind == "header").collect();
     let needle = normalize_heading(heading);
+    let needles = section_needle_aliases(&needle);
+
+    // Prefer IEEE/roman section markers (e.g. `#section=3` → `III. …`) over
+    // bare digit substring matches that OCR noise can trigger on page 1.
+    // Pure numbers / roman numerals only resolve via these markers — do not
+    // fall through to fuzzy overlap (`i` ⊂ `introduction`, `3` ⊂ arXiv ids).
+    if let Some(n) = parse_section_number(&needle) {
+        if let Some(region) = headers.iter().find(|region| {
+            let text = region
+                .title
+                .as_deref()
+                .or(region.text.as_deref())
+                .unwrap_or("");
+            header_matches_section_number(text, n)
+        }) {
+            return Ok((*region).into());
+        }
+        return Err(AppError::domain(
+            "citation_section_not_found",
+            format!("no header matching `{heading}` in {paper_path}/source/layout.json"),
+        ));
+    }
 
     let mut candidates: Vec<(f64, &LayoutRegion)> = Vec::new();
     for region in headers {
@@ -163,11 +185,14 @@ fn resolve_section(
             .or(region.text.as_deref())
             .unwrap_or("");
         let normalized = normalize_heading(text);
-        if normalized == needle {
+        if needles.contains(&normalized) {
             return Ok(region.into());
         }
-        let score = heading_similarity(&needle, &normalized);
-        if score > 0.0 {
+        let score = needles
+            .iter()
+            .map(|n| heading_similarity(n, &normalized))
+            .fold(0.0_f64, f64::max);
+        if score >= 0.35 {
             candidates.push((score, region));
         }
     }
@@ -264,23 +289,36 @@ fn item_matches_numbered_citation(item: &LayoutIndexItem, section: &str, n: usiz
         return true;
     }
     let title = item.title.as_deref().unwrap_or("");
-    let patterns = match section {
-        "figure" => vec![
-            format!("figure {n}"),
-            format!("fig {n}"),
-            format!("fig. {n}"),
-        ],
-        "table" => vec![format!("table {n}"), format!("tab. {n}")],
-        "algorithm" => vec![
-            format!("algorithm {n}"),
-            format!("alg. {n}"),
-            format!("alg {n}"),
-        ],
-        "formula" => vec![format!("({n})"), format!("{n}")],
-        _ => Vec::new(),
-    };
     let normalized = normalize_caption_title(title);
-    patterns.iter().any(|p| normalized.starts_with(p))
+    caption_contains_numbered_label(&normalized, section, n)
+}
+
+/// True when a normalized caption contains a numbered label for `section`/`n`
+/// (e.g. `model overview fig 3 is trained` matches figure 3).
+fn caption_contains_numbered_label(normalized: &str, section: &str, n: usize) -> bool {
+    // Token-boundary checks so `fig 1` does not match `fig 10`, and so OCR
+    // titles that put the label mid-string still match.
+    let tokens: Vec<&str> = normalized.split_whitespace().collect();
+    match section {
+        "figure" => numbered_label_in_tokens(&tokens, &["figure", "fig"], n),
+        "table" => numbered_label_in_tokens(&tokens, &["table", "tab"], n),
+        "algorithm" => numbered_label_in_tokens(&tokens, &["algorithm", "alg"], n),
+        "formula" => {
+            let n_str = n.to_string();
+            let paren = format!("({n})");
+            tokens.iter().any(|t| *t == n_str || *t == paren.as_str())
+                || normalized.contains(&format!("( {n} )"))
+                || normalized.contains(&paren)
+        }
+        _ => false,
+    }
+}
+
+fn numbered_label_in_tokens(tokens: &[&str], labels: &[&str], n: usize) -> bool {
+    let n_str = n.to_string();
+    tokens
+        .windows(2)
+        .any(|w| labels.contains(&w[0]) && w[1] == n_str)
 }
 
 fn normalize_heading(text: &str) -> String {
@@ -299,15 +337,109 @@ fn normalize_caption_title(text: &str) -> String {
         .join(" ")
 }
 
+/// Expand `#section=3` / `#section=III` into alias needles for matching.
+fn section_needle_aliases(needle: &str) -> Vec<String> {
+    let mut out = vec![needle.to_string()];
+    if let Some(n) = parse_section_number(needle) {
+        let roman = to_roman(n);
+        if roman != needle {
+            out.push(roman.clone());
+        }
+        // OCR often inserts spaces inside Roman markers / words: "iii. p reliminaries"
+        out.push(format!("{roman}."));
+        out.push(n.to_string());
+    }
+    out.sort();
+    out.dedup();
+    out
+}
+
+fn parse_section_number(needle: &str) -> Option<u32> {
+    let trimmed = needle.trim().trim_end_matches('.');
+    if let Ok(n) = trimmed.parse::<u32>() {
+        return (1..=20).contains(&n).then_some(n);
+    }
+    from_roman(trimmed)
+}
+
+fn to_roman(n: u32) -> String {
+    const MAP: &[(u32, &str)] = &[(10, "x"), (9, "ix"), (5, "v"), (4, "iv"), (1, "i")];
+    let mut n = n;
+    let mut out = String::new();
+    for &(val, sym) in MAP {
+        while n >= val {
+            out.push_str(sym);
+            n -= val;
+        }
+    }
+    out
+}
+
+fn from_roman(text: &str) -> Option<u32> {
+    let s = text.to_lowercase();
+    if s.is_empty() || !s.chars().all(|c| matches!(c, 'i' | 'v' | 'x')) {
+        return None;
+    }
+    let mut total = 0i32;
+    let mut prev = 0i32;
+    for c in s.chars().rev() {
+        let v = match c {
+            'i' => 1,
+            'v' => 5,
+            'x' => 10,
+            _ => return None,
+        };
+        if v < prev {
+            total -= v;
+        } else {
+            total += v;
+            prev = v;
+        }
+    }
+    (total > 0 && total <= 20).then_some(total as u32)
+}
+
+/// Match OCR'd IEEE headers like `III. P RELIMINARIES` to section number 3.
+///
+/// Requires an explicit marker boundary (`.` or space) so bare `i` does not
+/// match `introduction`, and `ii` does not prefix-match `iii.…`.
+fn header_matches_section_number(text: &str, n: u32) -> bool {
+    let normalized = normalize_heading(text);
+    let compact: String = normalized.chars().filter(|c| !c.is_whitespace()).collect();
+    let roman = to_roman(n);
+    let arabic = n.to_string();
+    section_marker_prefix(&normalized, &compact, &roman)
+        || section_marker_prefix(&normalized, &compact, &arabic)
+}
+
+fn section_marker_prefix(normalized: &str, compact: &str, marker: &str) -> bool {
+    let dotted = format!("{marker}.");
+    if (normalized.starts_with(&dotted) || compact.starts_with(&dotted))
+        && compact.len() > dotted.len()
+    {
+        return true;
+    }
+    let spaced = format!("{marker} ");
+    normalized.starts_with(&spaced)
+}
+
 fn heading_similarity(needle: &str, text: &str) -> f64 {
-    // Exact substring match is preferred.
+    // Exact substring match is preferred, but reject bare digit needles that
+    // merely appear inside longer OCR tokens / citations.
+    if text == needle {
+        return 1.0;
+    }
     if text.contains(needle) {
+        if needle.chars().all(|c| c.is_ascii_digit()) && needle.len() <= 2 {
+            return 0.0;
+        }
         return 1.0;
     }
     // Number-only needle ("2.3") also matches as a standalone token.
-    if needle
-        .split_whitespace()
-        .all(|part| text.split_whitespace().any(|token| token == part))
+    if needle.contains('.')
+        && needle
+            .split_whitespace()
+            .all(|part| text.split_whitespace().any(|token| token == part))
     {
         return 0.9;
     }
@@ -316,6 +448,13 @@ fn heading_similarity(needle: &str, text: &str) -> f64 {
     let text_tokens: std::collections::HashSet<&str> = text.split_whitespace().collect();
     if needle_tokens.is_empty() {
         return 0.0;
+    }
+    // Single short token needles are too ambiguous for overlap scoring.
+    if needle_tokens.len() == 1 {
+        let only = *needle_tokens.iter().next().unwrap();
+        if only.len() <= 2 {
+            return 0.0;
+        }
     }
     let intersection: Vec<_> = needle_tokens.intersection(&text_tokens).collect();
     intersection.len() as f64 / needle_tokens.len() as f64
@@ -501,5 +640,98 @@ mod tests {
         let target = resolve_citation(vault, "papers/p1/p1.pdf#page=5").unwrap();
         assert_eq!(target.page_index, 4);
         assert_eq!(target.region_id, "page-5");
+    }
+
+    #[test]
+    fn resolves_figure_when_label_is_mid_caption() {
+        let dir = tempdir().unwrap();
+        let vault = dir.path();
+        let paper = make_paper(vault, "papers/p1");
+        write_index(
+            &paper,
+            r#"{
+                "schemaVersion": 1,
+                "source": {"mode": "sidebar", "from": "layout.json", "generatedAt": "t", "minScore": 0.3},
+                "items": [
+                  {"id":"figure-p4-x","stableKey":"a","kind":"image","section":"figure","page":4,"pageIndex":3,"bbox":{"x":0,"y":0,"w":1,"h":1},"score":0.9,"title":"Model overview. Fig. 3: is trained in two stages.","layoutRegionId":"r3"},
+                  {"id":"figure-10","stableKey":"b","kind":"image","section":"figure","page":10,"pageIndex":9,"bbox":{"x":0,"y":0,"w":1,"h":1},"score":0.9,"title":"Fig. 10: Training recipe ablations","layoutRegionId":"r10"}
+                ]
+            }"#,
+        );
+        let fig3 = resolve_citation(vault, "papers/p1/p1.pdf#figure=3").unwrap();
+        assert_eq!(fig3.region_id, "r3");
+        assert_eq!(fig3.page_index, 3);
+        // Must not confuse figure 1 with figure 10.
+        let fig10 = resolve_citation(vault, "papers/p1/p1.pdf#figure=10").unwrap();
+        assert_eq!(fig10.region_id, "r10");
+        assert!(resolve_citation(vault, "papers/p1/p1.pdf#figure=1").is_err());
+    }
+
+    #[test]
+    fn resolves_section_arabic_to_ieee_roman() {
+        let dir = tempdir().unwrap();
+        let vault = dir.path();
+        let paper = make_paper(vault, "papers/p1");
+        write_raw_layout(
+            &paper,
+            r#"{
+                "schemaVersion": 3,
+                "source": {"mode": "embedpdf-layout", "generatedAt": "t"},
+                "regions": [
+                  {"id":"noise","pageIndex":0,"kind":"header","label":"header","score":0.9,"readingOrder":0,"rect":{"x":0,"y":0,"w":1,"h":1},"bbox":{"x":0.1,"y":0.1,"w":0.8,"h":0.05},"title":"arXiv:2504.16054v1 [cs.LG] 22 Apr 2025"},
+                  {"id":"h3","pageIndex":3,"kind":"header","label":"header","score":0.9,"readingOrder":1,"rect":{"x":0,"y":0,"w":1,"h":1},"bbox":{"x":0.1,"y":0.2,"w":0.8,"h":0.05},"title":"III. P RELIMINARIES"},
+                  {"id":"h1","pageIndex":1,"kind":"header","label":"header","score":0.9,"readingOrder":2,"rect":{"x":0,"y":0,"w":1,"h":1},"bbox":{"x":0.1,"y":0.3,"w":0.8,"h":0.05},"title":"I. I NTRODUCTION"}
+                ]
+            }"#,
+        );
+        let s3 = resolve_citation(vault, "papers/p1/PAPER.md#section=3").unwrap();
+        assert_eq!(s3.region_id, "h3");
+        assert_eq!(s3.page_index, 3);
+        let s_roman = resolve_citation(vault, "papers/p1/PAPER.md#section=III").unwrap();
+        assert_eq!(s_roman.region_id, "h3");
+        let s1 = resolve_citation(vault, "papers/p1/PAPER.md#section=1").unwrap();
+        assert_eq!(s1.region_id, "h1");
+    }
+
+    #[test]
+    fn rejects_bare_digit_section_against_ocr_noise() {
+        let dir = tempdir().unwrap();
+        let vault = dir.path();
+        let paper = make_paper(vault, "papers/p1");
+        write_raw_layout(
+            &paper,
+            r#"{
+                "schemaVersion": 3,
+                "source": {"mode": "embedpdf-layout", "generatedAt": "t"},
+                "regions": [
+                  {"id":"noise","pageIndex":0,"kind":"header","label":"header","score":0.9,"readingOrder":0,"rect":{"x":0,"y":0,"w":1,"h":1},"bbox":{"x":0.1,"y":0.1,"w":0.8,"h":0.05},"title":"arXiv:2504.16054v1 [cs.LG] 22 Apr 2025"},
+                  {"id":"intro","pageIndex":1,"kind":"header","label":"header","score":0.9,"readingOrder":1,"rect":{"x":0,"y":0,"w":1,"h":1},"bbox":{"x":0.1,"y":0.2,"w":0.8,"h":0.05},"title":"Introduction"}
+                ]
+            }"#,
+        );
+        assert!(resolve_citation(vault, "papers/p1/PAPER.md#section=3").is_err());
+        // Bare roman `i` must not match the word "Introduction".
+        assert!(resolve_citation(vault, "papers/p1/PAPER.md#section=1").is_err());
+    }
+
+    #[test]
+    fn caption_label_helpers() {
+        assert!(caption_contains_numbered_label(
+            "model overview fig 3 is trained",
+            "figure",
+            3
+        ));
+        assert!(!caption_contains_numbered_label(
+            "fig 10 training",
+            "figure",
+            1
+        ));
+        assert!(header_matches_section_number("III. P RELIMINARIES", 3));
+        assert!(header_matches_section_number("I. I NTRODUCTION", 1));
+        assert!(!header_matches_section_number("Introduction", 1));
+        assert!(!header_matches_section_number("III. P RELIMINARIES", 2));
+        assert_eq!(parse_section_number("iii"), Some(3));
+        assert_eq!(parse_section_number("3"), Some(3));
+        assert_eq!(to_roman(4), "iv");
     }
 }

@@ -20,7 +20,7 @@ import {
 import {
 	AnnotationLayer,
 	type BoxedAnnotationRenderer,
-	useAnnotationCapability,
+	type useAnnotationCapability,
 } from "@embedpdf/plugin-annotation/react";
 import { PagePointerProvider } from "@embedpdf/plugin-interaction-manager/react";
 import { LayoutAnalysisLayer } from "@embedpdf/plugin-layout-analysis/react";
@@ -263,6 +263,17 @@ export type PdfPageHandlers = {
 	onDismissSelectionComment: () => void;
 };
 
+/**
+ * EmbedPDF annotation capability. Passed in by the caller rather than read
+ * with `useAnnotationCapability()` here: the slim dual-pane translation
+ * viewer renders `PdfPageLayers` without registering the annotation plugin,
+ * and that hook throws ("Plugin annotation not found") when the plugin is
+ * absent — hooks run before the `mode.translationOnly` early return.
+ */
+type AnnotationCapabilityProvides = ReturnType<
+	typeof useAnnotationCapability
+>["provides"];
+
 export type PdfPageLayersProps = {
 	docId: string;
 	pageIndex: number;
@@ -272,6 +283,8 @@ export type PdfPageLayersProps = {
 	tone: PdfPaperTone;
 	/** Read at render time only; page width/height already track zoom. */
 	zoomRef: RefObject<number>;
+	/** EmbedPDF capability from the owning viewer; null in panes without the annotation plugin. */
+	annotationCap: AnnotationCapabilityProvides;
 	marks: PdfPageMarksSlice;
 	layout: PdfPageLayoutSlice;
 	mode: PdfPageModeSlice;
@@ -361,6 +374,7 @@ export const PdfPageLayers = memo(function PdfPageLayers({
 	height,
 	tone,
 	zoomRef,
+	annotationCap,
 	marks,
 	layout,
 	mode,
@@ -368,7 +382,6 @@ export const PdfPageLayers = memo(function PdfPageLayers({
 	hidden = false,
 }: PdfPageLayersProps) {
 	const { t } = useTranslation("viewer");
-	const { provides: annotationCap } = useAnnotationCapability();
 	const pdfDark = tone === "dark";
 	const paperTint = PDF_PAPER_TINT[tone];
 	const pageShellRef = useRef<HTMLDivElement | null>(null);

@@ -211,6 +211,7 @@ export function PdfTranslationViewerInner({
 				height={height}
 				tone={pdfTone}
 				zoomRef={zoomRef}
+				annotationCap={null}
 				marks={EMPTY_MARKS}
 				layout={pageLayout}
 				mode={PAGE_MODE}

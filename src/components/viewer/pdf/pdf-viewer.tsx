@@ -1490,6 +1490,7 @@ function PdfViewerInner({
 				height={height}
 				tone={pdfTone}
 				zoomRef={zoomRef}
+				annotationCap={annotationCap}
 				marks={pageMarks}
 				layout={pageLayout}
 				mode={pageMode}
@@ -1501,6 +1502,7 @@ function PdfViewerInner({
 			docId,
 			pdfTone,
 			zoomRef,
+			annotationCap,
 			pageMarks,
 			pageLayout,
 			pageMode,

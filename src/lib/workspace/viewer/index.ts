@@ -61,3 +61,16 @@ export function preferredModeForPath(path: string | null): CenterViewMode {
 	if (isImagePath(path)) return "image";
 	return "markdown";
 }
+
+/**
+ * A paper body renders PDF or HTML — never a Markdown editor. When no asset
+ * resolved, "pdf" shows PdfViewer's honest "no paper" empty state; an empty
+ * editor here would be editable-but-broken (its edits have no file to
+ * persist to).
+ */
+export function paperBodyMode(
+	hasPdf: boolean,
+	htmlUrl: string | null,
+): CenterViewMode {
+	return hasPdf ? "pdf" : htmlUrl ? "html" : "pdf";
+}

@@ -28,65 +28,49 @@ pub fn build_prompt(
 
     let skill_hint = skill_follow_hint(skill_style, skill_ids);
 
-    // Citation / pill formats live in vault `AGENTS.md` and skills (e.g. paper-reader).
-    // Do not re-inject them here — cwd is the vault root so agents already load AGENTS.md.
+    // Vault layout, reading order, citations, and CLI policy live in `AGENTS.md`
+    // (cwd = vault root) and selected skills. Envelope only sets the turn role.
     let system = match workflow {
         "summary" => {
             format!(
-                "You are helping with a research vault. Summarize the target paper using \
-                 progressive disclosure: AGENTS.md → papers/<id>/NOTES.md → marks/ → \
-                 PAPER.md → source/ (there is usually no root PAPERS.md; paper list lives in the app catalog). \
-                 Keep [[wikilinks]].{skill_hint}"
+                "You are helping with a research vault. Summarize the target paper \
+                 (follow vault AGENTS.md for reading order and citations).{skill_hint}"
             )
         }
         "paper_reader" => {
             let skill_line = paper_reader_skill_line(skill_style, skill_ids);
             format!(
                 "You are running the Agentero paper-reader workflow. {skill_line} \
-                 Target is a paper folder under papers/. Prefer TeX under source/, else PAPER.md, \
-                 else local PDF. Write structured lecture notes into that paper's NOTES.md. Keep [[wikilinks]]."
+                 Target is a paper folder under papers/; write lecture notes to that paper's NOTES.md."
             )
         }
         "qa" => {
             format!(
-                "You are answering questions about a local research vault. Read only what you need \
-                 (AGENTS.md → papers/*/NOTES.md → …; root PAPERS.md is optional export only).{skill_hint}"
+                "You are answering questions about a local research vault \
+                 (follow vault AGENTS.md; read only what you need).{skill_hint}"
             )
         }
         "related_work" => {
             format!(
-                "Draft a Related Work section from local papers in this Vault. Prefer each paper's NOTES.md \
-                 under papers/; open PAPER.md/source only when needed. Keep [[wikilinks]].{skill_hint}"
+                "Draft a Related Work section from local papers in this Vault \
+                 (prefer each paper's NOTES.md; follow vault AGENTS.md).{skill_hint}"
             )
         }
         _ => {
             format!(
                 "You are an assistant working inside a Agentero research Vault (cwd is the vault root). \
-                 Prefer progressive disclosure of local Markdown.{skill_hint}"
+                 Follow vault AGENTS.md.{skill_hint}"
             )
         }
     };
 
     let system = format!(
-        "{system}{}{}{}",
-        agentero_cli_directive(),
+        "{system}{}{}",
         language_directive(response_language),
         personal_preference_directive(personal_prompt)
     );
 
     format!("{system}\n\n{target_line}User request:\n{user_prompt}")
-}
-
-/// Keep structured Vault mutations on the public CLI, even when the optional
-/// `agentero-cli` skill was not explicitly selected in the Composer.
-fn agentero_cli_directive() -> &'static str {
-    // Keep this short: detailed protocols live in skill `agentero-cli` / AGENTS.md.
-    // Long flag recipes here made agents re-read the skill and over-call describe/list.
-    "\n\nAgentero CLI policy: mutate vault/catalog (import, download, parse, layout, \
-     mark, tag, set-read) via `agentero … --json` with vault-relative `papers/…` paths. \
-     For ordinary reading/Q&A, open NOTES/TeX/PAPER.md directly—do not list the whole \
-     catalog first. If `agentero` is missing, say so and fall back to Vault files; \
-     never invent catalog rows. Exact flags: skill `agentero-cli`."
 }
 
 /// Marker Host always inserts before the real user text in `build_prompt`.
@@ -503,7 +487,9 @@ mod tests {
     }
 
     #[test]
-    fn build_prompt_prefers_cli_for_paper_mutations_without_selected_skill() {
+    fn envelope_defers_cli_and_citation_policy_to_agents_md() {
+        // CLI / citation / reading-order details belong in vault AGENTS.md (+ skills),
+        // not the per-turn Host envelope.
         let p = build_prompt(
             Some("free"),
             "Add this paper and download its PDF",
@@ -513,31 +499,13 @@ mod tests {
             None,
             None,
         );
-        assert!(p.contains("Agentero CLI policy"));
-        assert!(p.contains("agentero … --json") || p.contains("agentero"));
-        assert!(p.contains("papers/"));
-        assert!(p.contains("skill `agentero-cli`"));
-        assert!(!p.contains("agentero import id <arxiv|doi|url> --json"));
-    }
-
-    #[test]
-    fn envelope_omits_citation_format_owned_by_agents_md() {
-        // Pill / PDF-fragment citation rules belong in vault AGENTS.md (and skills),
-        // not the per-turn Host envelope.
-        let p = build_prompt(
-            Some("qa"),
-            "What is the claim?",
-            Some("papers/x"),
-            SkillMentionStyle::InjectedOnly,
-            &[],
-            None,
-            None,
-        );
-        assert!(p.contains("AGENTS.md"));
-        assert!(p.contains("What is the claim?"));
+        assert!(p.contains("Follow vault AGENTS.md"));
+        assert!(p.contains("Add this paper and download its PDF"));
+        assert!(!p.contains("Agentero CLI policy"));
+        assert!(!p.contains("agentero … --json"));
         assert!(!p.contains("Cite sources inline"));
         assert!(!p.contains("[Section 2.3](papers/<id>/<id>.pdf#section=2.3)"));
-        assert!(!p.contains("never use status words like `blocked`"));
+        assert!(!p.contains("progressive disclosure: AGENTS.md →"));
     }
 
     #[test]

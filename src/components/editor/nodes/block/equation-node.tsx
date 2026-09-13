@@ -95,22 +95,25 @@ export function EquationElement(props: PlateElementProps<TEquationElement>) {
 	});
 
 	return (
-		<PlateElement className="my-1" {...props}>
+		<PlateElement className="my-2 min-w-0" {...props}>
 			<Popover open={open} onOpenChange={setOpen} modal={false}>
 				<PopoverTrigger asChild>
 					<button
 						type="button"
 						className={cn(
-							"group flex w-full cursor-pointer select-none items-center justify-center rounded-sm hover:bg-primary/10 data-[selected=true]:bg-primary/10",
+							"group flex w-full min-w-0 cursor-pointer select-none items-stretch justify-center rounded-sm hover:bg-primary/10 data-[selected=true]:bg-primary/10",
 							props.element.texExpression.length === 0
 								? "bg-muted p-3"
-								: "px-2 py-1",
+								: "px-2 py-2",
 						)}
 						data-selected={selected}
 						contentEditable={false}
 					>
 						{props.element.texExpression.length > 0 ? (
-							<span ref={katexRef} />
+							<div
+								ref={katexRef}
+								className="agentero-scroll-both agentero-scroll-x-only min-w-0 max-w-full overflow-x-auto overflow-y-hidden py-1 text-center [&_.katex-display]:my-0 [&_.katex-display]:min-w-max"
+							/>
 						) : (
 							<span className="flex h-7 items-center gap-2 text-muted-foreground text-sm">
 								<RadicalIcon className="size-5 text-muted-foreground/80" />

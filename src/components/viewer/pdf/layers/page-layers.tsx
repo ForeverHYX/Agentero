@@ -11,8 +11,17 @@
  * to silently break memoization.
  */
 
-import type { PdfLinkAnnoObject } from "@embedpdf/models";
-import { AnnotationLayer } from "@embedpdf/plugin-annotation/react";
+import {
+	PdfAnnotationSubtype,
+	PdfBlendMode,
+	type PdfHighlightAnnoObject,
+	type PdfLinkAnnoObject,
+} from "@embedpdf/models";
+import {
+	AnnotationLayer,
+	type BoxedAnnotationRenderer,
+	useAnnotationCapability,
+} from "@embedpdf/plugin-annotation/react";
 import { PagePointerProvider } from "@embedpdf/plugin-interaction-manager/react";
 import { LayoutAnalysisLayer } from "@embedpdf/plugin-layout-analysis/react";
 import { RenderLayer } from "@embedpdf/plugin-render/react";
@@ -20,7 +29,13 @@ import { SearchLayer } from "@embedpdf/plugin-search/react";
 import { SelectionLayer } from "@embedpdf/plugin-selection/react";
 import { TilingLayer } from "@embedpdf/plugin-tiling/react";
 import { EyeOff, Languages, Loader2 } from "lucide-react";
-import { memo, type RefObject, useRef } from "react";
+import {
+	memo,
+	type MouseEvent as ReactMouseEvent,
+	type PointerEvent as ReactPointerEvent,
+	type RefObject,
+	useRef,
+} from "react";
 import { useTranslation } from "react-i18next";
 import { PDF_CHROME_CHIP } from "@/components/viewer/pdf/chrome/pdf-chrome-surface";
 import {
@@ -73,6 +88,51 @@ import {
 	type PdfPaperTone,
 } from "@/lib/pdf/page-theme";
 import type { SelectionPin } from "@/lib/pdf/selection";
+
+const PASSIVE_HIGHLIGHT_RENDERER: BoxedAnnotationRenderer = {
+	id: "highlight",
+	matches: (annotation) => annotation.type === PdfAnnotationSubtype.HIGHLIGHT,
+	render: ({ currentObject, scale }) => {
+		const highlight = currentObject as PdfHighlightAnnoObject;
+		const rect = highlight.rect;
+		const segments = highlight.segmentRects?.length
+			? highlight.segmentRects
+			: [rect];
+		return (
+			<>
+				{segments.map((segment) => (
+					<div
+						key={`${highlight.id}-${segment.origin.x}-${segment.origin.y}-${segment.size.width}-${segment.size.height}`}
+						aria-hidden="true"
+						style={{
+							position: "absolute",
+							left: (segment.origin.x - rect.origin.x) * scale,
+							top: (segment.origin.y - rect.origin.y) * scale,
+							width: segment.size.width * scale,
+							height: segment.size.height * scale,
+							backgroundColor:
+								highlight.strokeColor ?? highlight.color ?? "#fcd34d",
+							opacity: highlight.opacity ?? 0.4,
+							pointerEvents: "none",
+						}}
+					/>
+				))}
+			</>
+		);
+	},
+	zIndex: 0,
+	defaultBlendMode: PdfBlendMode.Multiply,
+	interactionDefaults: {
+		isDraggable: false,
+		isResizable: false,
+		isRotatable: false,
+	},
+	useAppearanceStream: false,
+};
+
+const PASSIVE_HIGHLIGHT_RENDERERS: BoxedAnnotationRenderer[] = [
+	PASSIVE_HIGHLIGHT_RENDERER,
+];
 
 /** A mark region pinned to a page (visual draft frame / formula legend frame). */
 type PageRegion = { page: number; region: PdfAskNormalizedRect } | null;
@@ -308,8 +368,10 @@ export const PdfPageLayers = memo(function PdfPageLayers({
 	hidden = false,
 }: PdfPageLayersProps) {
 	const { t } = useTranslation("viewer");
+	const { provides: annotationCap } = useAnnotationCapability();
 	const pdfDark = tone === "dark";
 	const paperTint = PDF_PAPER_TINT[tone];
+	const pageShellRef = useRef<HTMLDivElement | null>(null);
 	/**
 	 * Pointer position at the last pointerdown on a layout hit target. A click
 	 * that travelled beyond the tolerance was a drag, not an activation.
@@ -357,6 +419,88 @@ export const PdfPageLayers = memo(function PdfPageLayers({
 		!!emphasizedComment && emphasizedComment.id === marks.hoveredCommentId;
 	const isEditingComment =
 		!!emphasizedComment && emphasizedComment.id === marks.editingCommentId;
+
+	const textCommentAtPoint = (clientX: number, clientY: number) => {
+		if (!comments.length) return null;
+		const pageRect = pageShellRef.current?.getBoundingClientRect();
+		if (!pageRect?.width || !pageRect.height) return null;
+		const x = (clientX - pageRect.left) / pageRect.width;
+		const y = (clientY - pageRect.top) / pageRect.height;
+		if (x < 0 || x > 1 || y < 0 || y > 1) return null;
+		return (
+			comments.find(
+				(comment) =>
+					comment.kind !== "visual" &&
+					comment.rects.some(
+						(rect) =>
+							x >= rect.x &&
+							x <= rect.x + rect.w &&
+							y >= rect.y &&
+							y <= rect.y + rect.h,
+					),
+			) ?? null
+		);
+	};
+
+	const highlightAtPoint = (clientX: number, clientY: number) => {
+		const pageRect = pageShellRef.current?.getBoundingClientRect();
+		if (!pageRect?.width || !pageRect.height || !annotationCap) return null;
+		const pageX = ((clientX - pageRect.left) / pageRect.width) * width;
+		const pageY = ((clientY - pageRect.top) / pageRect.height) * height;
+		if (pageX < 0 || pageX > width || pageY < 0 || pageY > height) return null;
+		const pageXPt = pageX / zoomRef.current;
+		const pageYPt = pageY / zoomRef.current;
+		const highlights = annotationCap
+			.forDocument(docId)
+			.getAnnotations()
+			.map((annotation) => annotation.object)
+			.filter(
+				(annotation): annotation is PdfHighlightAnnoObject =>
+					annotation.type === PdfAnnotationSubtype.HIGHLIGHT &&
+					annotation.pageIndex === pageIndex,
+			);
+		return (
+			highlights.find((highlight) => {
+				const segments = highlight.segmentRects?.length
+					? highlight.segmentRects
+					: [highlight.rect];
+				return segments.some(
+					(rect) =>
+						pageXPt >= rect.origin.x &&
+						pageXPt <= rect.origin.x + rect.size.width &&
+						pageYPt >= rect.origin.y &&
+						pageYPt <= rect.origin.y + rect.size.height,
+				);
+			}) ?? null
+		);
+	};
+
+	const handlePagePointerMove = (event: ReactPointerEvent<HTMLDivElement>) => {
+		if ((event.target as Element | null)?.closest("[data-pdf-chrome]")) return;
+		const comment = textCommentAtPoint(event.clientX, event.clientY);
+		if (comment?.id === marks.hoveredCommentId) return;
+		if (comment) handlers.onHoverComment(comment);
+		else if (marks.hoveredCommentId) handlers.onLeaveComment();
+	};
+
+	const handlePagePointerLeave = () => {
+		if (marks.hoveredCommentId) handlers.onLeaveComment();
+	};
+
+	const handlePageClickCapture = (event: ReactMouseEvent<HTMLDivElement>) => {
+		if ((event.target as Element | null)?.closest("[data-pdf-chrome]")) return;
+		if (window.getSelection()?.toString()) return;
+		const comment = textCommentAtPoint(event.clientX, event.clientY);
+		if (comment) {
+			event.stopPropagation();
+			handlers.onOpenComment(comment);
+			return;
+		}
+		const highlight = highlightAtPoint(event.clientX, event.clientY);
+		if (!highlight) return;
+		event.stopPropagation();
+		annotationCap?.forDocument(docId).selectAnnotation(pageIndex, highlight.id);
+	};
 
 	const paperRaster = (
 		<div className="absolute inset-0 isolate">
@@ -427,12 +571,16 @@ export const PdfPageLayers = memo(function PdfPageLayers({
 	// different colour.
 	return (
 		<div
+			ref={pageShellRef}
 			className={cn(
 				"relative overflow-visible rounded-sm shadow-sm ring-1",
 				PDF_PAPER_SHELL_CLASS[tone],
 				hidden && PDF_PRIVACY_ROOT_CLASS,
 			)}
 			style={{ width, height }}
+			onPointerMove={handlePagePointerMove}
+			onPointerLeave={handlePagePointerLeave}
+			onClickCapture={handlePageClickCapture}
 			{...{ [EMBED_PAGE_ATTR]: pageIndex }}
 		>
 			{/*
@@ -487,6 +635,7 @@ export const PdfPageLayers = memo(function PdfPageLayers({
 					<AnnotationLayer
 						documentId={docId}
 						pageIndex={pageIndex}
+						annotationRenderers={PASSIVE_HIGHLIGHT_RENDERERS}
 						selectionMenu={(menuProps) => (
 							<HighlightAnnotationMenu
 								{...menuProps}
@@ -851,33 +1000,31 @@ export const PdfPageLayers = memo(function PdfPageLayers({
 				 * (not in `comments`) still use EmbedPDF's annotation menu.
 				 */}
 				{comments.map((comment) =>
-					comment.rects.map((rect) => (
-						<button
-							key={`comment-hover-hit-${comment.id}-${rect.x}-${rect.y}-${rect.w}-${rect.h}`}
-							type="button"
-							className={cn(
-								"absolute z-[3] cursor-pointer bg-transparent",
-								PDF_PRIVACY_HIDE_CLASS,
-							)}
-							style={{
-								left: `${rect.x * 100}%`,
-								top: `${rect.y * 100}%`,
-								width: `${rect.w * 100}%`,
-								height: `${rect.h * 100}%`,
-							}}
-							aria-label={
-								comment.kind === "visual"
-									? t("pdfExplain.visualAnnotation")
-									: t("annotations.editorLabel")
-							}
-							onMouseEnter={() => handlers.onHoverComment(comment)}
-							onMouseLeave={handlers.onLeaveComment}
-							onClick={(event) => {
-								event.stopPropagation();
-								handlers.onOpenComment(comment);
-							}}
-						/>
-					)),
+					comment.rects.map((rect) =>
+						comment.kind === "visual" ? (
+							<button
+								key={`comment-hover-hit-${comment.id}-${rect.x}-${rect.y}-${rect.w}-${rect.h}`}
+								type="button"
+								className={cn(
+									"absolute z-[3] cursor-pointer bg-transparent",
+									PDF_PRIVACY_HIDE_CLASS,
+								)}
+								style={{
+									left: `${rect.x * 100}%`,
+									top: `${rect.y * 100}%`,
+									width: `${rect.w * 100}%`,
+									height: `${rect.h * 100}%`,
+								}}
+								aria-label={t("pdfExplain.visualAnnotation")}
+								onMouseEnter={() => handlers.onHoverComment(comment)}
+								onMouseLeave={handlers.onLeaveComment}
+								onClick={(event) => {
+									event.stopPropagation();
+									handlers.onOpenComment(comment);
+								}}
+							/>
+						) : null,
+					),
 				)}
 				<div className={PDF_PRIVACY_HIDE_CLASS}>
 					<CommentCardsLayer

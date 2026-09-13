@@ -75,7 +75,7 @@
 		"zotero": "从 Zotero 导入",
 		"zoteroOfferTitle": "要从 Zotero 导入吗？",
 		"zoteroOfferDesc": "Agentero 文献库已经创建。接下来可以选择 Zotero 数据目录作为导入来源。",
-		"zoteroLater": "稍后导入"
+		"zoteroNo": "不从 Zotero 导入"
 	},
 	"actions": {
 		"start": "开始配置",

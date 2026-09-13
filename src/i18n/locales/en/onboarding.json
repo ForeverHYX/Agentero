@@ -75,7 +75,7 @@
 		"zotero": "Import from Zotero",
 		"zoteroOfferTitle": "Import from Zotero now?",
 		"zoteroOfferDesc": "Your Agentero vault is ready. You can now choose a Zotero data folder as the import source.",
-		"zoteroLater": "Later"
+		"zoteroNo": "Don't import from Zotero"
 	},
 	"actions": {
 		"start": "Start setup",

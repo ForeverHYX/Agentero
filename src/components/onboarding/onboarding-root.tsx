@@ -351,7 +351,7 @@ function ZoteroImportOfferDialog({
 				</DialogHeader>
 				<DialogFooter>
 					<Button type="button" variant="ghost" onClick={onLater}>
-						{t("vault.zoteroLater")}
+						{t("vault.zoteroNo")}
 					</Button>
 					<Button type="button" onClick={onImport}>
 						{t("vault.zotero")}

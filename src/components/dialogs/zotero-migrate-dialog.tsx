@@ -156,7 +156,11 @@ export function ZoteroMigrateDialog({
 	};
 
 	const handleOpenChange = (next: boolean) => {
-		if (!next && !busy) reset();
+		if (!next && !busy) {
+			reset();
+			// Closing after Vault creation must clear the initial tree loading state.
+			onDone();
+		}
 		onOpenChange(next);
 	};
 

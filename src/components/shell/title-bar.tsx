@@ -91,7 +91,6 @@ export const TitleBar = memo(function TitleBar({
 					<Tooltip>
 						<TooltipTrigger asChild>
 							<Button
-								type="button"
 								variant="ghost"
 								size="icon-xs"
 								data-tb-sidebar
@@ -171,15 +170,13 @@ export const TitleBar = memo(function TitleBar({
 							</ContextMenuItem>
 						</ContextMenuContent>
 					</ContextMenu>
-				</div>
-				{/*
+					{/*
 				  Windows / Linux have no native menu bar, so the gear doubles as a
 				  compact app menu: settings entries plus the palette actions that
 				  otherwise only exist as keyboard shortcuts (discoverability).
 				  Caption buttons are drawn by the OS.
 				*/}
-				{showSettingsGear ? (
-					<div className="flex shrink-0 items-center gap-0.5 pl-1">
+					{showSettingsGear ? (
 						<DropdownMenu>
 							<Tooltip>
 								<TooltipTrigger asChild>
@@ -231,8 +228,8 @@ export const TitleBar = memo(function TitleBar({
 								</DropdownMenuItem>
 							</DropdownMenuContent>
 						</DropdownMenu>
-					</div>
-				) : null}
+					) : null}
+				</div>
 			</TooltipProvider>
 		</header>
 	);

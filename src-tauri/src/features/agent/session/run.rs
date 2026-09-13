@@ -3,14 +3,15 @@
 use crate::core::error::AppError;
 use crate::features::agent::acp::ask_user::GrokAskUserRequest;
 use crate::features::agent::acp::client::{
-    acp_err, cancelled_payload, client_initialize_request, simplified_agent_cwd,
-    timed_acp_initialize, timed_acp_request, to_acp_agent, wait_for_cancellation,
+    acp_err, acp_terminals, agentero_acp_builder, cancelled_payload, client_initialize_request,
+    simplified_agent_cwd, timed_acp_initialize, timed_acp_request, to_acp_agent,
+    wait_for_cancellation,
 };
 use crate::features::agent::acp::interaction::{
     await_grok_ask_user, await_user_elicitation, await_user_permission, permission_response,
     PermissionPolicy,
 };
-use crate::features::agent::acp::terminal::{AcpTerminalHandler, AcpTerminalManager};
+use crate::features::agent::acp::terminal::AcpTerminalManager;
 use crate::features::agent::acp::updates::{
     collaboration_from_config_options, effort_from_config_options, emit_rich_session_update,
     emit_session_config_options, fast_mode_value_to_set, is_fast_option, is_pi_startup_banner,
@@ -20,7 +21,7 @@ use crate::features::agent::models::{
     AgentDescriptor, AgentFailedEvent, AgentResultPayload, AgentStreamEvent, AgentStreamKind,
     AgentTemplate, PromptImage,
 };
-use crate::features::agent::prompt::envelope::{build_prompt, extract_sources};
+use crate::features::agent::prompt::envelope::build_prompt;
 use crate::features::agent::prompt::skills::{
     load_skill_instructions, skill_activation_prefix, skill_mention_style,
 };
@@ -242,7 +243,7 @@ impl RunOnceContext {
                 params.resume_session_id.is_none() || dsh_fresh_sessions,
             )),
             stop_reason: Arc::new(Mutex::new(None)),
-            terminals: Arc::new(tokio::sync::Mutex::new(AcpTerminalManager::with_cwd(cwd))),
+            terminals: acp_terminals(Some(cwd)),
         }
     }
 
@@ -353,10 +354,7 @@ impl RunOnceContext {
             },
         };
 
-        agent_client_protocol::Client
-            .builder()
-            .name("agentero")
-            .with_handler(AcpTerminalHandler::new(self.terminals.clone()))
+        agentero_acp_builder!(self.terminals.clone())
             .on_receive_notification(
                 {
                     let state = self.clone();
@@ -790,7 +788,7 @@ impl RunOnceContext {
             .lock()
             .map(|g| g.clone())
             .unwrap_or_default();
-        let sources = extract_sources(&content);
+        let sources = Vec::new();
         let payload = AgentResultPayload {
             session_id: self.session_id.clone(),
             message_id: self.message_id.clone(),

@@ -21,12 +21,17 @@ import {
 	PopoverAnchor,
 	PopoverContent,
 } from "@/components/ui/popover";
+import {
+	cleanCitationHref,
+	isAgentCitationHref,
+} from "@/lib/agent/citation-href";
 import { openExternalUrl } from "@/lib/core/open-external";
 import {
 	clearExternalLinkEditRequest,
 	peekExternalLinkEditId,
 	selectAfterInlineNode,
 } from "@/lib/markdown/external-link-insert";
+import { openCitation } from "@/lib/workspace/actions";
 
 type LinkEl = TElement & {
 	url?: string;
@@ -49,7 +54,8 @@ export function ExternalLinkElement(props: PlateElementProps) {
 	const editor = useEditorRef();
 	const linkElement = useElement<LinkEl>();
 	const readOnly = useReadOnly();
-	const url = (element as LinkEl).url ?? "";
+	const url = cleanCitationHref((element as LinkEl).url ?? "");
+	const citationJump = isAgentCitationHref(url);
 	const editId = (linkElement as LinkEl).agenteroEditId;
 	const [open, setOpen] = useState(false);
 	const [draftLabel, setDraftLabel] = useState("");
@@ -133,6 +139,12 @@ export function ExternalLinkElement(props: PlateElementProps) {
 	};
 
 	const onTriggerClick = (event: MouseEvent) => {
+		if (citationJump) {
+			event.preventDefault();
+			event.stopPropagation();
+			openCitation(url);
+			return;
+		}
 		if (event.metaKey || event.ctrlKey) {
 			openBrowser(event);
 			return;

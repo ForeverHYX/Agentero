@@ -198,6 +198,17 @@ export function paperDirFromPath(
 		return nestedAssetRel[1];
 	}
 
+	// Main / loose files sitting on the paper root (e.g. `papers/vla/id/id.pdf`).
+	// Parent of that file is the paper folder.
+	const rootFileAbs = norm.match(/^(.*\/papers\/.+?)\/([^/]+\.[^/]+)$/i);
+	if (rootFileAbs?.[1]) {
+		return rootFileAbs[1];
+	}
+	const rootFileRel = norm.match(/^(papers\/.+?)\/([^/]+\.[^/]+)$/i);
+	if (rootFileRel?.[1]) {
+		return rootFileRel[1];
+	}
+
 	// Path is a directory under papers with no further hint → not enough to claim paper unit
 	return null;
 }

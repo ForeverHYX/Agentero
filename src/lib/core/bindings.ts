@@ -146,6 +146,14 @@ export const commands = {
 	agentRespondElicitation: (request: ElicitationResponseRequest) => __TAURI_INVOKE<ApiResult<PermissionResponded>>("agent_respond_elicitation", { request }),
 	/**  Answer a pending Grok `_x.ai/ask_user_question` extension request. */
 	agentRespondAskUser: (request: AskUserResponseRequest) => __TAURI_INVOKE<ApiResult<PermissionResponded>>("agent_respond_ask_user", { request }),
+	/**
+	 *  Resolve a vault-relative citation link to PDF coordinates.
+	 * 
+	 *  Supports fragments like `#section=2.3`, `#figure=1`, `#table=2`,
+	 *  `#algorithm=1`, `#formula=5`, `#region=figure-1`, and `#page=3`.
+	 *  Remote vaults are not supported yet.
+	 */
+	agentResolveCitation: (vaultPath: string | null, source: string) => typedError<ApiResult<CitationTarget>, string>(__TAURI_INVOKE("agent_resolve_citation", { vaultPath, source })),
 	graphGetBacklinks: (vaultPath: string, path: string) => typedError<ApiResult<BacklinksResponse_Serialize>, string>(__TAURI_INVOKE("graph_get_backlinks", { vaultPath, path })),
 	wikiResolve: (vaultPath: string, sourcePath: string, linkText: string, syntax: "wikilink" | "markdown" | null) => typedError<ApiResult<WikiResolveResponse_Serialize>, string>(__TAURI_INVOKE("wiki_resolve", { vaultPath, sourcePath, linkText, syntax })),
 	/**  Resolve and read the exact source projection for one `![[...]]` embed. */
@@ -1570,6 +1578,13 @@ export type BacklinksResponse_Serialize = {
 	backlinks: ResolvedLink_Serialize[],
 };
 
+export type Bbox = {
+	x: number | null,
+	y: number | null,
+	w: number | null,
+	h: number | null,
+};
+
 export type BlobCacheStats = {
 	/**  Total bytes under all (or one) remote blob dirs. */
 	bytes: number,
@@ -1794,6 +1809,23 @@ export type CitationMeta_Serialize = {
 	doi?: string | null,
 	arxivId?: string | null,
 	url?: string | null,
+};
+
+export type CitationTarget = {
+	/**  Vault-relative paper folder path (`papers/<id>`). */
+	paperPath: string,
+	/**  Vault-relative path from the citation link. */
+	path: string,
+	/**  Raw fragment (e.g. `figure=1`). */
+	fragment: string,
+	/**  0-based page index for the PDF viewer. */
+	pageIndex: number,
+	/**  Normalized page bbox (0–1) to scroll to and highlight. */
+	bbox: Bbox,
+	/**  Human-readable title when available. */
+	title: string | null,
+	/**  Region id suitable for the PDF highlight registry. */
+	regionId: string,
 };
 
 export type Citation_Deserialize = {

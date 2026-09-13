@@ -401,13 +401,27 @@ function PdfViewerInner({
 	const currentPage = scrollState.currentPage || 1;
 	const totalPages = scrollState.totalPages || 0;
 
-	/** Sidebar-selected layout region → PDF focus outline. */
+	/** Sidebar / citation focus → PDF outline (stable refs only — no fresh objects). */
 	const focusedLayoutRegion = useStore(layoutAnalysisStore, (s) => {
 		if (s.focused?.documentId !== docId) return null;
+		const focused = s.focused;
+		if (!focused) return null;
+		if (focused.region) return focused.region;
 		const result = s.byDocument[docId];
-		if (!result || !s.focused) return null;
-		return result.regions.find((r) => r.id === s.focused?.regionId) ?? null;
+		if (!result) return null;
+		return (
+			result.regions.find((r) => r.id === focused.regionId) ??
+			result.rawRegions.find((r) => r.id === focused.regionId) ??
+			null
+		);
 	});
+	const focusedLayoutFlash = useStore(
+		layoutAnalysisStore,
+		(s) => s.focused?.documentId === docId && Boolean(s.focused.flash),
+	);
+	const focusedLayoutFlashToken = useStore(layoutAnalysisStore, (s) =>
+		s.focused?.documentId === docId ? (s.focused.flashToken ?? 0) : 0,
+	);
 	const zoomLevel = zoomState.currentZoomLevel || 1;
 
 	const { pdfTone, setPdfTone } = usePdfPaperTone();
@@ -1239,6 +1253,8 @@ function PdfViewerInner({
 			visualDraftRegion: null,
 			visualCropRegion,
 			focusedLayoutRegion,
+			focusedLayoutFlash,
+			focusedLayoutFlashToken,
 			pinsByPage,
 			commentsByPage,
 			editingCommentId: railEdit?.id ?? null,
@@ -1256,6 +1272,8 @@ function PdfViewerInner({
 			activeVisualTrace,
 			visualCropRegion,
 			focusedLayoutRegion,
+			focusedLayoutFlash,
+			focusedLayoutFlashToken,
 			pinsByPage,
 			commentsByPage,
 			railEdit?.id,

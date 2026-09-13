@@ -23,6 +23,7 @@ pub use vault::rename;
 pub use vault::trash;
 
 pub use paper::analyze::parse as pdf_parse;
+pub use pdf::layout_index;
 #[cfg(not(any(target_os = "ios", target_os = "android")))]
 pub use pdf::locate as pdf_locate;
 

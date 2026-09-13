@@ -1,9 +1,19 @@
-//! Session model / mode / effort / fast-mode preference types.
+//! Session model / mode / effort / fast-mode preference types and warm helpers.
 //!
-//! Preference *application* (`session/set_config_option`) currently lives on
-//! `RunOnceContext` in `run.rs` because it is tightly coupled to cancellation
-//! and `agent:completed` emission. Warm uses the same ACP helpers from
-//! `acp::updates` directly.
+//! Warm applies model + collaboration via [`apply_model_and_collaboration_prefs`].
+//! Run's cancel-aware `apply_session_preferences` (model/collab/effort/fast) remains
+//! on `RunOnceContext` in `run.rs` because it is tightly coupled to cancellation
+//! and `agent:completed` emission.
+
+use crate::features::agent::acp::client::timed_acp_request;
+use crate::features::agent::acp::updates::{
+    collaboration_from_config_options, models_from_config_options,
+};
+use agent_client_protocol::schema::v1::{
+    SessionConfigId, SessionConfigOption, SessionConfigOptionValue, SessionId,
+    SetSessionConfigOptionRequest,
+};
+use agent_client_protocol::{Agent, ConnectionTo};
 
 /// User-selected session preferences applied after the session opens.
 #[derive(Debug, Clone, Default)]
@@ -41,6 +51,88 @@ impl RunPreferences {
         }
         highest.map(|(_, id)| id)
     }
+}
+
+/// Apply preferred model (free-form) and collaboration mode after session/new.
+/// Failures are logged and do not abort the warm path.
+pub(crate) async fn apply_model_and_collaboration_prefs(
+    connection: &ConnectionTo<Agent>,
+    runtime_session_id: &str,
+    agent_id: &str,
+    acp_session_id: &SessionId,
+    mut config_options: Vec<SessionConfigOption>,
+    preferred_model: Option<String>,
+    preferred_collab: Option<String>,
+) -> Vec<SessionConfigOption> {
+    if let Some(ev) = models_from_config_options(runtime_session_id, agent_id, &config_options) {
+        // Attempt preferred model even when not in the advertised catalog
+        // (third-party / gateway free-form ids).
+        if let Some(pref) = preferred_model {
+            if pref != ev.current_id {
+                let listed = ev.models.iter().any(|m| m.id == pref);
+                match timed_acp_request(
+                    "set model",
+                    connection
+                        .send_request(SetSessionConfigOptionRequest::new(
+                            acp_session_id.clone(),
+                            SessionConfigId::new(ev.config_id.as_str()),
+                            SessionConfigOptionValue::value_id(pref.clone()),
+                        ))
+                        .block_task(),
+                )
+                .await
+                {
+                    Ok(response) => {
+                        config_options = response.config_options;
+                    }
+                    Err(e) => {
+                        log::debug!(
+                            target: "agentero::agent",
+                            "agent={} warm set model failed (listed={}): pref={} err={}",
+                            agent_id,
+                            listed,
+                            pref,
+                            e
+                        );
+                    }
+                }
+            }
+        }
+    }
+    if let Some(pref) = preferred_collab {
+        if let Some(ev) =
+            collaboration_from_config_options(runtime_session_id, agent_id, &config_options)
+        {
+            if pref != ev.current_id && ev.modes.iter().any(|mode| mode.id == pref) {
+                match timed_acp_request(
+                    "set collaboration mode",
+                    connection
+                        .send_request(SetSessionConfigOptionRequest::new(
+                            acp_session_id.clone(),
+                            SessionConfigId::new(ev.config_id.as_str()),
+                            SessionConfigOptionValue::value_id(pref.clone()),
+                        ))
+                        .block_task(),
+                )
+                .await
+                {
+                    Ok(response) => {
+                        config_options = response.config_options;
+                    }
+                    Err(e) => {
+                        log::debug!(
+                            target: "agentero::agent",
+                            "agent={} warm set collaboration mode failed: pref={} err={}",
+                            agent_id,
+                            pref,
+                            e
+                        );
+                    }
+                }
+            }
+        }
+    }
+    config_options
 }
 
 #[cfg(test)]

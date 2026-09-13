@@ -461,7 +461,6 @@ export function useAgentSend({
 				preferHighestReasoningEffort: preferredEffort === null,
 				fastMode: fastAvailable ? fastEnabled : undefined,
 				skillIds: resolvedSkillIds,
-				autoApprove: loadSettings().agentPermissionMode === "auto",
 				permissionMode: loadSettings().agentPermissionMode,
 			});
 			if (

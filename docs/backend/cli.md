@@ -16,28 +16,44 @@ Headless Vault / Catalog / Wiki 接口；**不含** BYOA / paper-reader。
 | 组 | 用途 |
 |---|---|
 | `open` | 在桌面 App 打开本地目录为 Vault（`agentero open <PATH>`；简写 `agentero <PATH>`） |
-| `vault` | create / which / info / list / use 等 |
-| `tree` | 列树 |
+| `vault` | create / list 等 |
+| `describe` | Agent 自省：策展型 op 目录与单 op 的 input/output/errors/examples（机器契约真源） |
 | `paper` | list/get、tag list/set/add/rm、move、download/parse… |
 | `import` | 标识符入库 |
 | `export` | 导出 |
 | `doctor` | Vault 结构与 Catalog 诊断；含 wikilink 检查与 aliases / 视觉批注 / catalog 去重修复 |
-| `layout` | 侧栏同构版面索引：`list` / `get`（figure / table / algorithm / formula） |
+| `layout` | 侧栏同构版面索引：`list` / `get`（figure / table / algorithm / formula / section） |
 | `mark` | 阅读标注：`list` / `get` / `add`（`--quote` 文字锚点或 `--region` 区域锚点）/ `update` / `delete` |
 | `translate` | 免费机器翻译纯文本（无需 API Key，不读桌面 settings） |
 
 稳定 `--json` 输出，供脚本与外部 Agent 组合。JSON 默认 **compact 单行**（省 token），`--pretty` 恢复缩进美化（[#367](https://github.com/poco-ai/Agentero/issues/367)）。
 
+### Agent 自省（`describe`）
+
+Agent 不应背 flag 表；以 curated ops 目录为准（`agentero-core::ops`，与 MCP tool 名对齐）：
+
+```bash
+agentero describe --json
+agentero describe paper.list --json
+agentero describe paper_list --json   # MCP tool 名亦可
+```
+
+未知 id 返回 `usage`，并尽量提示相近 op。Skill `agentero-cli`（v16+）按**任务分支**写协议（已知 path 的问答直接读文件；探索才 `paper list`；`describe` 仅在 flag 未知时用；`set-read` 只在 paper-reader / 显式标已读后），细节仍以本命令为准。
+
 `paper list --json` 默认每行只含 `id/path/title`；用 `--fields year,tags,abstract,…`（逗号分隔、可重复）按需加字段，或 `--full` 输出完整 `PaperRecord`。未知字段报 `usage` 错误并列出合法字段。text 表格输出不受影响。
+
+`paper get` / 其它接受 paper ref 的命令：优先 vault-relative **path**。bare **id** 在多 shelf 同 id 时返回 `paper_ambiguous`（`details.candidates` 为可选 path），message 会提示用 path 重试。
 
 ### 版面索引与区域批注（已实现）
 
 侧栏 Figures 同源列表落在 `{paper}/source/layout-index.json`（由桌面版面分析在 merge 后写入；raw 仍为 `source/layout.json`）。
 
 ```bash
-# 列出图 / 表 / 算法 / 公式（--kind 可重复，OR）
+# 列出图 / 表 / 算法 / 公式 / 章节标题（--kind 可重复，OR）
 agentero layout list papers/demo --json
 agentero layout list papers/demo --kind figure --kind formula --json
+# section 从 source/layout.json 的 header 区域实时合并，不写入 layout-index.json
+agentero layout list papers/demo --kind section --json
 agentero layout get  papers/demo figure-3 --json
 
 # 按区域钉批注（bbox 归一，页面尺寸由 PDF 引擎测量）
@@ -53,6 +69,7 @@ Mark id 是 nanoid，字母表含 `-`，约 1/64 的 id 以 `-` 开头。`mark g
 |---|---|
 | `figure` | 侧栏插图分区（image + chart） |
 | `image` / `chart` / `table` / `algorithm` / `formula` | 精确 kind |
+| `section` | 章节 / 段落标题，实时从 `source/layout.json` 的 `kind=header` 区域合并 |
 
 无 `layout-index.json` 时返回 `layout_index_missing`（提示先在 App 打开论文跑版面分析）。
 
@@ -109,7 +126,7 @@ zh 目标走并行竞速）；商业 BYOK Key 只在桌面 settings 里，CLI �
 # 开发机可选跑下面命令把真二进制放进 src-tauri/binaries，让 设置 → 安装 CLI 走本地路径：
 pnpm cli:bundle
 cargo build -p agentero-cli
-cargo run -p agentero-cli -- vault which --json
+cargo run -p agentero-cli -- vault list --json
 cargo run -p agentero-cli -- doctor wiki papers/demo/NOTES.md --json
 cargo run -p agentero-cli -- doctor --json
 cargo run -p agentero-cli -- layout list papers/demo --json
@@ -118,7 +135,7 @@ cargo test -p agentero-cli
 
 ### Vault 列表
 
-`agentero vault use <PATH>` 和 `agentero vault create <PATH>` 会把 Vault 绝对路径记录到 `~/.config/agentero/config.toml` 的 `known_vaults` 数组中（去重追加）。`agentero vault list` 可列出这些已知 Vault，并标出当前 `default_vault`：
+`agentero vault create <PATH>` 会把 Vault 绝对路径记录到 `~/.config/agentero/config.toml` 的 `known_vaults` 数组中（去重追加）。`agentero vault list` 可列出这些已知 Vault，并标出当前 `default_vault`：
 
 ```bash
 agentero vault list

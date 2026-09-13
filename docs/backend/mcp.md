@@ -21,6 +21,8 @@ Host commands：`mcp_get_status` / `mcp_set_enabled` / `mcp_set_port` / `mcp_set
 
 `initialize.serverInfo` 带 `title`、`websiteUrl` 和 `icons`（应用 PNG 的 data URI）。客户端可以忽略不画。
 
+`initialize.instructions` 指向下方 resources，并强调 `paper_list` 默认瘦字段、覆盖 NOTES 前需确认。
+
 无鉴权。不要把端口绑到非 loopback。
 
 ## ChatGPT Secure MCP Tunnel
@@ -35,29 +37,32 @@ Codex / Inspector 也可直接打 loopback URL。stdio 子进程不是这条通�
 
 ## Resource
 
-Vault 概况不是 tool，是文档：
-
 | URI | MIME | 内容 |
 |---|---|---|
 | `agentero://vault` | Markdown | 路径、schemaVersion、papers、unread |
+| `agentero://agent-invariants` | Markdown | 与 CLI/`agentero-core::ops` 同源的 agent invariants |
+| `agentero://skills/agentero-cli` | Markdown | 当前平台 bundled `agentero-cli` Skill 正文 |
 
-无 Vault 时 resource 仍列出，`resources/read` 返回「未打开 Vault」正文。`initialize` instructions 提示先读这份文档，再 `paper_list` / `paper_get`。
+无 Vault 时 `agentero://vault` 仍列出，`resources/read` 返回「未打开 Vault」正文。`initialize` instructions 提示先读 vault → invariants，再调用 tools。
 
 ## Tools
 
 `ref` = paper id 或 vault 相对路径（如 `papers/1706.03762`）。禁止 `..`。
 
+每个 tool 都声明 `outputSchema`，成功时走 MCP `structuredContent`（ChatGPT 需要这份才能理解结果）。
+
 | Tool | 作用 |
 |---|---|
-| `paper_list` | 列表 metadata：`{ items: [{ id, path, title, authors, year, tags, doi, arxivId, publication, status, isRead }] }`。`query?`、`tag[]?`、`unread?`、`limit?`（默认 50，封顶 200）。abstract 只在 `paper_get`。 |
+| `paper_list` | 列表。**默认**每行只有 `id/path/title`（省 token）。`fields[]?` 按需加字段（`year`/`tags`/`authors`/`isRead`/…）；`full?` 恢复完整 metadata 行。另有 `query?`、`tag[]?`、`unread?`、`limit?`（默认 50，封顶 200）。abstract 只在 `paper_get`。 |
 | `paper_get` | 单篇 metadata（含 abstract） |
-
-每个 tool 都声明 `outputSchema`，成功时走 MCP `structuredContent`（ChatGPT 需要这份才能理解结果）。
+| `paper_set_read` | 设置 catalog `isRead`（默认 true） |
 | `import_id` | 魔棒入库（arxiv / DOI / URL）。`parent?` 默认当前 Library 作用域或 `papers` |
 | `paper_notes_get` | 读 `{paper}/NOTES.md`（文件不存在则空字符串） |
 | `paper_notes_write` | 写 `NOTES.md`。`mode`: `replace`（默认）或 `append` |
 | `paper_tag_add` | 加标签；可用 `topic:blue` 色后缀 |
 | `paper_tag_rm` | 删标签 |
+| `layout_list` | 侧栏版面索引（需 `{paper}/source/layout-index.json`）。`kind[]?`、`minScore?` |
+| `layout_get` | 按 region id 取一条（如 `figure-3`） |
 
 `paper_notes_write`：
 
@@ -67,11 +72,13 @@ Vault 概况不是 tool，是文档：
 - `append`：追加正文，保留 frontmatter
 - 编辑器有未存改动时走现有 `vault:file-changed` 冲突逻辑
 
-不做：`vault_info` tool、通用读文件、`paper_paths`、delete/trash、mark/layout、shell。
+不做：通用读文件、`paper_paths`、delete/trash、mark（请用 CLI）、shell、stdio MCP。
+
+机器契约与 CLI 共用 `agentero-core::ops`；CLI 侧用 `agentero describe` 自省。
 
 ## 代码
 
-`src-tauri/src/features/mcp/`：`McpController` + Streamable HTTP（`rmcp`）+ tools/resource。直接调 `features::{catalog, import, vault}`。
+`src-tauri/src/integration/mcp/`：`McpController` + Streamable HTTP（`rmcp`）+ tools/resource。直接调 `features::{catalog, import, vault, pdf::layout_index}`。
 
 ## 安全
 

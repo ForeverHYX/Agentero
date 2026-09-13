@@ -201,7 +201,7 @@ export async function runPaperReaderWorkflow(opts: {
 					target: paperRel,
 					prompt: userPrompt,
 					skillIds: [PAPER_READER_SKILL_ID],
-					autoApprove: true,
+					permissionMode: "auto",
 					// Background workflow — never surface in Agent chat history.
 					hideFromChatHistory: true,
 				});

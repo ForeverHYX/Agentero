@@ -1,6 +1,7 @@
 pub mod acp;
 #[cfg(test)]
 mod acp_tests;
+pub mod citation;
 pub mod commands;
 pub mod doctor;
 pub mod doctor_agents;

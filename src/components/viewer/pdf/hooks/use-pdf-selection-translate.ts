@@ -278,7 +278,7 @@ export function usePdfSelectionTranslate({
 								undefined,
 							vaultPath: vaultPath ?? undefined,
 							workflow: "translate",
-							autoApprove: true,
+							permissionMode: "auto",
 							hideFromChatHistory: true,
 						});
 						await attachAgentRun({

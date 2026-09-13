@@ -9,6 +9,7 @@ import { type MouseEvent, useMemo } from "react";
 import { useTranslation } from "react-i18next";
 import { useMarkdownDoc } from "@/components/editor/context/markdown-doc-context";
 import { WikiEmbedElement } from "@/components/editor/embeds/wiki-embed-node";
+import { isAgentCitationHref } from "@/lib/agent/citation-href";
 import { cn } from "@/lib/core/utils";
 import {
 	type LinkFragment,
@@ -18,6 +19,7 @@ import {
 } from "@/lib/wiki";
 import { useWikiNav } from "@/lib/wiki/nav-context";
 import type { WikiSlateNode } from "@/lib/wiki/wikilink-model";
+import { openCitation, tryOpenCitationHref } from "@/lib/workspace/actions";
 
 export function WikiLinkElement(props: PlateElementProps) {
 	const element = props.element as unknown as WikiSlateNode;
@@ -68,6 +70,18 @@ function WikiLinkNavigationElement({
 	const navigate = async (event: MouseEvent) => {
 		event.preventDefault();
 		event.stopPropagation();
+		// `[[papers/…/x.pdf#page=1]]` (and tex rewritten to pdf) share the
+		// agent citation jumper instead of heading navigation.
+		if (isAgentCitationHref(withHeading)) {
+			openCitation(withHeading);
+			return;
+		}
+		if (
+			path &&
+			tryOpenCitationHref(`${path}${el.heading ? `#${el.heading}` : ""}`)
+		) {
+			return;
+		}
 		if (wikiNav?.vaultPath && markdownDoc.filePath) {
 			try {
 				const resolved = await resolveWikiReference(

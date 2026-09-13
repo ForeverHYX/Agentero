@@ -247,7 +247,7 @@ export function usePdfAskThreads({
 					images,
 					vaultPath: vaultPath ?? undefined,
 					workflow: "free",
-					autoApprove: true,
+					permissionMode: "auto",
 					hideFromChatHistory: true,
 				});
 				const withAssistant: PdfAskThread = {

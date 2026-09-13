@@ -24,9 +24,10 @@ import {
 	CollapsibleContent,
 	CollapsibleTrigger,
 } from "@/components/ui/collapsible";
+import { prepareAgentMessageMarkdown } from "@/lib/agent/message-markdown";
 import { cn } from "@/lib/core/utils";
 
-import { ExternalLink } from "./external-link";
+import { AgentCitationLink } from "./agent-citation-link";
 import { PlainCodeBlock } from "./plain-code-block";
 import { PlainTable } from "./plain-table";
 import { Shimmer } from "./shimmer";
@@ -220,12 +221,14 @@ export type ReasoningContentProps = ComponentProps<
 	typeof CollapsibleContent
 > & {
 	children: string;
+	/** Open a vault-relative source path from an inline citation pill. */
+	onOpenSource?: (source: string) => void;
 };
 
 const streamdownPlugins = { cjk, code, math, mermaid };
 
 export const ReasoningContent = memo(
-	({ className, children, ...props }: ReasoningContentProps) => (
+	({ className, children, onOpenSource, ...props }: ReasoningContentProps) => (
 		<CollapsibleContent
 			className={cn(
 				"mt-4 text-sm",
@@ -237,14 +240,16 @@ export const ReasoningContent = memo(
 		>
 			<Streamdown
 				components={{
-					a: ExternalLink,
+					a: (linkProps) => (
+						<AgentCitationLink {...linkProps} onOpenSource={onOpenSource} />
+					),
 					code: PlainCodeBlock,
 					table: PlainTable,
 				}}
 				linkSafety={{ enabled: false }}
 				plugins={streamdownPlugins}
 			>
-				{children}
+				{prepareAgentMessageMarkdown(children)}
 			</Streamdown>
 		</CollapsibleContent>
 	),

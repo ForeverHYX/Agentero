@@ -153,7 +153,15 @@
 		"expand": "Expand questionnaire"
 	},
 	"citation": {
-		"vaultPath": "Vault path referenced by agent"
+		"vaultPath": "Vault path referenced by agent",
+		"resolveFailed": "Could not open citation: {{source}}",
+		"figureNotFound": "Figure not found: {{source}}",
+		"sectionNotFound": "Section not found: {{source}}",
+		"tableNotFound": "Table not found: {{source}}",
+		"algorithmNotFound": "Algorithm not found: {{source}}",
+		"formulaNotFound": "Formula not found: {{source}}",
+		"pageNotFound": "Page not found: {{source}}",
+		"regionNotFound": "Region not found: {{source}}"
 	},
 	"models": {
 		"currentSelection": "Current selection",

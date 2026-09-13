@@ -132,28 +132,3 @@ pub fn save(cfg: &CliConfig) -> Result<PathBuf, CliError> {
     fs::write(&path, text)?;
     Ok(path)
 }
-
-pub fn set_key(key: &str, value: &str) -> Result<CliConfig, CliError> {
-    let mut cfg = load()?;
-    match key {
-        "default_vault" => {
-            let p = Path::new(value);
-            let abs = if p.is_absolute() {
-                p.to_path_buf()
-            } else {
-                std::env::current_dir()?.join(p)
-            };
-            cfg.default_vault = Some(abs.to_string_lossy().to_string());
-        }
-        "translator_base_url" | "translator" => {
-            cfg.translator_base_url = Some(value.trim().to_string());
-        }
-        other => {
-            return Err(CliError::usage(format!(
-                "unknown config key '{other}' (allowed: default_vault, translator_base_url)"
-            )));
-        }
-    }
-    save(&cfg)?;
-    Ok(cfg)
-}

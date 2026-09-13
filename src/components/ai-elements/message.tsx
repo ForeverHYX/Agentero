@@ -26,10 +26,10 @@ import {
 	TooltipProvider,
 	TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { prepareAgentMessageMarkdown } from "@/lib/agent/message-markdown";
 import { cn } from "@/lib/core/utils";
-import { normalizeMarkdownMath } from "@/lib/markdown/math-normalize";
 
-import { ExternalLink } from "./external-link";
+import { AgentCitationLink } from "./agent-citation-link";
 import { PlainCodeBlock } from "./plain-code-block";
 import { PlainTable } from "./plain-table";
 
@@ -328,7 +328,10 @@ export const MessageBranchPage = ({
 	);
 };
 
-export type MessageResponseProps = ComponentProps<typeof Streamdown>;
+export type MessageResponseProps = ComponentProps<typeof Streamdown> & {
+	/** Open a vault-relative source path from an inline citation pill. */
+	onOpenSource?: (source: string) => void;
+};
 
 /**
  * KaTeX via Streamdown. Default `@streamdown/math` turns single-dollar off
@@ -344,9 +347,11 @@ const streamdownPlugins = {
 };
 
 export const MessageResponse = memo(
-	({ className, children, ...props }: MessageResponseProps) => {
+	({ className, children, onOpenSource, ...props }: MessageResponseProps) => {
 		const content =
-			typeof children === "string" ? normalizeMarkdownMath(children) : children;
+			typeof children === "string"
+				? prepareAgentMessageMarkdown(children)
+				: children;
 		return (
 			<Streamdown
 				className={cn(
@@ -356,7 +361,9 @@ export const MessageResponse = memo(
 					className,
 				)}
 				components={{
-					a: ExternalLink,
+					a: (linkProps) => (
+						<AgentCitationLink {...linkProps} onOpenSource={onOpenSource} />
+					),
 					code: PlainCodeBlock,
 					table: PlainTable,
 				}}
@@ -370,7 +377,8 @@ export const MessageResponse = memo(
 	},
 	(prevProps, nextProps) =>
 		prevProps.children === nextProps.children &&
-		nextProps.isAnimating === prevProps.isAnimating,
+		nextProps.isAnimating === prevProps.isAnimating &&
+		prevProps.onOpenSource === nextProps.onOpenSource,
 );
 
 MessageResponse.displayName = "MessageResponse";

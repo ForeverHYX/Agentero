@@ -3,6 +3,7 @@
 //! See `docs/backend/mcp.md`.
 
 mod icons;
+mod layout;
 mod notes;
 mod paper;
 mod resources;
@@ -377,10 +378,14 @@ mod tests {
         std::fs::create_dir_all(vault.join("papers").join("p1")).unwrap();
         papers::upsert_paper(&vault, &rec).unwrap();
 
-        let items = paper::list_papers(&vault, Some("Hello"), &[], false, 50).unwrap();
+        let items = paper::list_papers(&vault, Some("Hello"), &[], false, 50, &[], false).unwrap();
         assert_eq!(items.len(), 1);
         assert_eq!(items[0].id, "p1");
         assert_eq!(items[0].title, "Hello");
+        assert!(items[0].authors.is_none(), "default list is slim");
+
+        let full = paper::list_papers(&vault, None, &[], false, 50, &[], true).unwrap();
+        assert_eq!(full[0].authors.as_ref().unwrap(), &vec!["Ann".to_string()]);
 
         let got = paper::get_paper(&vault, "p1").unwrap();
         assert_eq!(got.title, "Hello");

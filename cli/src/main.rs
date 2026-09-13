@@ -176,14 +176,10 @@ enum Commands {
         #[command(subcommand)]
         cmd: commands::vault::VaultCmd,
     },
-    /// List vault-relative file tree.
-    Tree {
-        /// Subpath under vault (default: root).
-        #[arg(value_hint = ValueHint::AnyPath)]
-        path: Option<String>,
-        /// Max depth (default 3; -1 = unlimited).
-        #[arg(long = "depth", default_value = "3")]
-        depth: i32,
+    /// Introspect curated machine ops (agent schema). Omit id for the full index.
+    Describe {
+        /// Op id (`paper.list`) or MCP tool name (`paper_list`).
+        op: Option<String>,
     },
     /// Paper catalog operations.
     Paper {
@@ -360,12 +356,9 @@ fn command_label(cmd: &Commands) -> &'static str {
     match cmd {
         Commands::Vault { cmd } => match cmd {
             commands::vault::VaultCmd::Create { .. } => "cli.vault.create",
-            commands::vault::VaultCmd::Which => "cli.vault.which",
-            commands::vault::VaultCmd::Info => "cli.vault.info",
             commands::vault::VaultCmd::List => "cli.vault.list",
-            commands::vault::VaultCmd::Use { .. } => "cli.vault.use",
         },
-        Commands::Tree { .. } => "cli.tree",
+        Commands::Describe { .. } => "cli.describe",
         Commands::Paper { .. } => "cli.paper",
         Commands::Import { .. } => "cli.import",
         Commands::Export { .. } => "cli.export",
@@ -397,7 +390,7 @@ fn resolve_format(cli: &Cli) -> OutputFormat {
 async fn run(command: Commands, globals: &GlobalOpts) -> Result<serde_json::Value, CliError> {
     match command {
         Commands::Vault { cmd } => commands::vault::run(cmd, globals).await,
-        Commands::Tree { path, depth } => commands::tree::run(path.as_deref(), depth, globals),
+        Commands::Describe { op } => commands::describe::run(op.as_deref(), globals),
         Commands::Paper { cmd } => commands::paper::run(cmd, globals).await,
         Commands::Import { cmd } => commands::import::run(cmd, globals).await,
         Commands::Export { cmd } => commands::export::run(cmd, globals).await,

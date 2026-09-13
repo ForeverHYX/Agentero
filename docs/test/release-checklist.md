@@ -432,7 +432,7 @@ agentero --vault /tmp/agentero-cli-vault paper list --json
 |---|---|---|---|---|
 | 13.1 | 终端 | `agentero --version` | 版本与发布一致 | ☐ |
 | 13.2 | 终端 | `vault create <空目录>` | 脚手架与 GUI Create 一致（含 catalog） | ☐ |
-| 13.3 | 终端 | `vault which --json` / `info` / `list` | JSON 可解析；退出码 0 | ☐ |
+| 13.3 | 终端 | `vault list --json` | JSON 可解析；退出码 0 | ☐ |
 | 13.4 | 终端 | `tree`；`paper list --json` | 与 catalog 一致 | ☐ |
 | 13.5 | 终端 | `paper tag add …`；`list --tag` | 标签生效 | ☐ |
 | 13.6 | 终端 | `import id 1706.03762`（需网） | 入库成功或稳定 `error.code` | ☐ |

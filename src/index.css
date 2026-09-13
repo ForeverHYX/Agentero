@@ -15,6 +15,21 @@
 	}
 }
 
+/* Citation jump attention flash: hold, then fade out (~CITATION_FOCUS_FLASH_MS). */
+@keyframes citation-focus-flash {
+	0%,
+	55% {
+		opacity: 1;
+	}
+	100% {
+		opacity: 0;
+	}
+}
+
+.citation-focus-flash {
+	animation: citation-focus-flash 1.6s ease-out forwards;
+}
+
 .library-shimmer {
 	background: linear-gradient(
 		110deg,

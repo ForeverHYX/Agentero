@@ -52,7 +52,7 @@ pnpm tauri build
 ```bash
 # Headless CLI 与共享基础 crate（仓库根 workspace）
 cargo build -p agentero-cli
-cargo run -p agentero-cli -- vault which --json
+cargo run -p agentero-cli -- vault list --json
 cargo test -p agentero-cli
 cargo test -p agentero-core   # tauri 无关基础层（crates/agentero-core）
 ```

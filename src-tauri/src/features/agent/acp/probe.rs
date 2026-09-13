@@ -1,8 +1,8 @@
 use crate::features::agent::acp::client::{
-    acp_err, client_initialize_request, to_acp_agent, ACP_INITIALIZE_TIMEOUT,
+    acp_err, acp_terminals, agentero_acp_builder, client_initialize_request, to_acp_agent,
+    ACP_INITIALIZE_TIMEOUT,
 };
 use crate::features::agent::acp::interaction::permission_response;
-use crate::features::agent::acp::terminal::{AcpTerminalHandler, AcpTerminalManager};
 use crate::features::agent::doctor::{diagnose_codex_auth, CodexAuthStatus};
 use crate::features::agent::models::{
     AcpSessionCapabilities, AgentDescriptor, AgentTemplate, ProbeResult,
@@ -35,12 +35,9 @@ pub async fn probe_agent(
     let captured: Arc<Mutex<Option<(String, String, AcpSessionCapabilities)>>> =
         Arc::new(Mutex::new(None));
     let captured_clone = captured.clone();
-    let terminals = Arc::new(tokio::sync::Mutex::new(AcpTerminalManager::new()));
+    let terminals = acp_terminals(None);
 
-    let connect = agent_client_protocol::Client
-        .builder()
-        .name("agentero")
-        .with_handler(AcpTerminalHandler::new(terminals))
+    let connect = agentero_acp_builder!(terminals)
         .on_receive_request(
             async move |request: RequestPermissionRequest, responder, _cx| {
                 let _ = responder.respond(permission_response(&request, false));

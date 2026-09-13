@@ -7,6 +7,14 @@
 
 import i18n from "@/i18n";
 import { notePaperFocus, track } from "@/lib/activity";
+import type { CitationTarget } from "@/lib/agent/api";
+import { resolvePdfCitation } from "@/lib/agent/api";
+import {
+	citationHrefFromWikiParts,
+	cleanCitationHref,
+	isAgentCitationHref,
+	rewriteCitationHrefToPdf,
+} from "@/lib/agent/citation-href";
 import { errorText } from "@/lib/core/error";
 import { notifyError, notifyUndo, notifyWarning } from "@/lib/core/notify";
 import { closeTopOverlay } from "@/lib/core/overlay-stack";
@@ -38,10 +46,15 @@ import { removeTabAnnotations } from "@/lib/pdf/annotations-store";
 import {
 	buildLayoutDocumentResult,
 	getLayoutDocumentResult,
+	layoutKindFromCitationFragment,
 	mergeCaptionsIntoHosts,
 	setLayoutDocumentResult,
 } from "@/lib/pdf/layout";
 import { readLayoutSidecar } from "@/lib/pdf/layout/io";
+import {
+	clearPendingPdfPage,
+	setPendingPdfPage,
+} from "@/lib/pdf/pending-pdf-page";
 import { registerScrollSyncPair } from "@/lib/pdf/scroll-sync";
 import {
 	isPlazaVirtualPath,
@@ -785,8 +798,24 @@ export function openPath(absoluteOrDemoPath: string): void {
 	});
 }
 
+/**
+ * If `href` carries a PDF citation fragment (`#page=` / `#section=` / …),
+ * open via the shared citation jumper. Returns true when handled.
+ */
+export function tryOpenCitationHref(href: string): boolean {
+	const trimmed = cleanCitationHref(href);
+	if (!trimmed) return false;
+	const rewritten = rewriteCitationHrefToPdf(trimmed);
+	if (!isAgentCitationHref(trimmed) && !isAgentCitationHref(rewritten)) {
+		return false;
+	}
+	openCitation(trimmed);
+	return true;
+}
+
 /** Open a vault-relative path from backlinks (e.g. `notes/idea.md`). */
 export function openVaultRel(rel: string): void {
+	if (tryOpenCitationHref(rel)) return;
 	const vaultPath = getVaultPath();
 	if (!vaultPath) {
 		notifyError(i18n.t("app:errors.openVaultForLinks"));
@@ -798,6 +827,7 @@ export function openVaultRel(rel: string): void {
 
 /** Graph: paper NOTES / paper folder → open paper (PDF + Notes). */
 export function openGraphPath(rel: string): void {
+	if (tryOpenCitationHref(rel)) return;
 	const vaultPath = getVaultPath();
 	if (!vaultPath) {
 		notifyError(i18n.t("app:errors.openVaultForGraph"));
@@ -822,6 +852,174 @@ export function openGraphPath(rel: string): void {
 		}
 		openVaultRel(clean);
 	})();
+}
+
+/** Paper-key aliases so pending-page intent matches `usePdfNavigation`'s paperKey. */
+function citationPaperKeys(paperAbs: string): string[] {
+	const keys = [paperAbs];
+	const vaultPath = getVaultPath();
+	if (vaultPath) {
+		const rel = toVaultRelative(vaultPath, paperAbs);
+		if (rel && rel !== paperAbs) keys.push(rel);
+	}
+	return keys;
+}
+
+/**
+ * Wait for the PDF handle after openPaper, then jump to a layout region.
+ *
+ * First-open races with reading-position restore and EmbedPDF layout: a single
+ * early scroll often lands briefly then snaps back to page 1. Stash a pending
+ * page for restore to prefer, and re-apply the jump a few times while the
+ * viewport settles.
+ */
+function scheduleCitationJump(paperAbs: string, target: CitationTarget): void {
+	const tabId = tabIdForPath(paperAbs);
+	const keys = citationPaperKeys(paperAbs);
+	const page = target.pageIndex + 1;
+	setPendingPdfPage(keys, page);
+
+	let unsubscribe: (() => void) | null = null;
+	const retryTimeoutIds: number[] = [];
+	let stopped = false;
+
+	const stop = () => {
+		if (stopped) return;
+		stopped = true;
+		unsubscribe?.();
+		for (const id of retryTimeoutIds) window.clearTimeout(id);
+	};
+
+	const kind = layoutKindFromCitationFragment(target.fragment);
+	const tryJump = () => {
+		if (stopped) return;
+		const handle = pdfHandleFor(tabId);
+		if (!handle) return;
+		handle.scrollToLayoutRegion({
+			id: target.regionId,
+			pageIndex: target.pageIndex,
+			bbox: target.bbox,
+			kind,
+		});
+	};
+
+	tryJump();
+	unsubscribe = subscribePdfHandles(tryJump);
+	// Re-apply after layout/restore can wipe an early scroll (not a busy loop).
+	for (const delayMs of [300, 800]) {
+		retryTimeoutIds.push(window.setTimeout(tryJump, delayMs));
+	}
+	retryTimeoutIds.push(
+		window.setTimeout(() => {
+			stop();
+			// Restore may still be about to run; keep the intent briefly.
+			window.setTimeout(() => clearPendingPdfPage(keys), 2000);
+		}, 2000),
+	);
+}
+
+/** Short category toast for a failed citation resolve (e.g. figure / section). */
+function citationResolveFailedMessage(source: string): string {
+	const hash = source.indexOf("#");
+	const frag = hash >= 0 ? source.slice(hash + 1) : "";
+	const key = (frag.split("=")[0] ?? "").toLowerCase();
+	switch (key) {
+		case "figure":
+			return i18n.t("agent:citation.figureNotFound", { source });
+		case "section":
+			return i18n.t("agent:citation.sectionNotFound", { source });
+		case "table":
+			return i18n.t("agent:citation.tableNotFound", { source });
+		case "algorithm":
+			return i18n.t("agent:citation.algorithmNotFound", { source });
+		case "formula":
+			return i18n.t("agent:citation.formulaNotFound", { source });
+		case "page":
+			return i18n.t("agent:citation.pageNotFound", { source });
+		case "region":
+			return i18n.t("agent:citation.regionNotFound", { source });
+		default:
+			return i18n.t("agent:citation.resolveFailed", { source });
+	}
+}
+
+/**
+ * Open a citation link from agent output.
+ *
+ * Plain vault paths open as documents. Links that point at a paper file and
+ * carry a `#section=`, `#figure=`, `#page=`, or `#region=` fragment resolve
+ * the fragment on the Host and jump the PDF viewer to the cited location.
+ */
+export function openCitation(source: string): void {
+	const trimmed = rewriteCitationHrefToPdf(cleanCitationHref(source));
+	if (!trimmed) return;
+	if (/^https?:\/\//i.test(trimmed)) {
+		void import("@tauri-apps/plugin-opener")
+			.then(({ openUrl }) => openUrl(trimmed))
+			.catch(() => {
+				window.open(trimmed, "_blank", "noopener,noreferrer");
+			});
+		return;
+	}
+
+	const fragmentIndex = trimmed.indexOf("#");
+	const path = fragmentIndex >= 0 ? trimmed.slice(0, fragmentIndex) : trimmed;
+	const fragment = fragmentIndex >= 0 ? trimmed.slice(fragmentIndex + 1) : "";
+	if (!fragment) {
+		// Prefer opening the paper unit for PDF paths; plain notes still use graph open.
+		if (/\.pdf$/i.test(path)) {
+			const vaultPath = getVaultPath();
+			if (vaultPath) {
+				const clean = normalizeVaultRel(path);
+				const full = joinVaultPath(vaultPath, clean);
+				const paperAbs =
+					paperDirFromPath(full, vaultStore.getState().paperFolders) ?? null;
+				if (paperAbs) {
+					openPaper(paperAbs);
+					return;
+				}
+			}
+		}
+		openGraphPath(path);
+		return;
+	}
+
+	const vaultPath = getVaultPath();
+	if (!vaultPath) {
+		notifyError(i18n.t("app:errors.openVaultForGraph"));
+		return;
+	}
+
+	const clean = normalizeVaultRel(path);
+	const full = joinVaultPath(vaultPath, clean);
+	const paperAbs =
+		paperDirFromPath(full, vaultStore.getState().paperFolders) ?? null;
+
+	if (!paperAbs) {
+		// Best-effort: if the path itself is a paper folder, open it.
+		void (async () => {
+			if (await detectPaperDirectory(full)) {
+				openPaper(full);
+				void resolvePdfCitation(vaultPath, trimmed)
+					.then((target) => scheduleCitationJump(full, target))
+					.catch((e) => {
+						notifyError(citationResolveFailedMessage(trimmed));
+						console.warn("resolve citation failed", e);
+					});
+				return;
+			}
+			openGraphPath(path);
+		})();
+		return;
+	}
+
+	openPaper(paperAbs);
+	void resolvePdfCitation(vaultPath, trimmed)
+		.then((target) => scheduleCitationJump(paperAbs, target))
+		.catch((e) => {
+			notifyError(citationResolveFailedMessage(trimmed));
+			console.warn("resolve citation failed", e);
+		});
 }
 
 let wikiNavigationIntentId = 0;
@@ -879,6 +1077,15 @@ export async function navigateWiki(nav: WikiNavTarget): Promise<void> {
 	if (destination) {
 		if (!vaultPath) {
 			notifyError(i18n.t("app:errors.openVaultForLinks"));
+			return;
+		}
+		// PDF / layout citation fragments (page=/section=/figure=/…) share the
+		// agent citation jumper so editor wikilinks and markdown links behave alike.
+		const citationHref = citationHrefFromWikiParts(
+			destination.path,
+			destination.fragment,
+		);
+		if (citationHref && tryOpenCitationHref(citationHref)) {
 			return;
 		}
 		const full = joinVaultPath(vaultPath, normalizeVaultRel(destination.path));

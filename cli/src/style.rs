@@ -113,17 +113,6 @@ impl Style {
         }
     }
 
-    /// Directory name in `tree`.
-    pub fn dir(self, s: &str) -> String {
-        // bold + bright blue in one SGR (avoid nested reset).
-        self.paint("1;94", s)
-    }
-
-    /// File name in `tree`.
-    pub fn file(self, s: &str) -> String {
-        s.to_string()
-    }
-
     /// Success / ok line.
     pub fn ok(self, s: &str) -> String {
         self.bright_green(s)

@@ -56,7 +56,7 @@ jobs:
             ```bash
             agentero --version
             agentero open ~/research   # or: agentero ~/research
-            agentero vault which --json
+            agentero vault list --json
             ```
 
             Source install (slow; pulls desktop Rust deps):

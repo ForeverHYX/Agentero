@@ -319,7 +319,7 @@ export function usePlazaFeedSelection({
 					modelId: agentOpts?.modelId,
 					vaultPath: getVaultPath() ?? undefined,
 					workflow: "free",
-					autoApprove: true,
+					permissionMode: "auto",
 					hideFromChatHistory: true,
 				});
 				const withAssistant: PdfAskThread = {

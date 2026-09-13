@@ -10,6 +10,11 @@
 
 import type { useScroll } from "@embedpdf/plugin-scroll/react";
 import { type RefObject, useEffect, useRef, useState } from "react";
+import {
+	clearPendingPdfPage,
+	consumePendingPdfPage,
+	peekPendingPdfPage,
+} from "@/lib/pdf/pending-pdf-page";
 import { readReadingPage, writeReadingPage } from "@/lib/pdf/reading-position";
 
 /** Debounce for persisting the last read page while scrolling. */
@@ -58,11 +63,31 @@ export function usePdfNavigation({
 		if (!pageFocusedRef.current) setPageField(String(currentPage));
 	}, [currentPage]);
 
-	// On first load: restore the last read page.
+	// On first load: prefer a one-shot citation/wiki page intent, else restore
+	// the last read page. Citation jumps race with this effect — without the
+	// pending intent, an early `#page=N` scroll is overwritten by restore (or
+	// by EmbedPDF finishing layout back at page 1).
 	// biome-ignore lint/correctness/useExhaustiveDependencies: scrollReady waits for EmbedPDF scope
 	useEffect(() => {
 		const scrollScope = scrollRef.current;
 		if (restoredRef.current || totalPages <= 0 || !scrollScope) return;
+
+		if (paperKey) {
+			const pending = peekPendingPdfPage(paperKey);
+			if (pending != null && pending >= 1 && pending <= totalPages) {
+				restoredRef.current = true;
+				consumePendingPdfPage(paperKey);
+				scrollScope.scrollToPage({
+					pageNumber: pending,
+					behavior: "instant",
+				});
+				return;
+			}
+			if (pending != null) {
+				// Out-of-range citation page — drop it and fall through to saved.
+				clearPendingPdfPage(paperKey);
+			}
+		}
 
 		// Guard against the restore firing after the user has already scrolled.
 		// On Windows the EmbedPDF scroll plugin may report readiness late (e.g.

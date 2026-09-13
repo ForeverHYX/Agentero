@@ -68,7 +68,7 @@ agentero-vault/
 1. Resolve whether the target is already a Vault:
    - Minimum app structure: `papers/` plus `.agentero/catalog.sqlite` or an app/CLI path to initialize it. `notes/`, `plans/`, and `AGENTS.md` are recommended but not required for preserving an existing organization.
    - If `AGENTS.md` already exists, treat it as authoritative local guidance and keep it unchanged.
-   - If `agentero` exists, prefer `agentero vault info --json`.
+   - If `agentero` exists, prefer `agentero vault list --json` to see recorded vaults.
 2. Inventory the existing directory:
    - Identify PDFs, paper folders, TeX/source folders, Markdown notes, images/assets, BibTeX files, exported `PAPERS.md`, Zotero exports, and loose attachments.
    - Separate user-authored files from generated files.
@@ -99,7 +99,7 @@ agentero-vault/
    - For disk folders that already contain papers, use the app Rescan or CLI catalog commands if available.
    - Do not invent title, authors, year, DOI, or tags; mark unknowns explicitly.
 8. Verify:
-   - Run `agentero vault info --json` if available.
+   - Run `agentero vault list --json` if available.
    - Confirm that paper paths, local PDFs, `NOTES.md`, `PAPER.md`/`source/`, and `marks/` are discoverable.
    - Run `agentero wiki check --json` again. For a staged subset, pass its
      Vault-relative Markdown file or directory to isolate that scope.

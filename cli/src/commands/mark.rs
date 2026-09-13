@@ -8,12 +8,13 @@
 //! @see docs/development/mark-cli-roadmap.md
 //! @see docs/backend/cli.md
 
-use crate::commands::layout::{self as layout_cmd, LayoutIndexItem};
+use crate::commands::layout as layout_cmd;
 use crate::error::{CliError, ExitCode};
 use crate::prompt;
 use crate::resolve::{paper_dir, resolve_paper, resolve_vault, GlobalOpts};
 use agentero_core::features::catalog::probe_paper_caps;
 use agentero_core::features::import::pdf_parse::run_pdf_locate;
+use agentero_core::features::layout_index::LayoutIndexItem;
 use agentero_core::features::pdf_locate::{annotations, LocateMatch, LocateRequest, NormRect};
 use clap::{Subcommand, ValueHint};
 use serde::Serialize;

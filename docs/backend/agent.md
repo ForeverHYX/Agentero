@@ -90,6 +90,15 @@ wait / kill / release 在分发时先获取或移除句柄，再经 `connection.
 让 Kimi Code 等需要执行 shell 命令的 Agent 可以在 Vault 工作目录下运行命令并
 读取结果。
 
+run / warm / list / load / probe 共用 `agentero_acp_builder!`（name + terminal
+handler）；各入口自行挂 notification / permission 回调。
+
+**warm 与空会话**：模型列表来自 Session Setup 的 `configOptions`（协议不在
+`initialize` 提供），故 warm 仍需 `session/new`。若 Agent 声明
+`sessionCapabilities.delete`，warm 在读完 models/usage 后对该空会话调用
+`session/delete`，避免 `session/list` / CLI 历史堆积无消息 thread；未声明时仅
+debug 日志，行为与旧版相同。
+
 Kimi Code ACP 会把 `Bash`/`Glob`/`Grep` 等工具实现为 `terminal/create`。[当前实现](https://github.com/MoonshotAI/kimi-cli/blob/main/src/kimi_cli/acp/tools.py)
 会把完整 shell 文本放进 `command`；Host 对可解析的可执行文件继续按 `command + args`
 直接 spawn，对无法解析且没有 `args` 的命令在 Windows 用 PowerShell、Unix 用
@@ -149,7 +158,8 @@ Agentero prompt envelope、skill/context 注入，并将原始 `/command` 作为
 
 ## 权限
 
-全局 `agentPermissionMode`：
+全局 `agentPermissionMode`，前端经 `runOnce({ permissionMode })` 下发（优先字段；
+旧 `autoApprove` 仅 Host 侧兼容读取）：
 
 | 模式 | 行为 |
 |---|---|
@@ -188,8 +198,8 @@ ACP **没有**统一的 ask-user tool 规范：各 harness 的字段名、挂载
 - `translate`：**不套 envelope**（无 `## Sources`、无 CLI 政策、不注入回答语言与个人偏好）。翻译 prompt 自己已指定目标语言并要求「只返回译文」，envelope 会与之冲突。
 - Skill：Claude 倾向 `/id`；其它注入 `SKILL.md` 文本（`SkillMentionStyle`）。激活语法**只由 Host 判定**（`skill_mention_style` + `paper_reader_skill_line`）；前端不得重复推断，否则同一条 prompt 的两半会互相矛盾。
 - paper-reader：写 NOTES + `paper_set_is_read`；前端任务条编排。
-- 输出约定：工作流要求 `## Sources`（相对 Vault 路径）；双链保留 `[[...]]`。
-- `AGENTS.md` 已作为 progressive disclosure 系统上下文注入所有工作流 prompt（优先级：Vault 根 `AGENTS.md` → 当前 paper `NOTES.md` → marks）。
+- Host `build_prompt` envelope **只**负责：本轮 workflow 角色、回答语言、个人偏好、`User request`（`paper_reader` 另带激活句）。**不**再塞引用格式、CLI 政策、论文阅读顺序，也**不**在 free/qa 等 workflow 里重复 skill-follow-hint（激活靠 `skill_activation_prefix` + 注入的 `SKILL.md`；cwd 为 vault 根时 Agent 自载 `AGENTS.md`）。
+- 引用约定（`AGENTS.md` / `paper-reader`）：**阅读**可用 TeX/`PAPER.md`，citation **href 优先本地 PDF + fragment**；笔记用 `[[papers/<id>/NOTES]]`；不加外层 `([…])`、不用文末 `## Sources`。前端负责 pill 渲染、`.tex`→PDF 回退，以及残留 `blocked` 标签的显示兜底。Host `agent_resolve_citation`：`#figure=N` 在 caption 任意位置匹配 `Fig./Figure N`；`#section=N` 认阿拉伯与 IEEE 罗马章节号（如 `3`↔`III.`），纯数字不走模糊 overlap；失败时前端按 fragment 类型 Toast（短分类 + source）。
 - 自由模型选择：`preferred_model_id` 可指向 ACP catalog 外的任意模型 id；Warm / Run 时始终尝试 `session/set_config_option`，失败不阻断会话。
 
 ## 模型协商

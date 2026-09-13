@@ -169,7 +169,7 @@ pub fn resolve_paper(
             let candidates: Vec<String> = matches.iter().map(|p| p.path.clone()).collect();
             if let Some(path) = crate::prompt::select_one(
                 globals,
-                &format!("Multiple papers match id '{ref_}'"),
+                &format!("Multiple papers match id '{ref_}'. Choose a vault-relative path"),
                 candidates.clone(),
             )? {
                 return papers::get_by_path(vault, &path)?

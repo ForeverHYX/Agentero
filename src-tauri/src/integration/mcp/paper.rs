@@ -9,6 +9,21 @@ const TAG_COLORS: &[&str] = &[
     "red", "orange", "yellow", "green", "teal", "blue", "indigo", "purple",
 ];
 
+/// MCP / camelCase field names allowed on `paper_list` (beyond id/path/title).
+const PAPER_LIST_EXTRA_FIELDS: &[&str] = &[
+    "authors",
+    "year",
+    "tags",
+    "doi",
+    "arxivId",
+    "publication",
+    "status",
+    "isRead",
+    // snake_case aliases (CLI parity)
+    "arxiv_id",
+    "is_read",
+];
+
 pub fn looks_like_path(ref_: &str) -> bool {
     let t = ref_.trim();
     t.contains('/') || t.contains('\\') || t.starts_with("papers")
@@ -71,35 +86,88 @@ pub struct PaperListItem {
     pub id: String,
     pub path: String,
     pub title: String,
-    pub authors: Vec<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub authors: Option<Vec<String>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub year: Option<i32>,
-    pub tags: Vec<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub tags: Option<Vec<String>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub doi: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub arxiv_id: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub publication: Option<String>,
-    pub status: String,
-    pub is_read: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub status: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub is_read: Option<bool>,
 }
 
 impl PaperListItem {
-    fn from_record(row: &PaperRecord) -> Self {
+    fn slim(row: &PaperRecord) -> Self {
         Self {
             id: row.id.clone(),
             path: row.path.clone(),
             title: row.title.clone(),
-            authors: row.authors.clone(),
+            authors: None,
+            year: None,
+            tags: None,
+            doi: None,
+            arxiv_id: None,
+            publication: None,
+            status: None,
+            is_read: None,
+        }
+    }
+
+    fn full(row: &PaperRecord) -> Self {
+        Self {
+            id: row.id.clone(),
+            path: row.path.clone(),
+            title: row.title.clone(),
+            authors: Some(row.authors.clone()),
             year: row.year,
-            tags: row.tags.iter().map(|t| t.name.clone()).collect(),
+            tags: Some(row.tags.iter().map(|t| t.name.clone()).collect()),
             doi: row.doi.clone(),
             arxiv_id: row.arxiv_id.clone(),
             publication: row.publication.clone(),
-            status: row.status.clone(),
-            is_read: row.is_read,
+            status: Some(row.status.clone()),
+            is_read: Some(row.is_read),
         }
+    }
+
+    fn with_fields(row: &PaperRecord, fields: &[String]) -> Result<Self, AppError> {
+        let mut item = Self::slim(row);
+        for raw in fields {
+            let f = raw.trim();
+            if f.is_empty() || matches!(f, "id" | "path" | "title") {
+                continue;
+            }
+            if !PAPER_LIST_EXTRA_FIELDS.contains(&f) {
+                return Err(AppError::domain(
+                    "usage",
+                    format!(
+                        "unknown field '{f}' (valid: id, path, title, {})",
+                        PAPER_LIST_EXTRA_FIELDS.join(", ")
+                    ),
+                ));
+            }
+            match f {
+                "authors" => item.authors = Some(row.authors.clone()),
+                "year" => item.year = row.year,
+                "tags" => {
+                    item.tags = Some(row.tags.iter().map(|t| t.name.clone()).collect());
+                }
+                "doi" => item.doi = row.doi.clone(),
+                "arxivId" | "arxiv_id" => item.arxiv_id = row.arxiv_id.clone(),
+                "publication" => item.publication = row.publication.clone(),
+                "status" => item.status = Some(row.status.clone()),
+                "isRead" | "is_read" => item.is_read = Some(row.is_read),
+                _ => {}
+            }
+        }
+        Ok(item)
     }
 }
 
@@ -109,6 +177,8 @@ pub fn list_papers(
     filter_tags: &[String],
     unread: bool,
     limit: usize,
+    fields: &[String],
+    full: bool,
 ) -> Result<Vec<PaperListItem>, AppError> {
     let mut rows = papers::list_all_unique_by_id(vault)?;
     if unread {
@@ -140,7 +210,12 @@ pub fn list_papers(
         });
     }
     rows.truncate(limit);
-    Ok(rows.iter().map(PaperListItem::from_record).collect())
+    if full {
+        return Ok(rows.iter().map(PaperListItem::full).collect());
+    }
+    rows.iter()
+        .map(|r| PaperListItem::with_fields(r, fields))
+        .collect()
 }
 
 #[derive(Debug, Clone, Serialize, schemars::JsonSchema)]
@@ -204,4 +279,11 @@ pub fn get_paper(vault: &Path, ref_: &str) -> Result<PaperGetOut, AppError> {
     let mut paper = resolve_paper(vault, ref_)?;
     strip_internal_tags(&mut paper);
     Ok(PaperGetOut::from_record(&paper))
+}
+
+pub fn set_read(vault: &Path, ref_: &str, is_read: bool) -> Result<PaperGetOut, AppError> {
+    let paper = resolve_paper(vault, ref_)?;
+    let mut row = papers::set_is_read(vault, &paper.path, is_read)?;
+    strip_internal_tags(&mut row);
+    Ok(PaperGetOut::from_record(&row))
 }

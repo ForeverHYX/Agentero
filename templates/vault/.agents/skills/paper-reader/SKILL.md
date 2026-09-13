@@ -1,6 +1,6 @@
 ---
 name: paper-reader
-version: 3
+version: 6
 description: >-
   Read and explain a research paper clearly (prefer TeX, else PAPER.md/PDF).
   Use for core contribution, method deep-dive, experiments, limitations, and
@@ -144,8 +144,8 @@ Use wikilinks to connect this paper to knowledge that is already present in the
 Vault. A link is a navigable relationship, not decoration for every technical
 term.
 
-- Before adding a link, confirm its target exists with `agentero tree --json`,
-  `agentero paper list --json`, or direct Vault file inspection.
+- Before adding a link, confirm its target exists with `agentero paper list --json`
+  or direct Vault file inspection.
 - Link a cataloged paper to its note with a canonical Vault-relative target,
   for example `[[papers/nlp/1706.03762/NOTES|Attention Is All You Need]]`.
 - Link an existing concept note by path, for example
@@ -178,7 +178,11 @@ term.
      changed by this run, then check again.
    - If this CLI command is unavailable, report that semantic link validation
      was not completed. Do not claim that every link resolves.
-8. End with `## Sources` listing **Vault-relative** paths you actually read.
+8. Cite **inline** in the lecture body (no wrapping parentheses, no trailing
+   `## Sources` block). Prefer PDF fragment hrefs even when you read TeX, e.g.
+   `[Section 2.3](papers/<id>/<id>.pdf#section=2.3)`,
+   `[Figure 1](papers/<id>/<id>.pdf#figure=1)`, or notes
+   `[[papers/<id>/NOTES]]`. Do not cite `source/**/*.tex` in hrefs.
 9. Mark as read in catalog: run `agentero paper set-read {paper} --json`.
 
 ## Rules
@@ -188,4 +192,6 @@ term.
 - Never invent experimental numbers; if something is unclear, say so.
 - Math must use `$...$` / `$$...$$` so Agentero can render it (see vault `AGENTS.md`).
 - Final deliverable path: `{paper}/NOTES.md` only for the lecture notes body.
+- Cite with PDF fragment Markdown links or notes wikilinks (pill-friendly);
+  never wrap as `([…])`, never href `source/**/*.tex`.
 - Mark as read on completion: always run `agentero paper set-read {paper} --json` after notes and links are done.

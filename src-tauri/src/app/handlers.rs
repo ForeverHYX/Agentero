@@ -57,6 +57,7 @@ macro_rules! common_commands {
             crate::features::agent::commands::agent_respond_permission,
             crate::features::agent::commands::agent_respond_elicitation,
             crate::features::agent::commands::agent_respond_ask_user,
+            crate::features::agent::commands::agent_resolve_citation,
             crate::features::markdown::wiki::commands::graph_get_backlinks,
             crate::features::markdown::wiki::commands::wiki_resolve,
             crate::features::markdown::wiki::commands::wiki_embed_read,

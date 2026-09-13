@@ -5,6 +5,7 @@
 //! Shared logic lives in `features::agent::service` (also consumed by the
 //! desktop bridge RPC).
 
+mod citation;
 mod doctor;
 mod interaction;
 mod registry;
@@ -26,6 +27,7 @@ pub struct AgentUserAgentResponse {
     pub user_agent_provider_ids: String,
 }
 
+pub use citation::*;
 pub use doctor::*;
 pub use interaction::*;
 pub use registry::*;

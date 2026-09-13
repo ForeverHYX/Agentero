@@ -56,12 +56,6 @@ import {
 	ReasoningTrigger,
 } from "@/components/ai-elements/reasoning";
 import { Shimmer } from "@/components/ai-elements/shimmer";
-import {
-	Source,
-	Sources,
-	SourcesContent,
-	SourcesTrigger,
-} from "@/components/ai-elements/sources";
 import { Suggestion } from "@/components/ai-elements/suggestion";
 import {
 	Tool,
@@ -89,7 +83,6 @@ import {
 } from "@/lib/agent/chat-state";
 import { stripInlineTokens } from "@/lib/agent/composer-inline-tokens";
 import { stripPromptEnvelopeForDisplay } from "@/lib/agent/prompt-display";
-import { normalizeAgentSourcePath } from "@/lib/agent/sources";
 import { cn } from "@/lib/core/utils";
 
 /** Compact note: interactive form is docked below, not inside the tool card. */
@@ -455,6 +448,7 @@ const ChatTranscriptRow = memo(function ChatTranscriptRow({
 						/>
 						<ReasoningContent
 							className={insideProcess ? "mt-2 px-2 pb-2" : undefined}
+							onOpenSource={onOpenSource}
 						>
 							{part.text}
 						</ReasoningContent>
@@ -566,7 +560,10 @@ const ChatTranscriptRow = memo(function ChatTranscriptRow({
 				Boolean(line.streaming) && index === lastIndex && part.text.length > 0;
 			return (
 				<div key={partKey} className="min-w-0">
-					<MessageResponse isAnimating={isAnimating}>
+					<MessageResponse
+						isAnimating={isAnimating}
+						onOpenSource={onOpenSource}
+					>
 						{part.text}
 					</MessageResponse>
 				</div>
@@ -613,28 +610,6 @@ const ChatTranscriptRow = memo(function ChatTranscriptRow({
 						</MessageActions>
 					) : null}
 				</Message>
-				{line.sources && line.sources.length > 0 ? (
-					<Sources>
-						<SourcesTrigger count={line.sources.length} />
-						<SourcesContent>
-							{line.sources.map((raw) => {
-								const s = normalizeAgentSourcePath(raw);
-								const isHttp = /^https?:\/\//i.test(s);
-								return (
-									<Source
-										key={s}
-										title={s}
-										// External URLs are opened by the opener plugin via onClick;
-										// do not render them as <a target="_blank"> to avoid Tauri
-										// creating an empty in-app webview window.
-										href={isHttp ? undefined : s}
-										onClick={onOpenSource ? () => onOpenSource(s) : undefined}
-									/>
-								);
-							})}
-						</SourcesContent>
-					</Sources>
-				) : null}
 			</div>
 		);
 	}

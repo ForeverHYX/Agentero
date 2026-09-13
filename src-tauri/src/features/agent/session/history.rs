@@ -2,11 +2,10 @@
 
 use crate::core::error::AppError;
 use crate::features::agent::acp::client::{
-    client_initialize_request, simplified_agent_cwd, timed_acp_initialize, timed_acp_request,
-    to_acp_agent,
+    acp_terminals, agentero_acp_builder, client_initialize_request, simplified_agent_cwd,
+    timed_acp_initialize, timed_acp_request, to_acp_agent,
 };
 use crate::features::agent::acp::interaction::permission_response;
-use crate::features::agent::acp::terminal::{AcpTerminalHandler, AcpTerminalManager};
 use crate::features::agent::acp::updates::{
     plan_priority_str, plan_status_str, text_from_content_block, tool_kind_str, tool_status_str,
 };
@@ -14,7 +13,7 @@ use crate::features::agent::models::{
     AcpHistoryLine, AcpHistoryPart, AcpHistoryTool, AcpListSessionsResult, AcpLoadSessionResult,
     AcpSessionInfo, AgentDescriptor, AgentPlanEntry,
 };
-use crate::features::agent::prompt::envelope::extract_sources;
+
 use agent_client_protocol::schema::v1::{
     ListSessionsRequest, LoadSessionRequest, RequestPermissionRequest, SessionId,
     SessionNotification, SessionUpdate,
@@ -63,14 +62,9 @@ pub async fn list_acp_sessions(
         cwd = simplified_agent_cwd(&cwd);
     }
     let acp = to_acp_agent(desc, Some(&cwd), remote)?;
-    let terminals = Arc::new(tokio::sync::Mutex::new(AcpTerminalManager::with_cwd(
-        cwd.clone(),
-    )));
+    let terminals = acp_terminals(Some(cwd.clone()));
 
-    let result = agent_client_protocol::Client
-        .builder()
-        .name("agentero")
-        .with_handler(AcpTerminalHandler::new(terminals))
+    let result = agentero_acp_builder!(terminals)
         .on_receive_request(
             async move |request: RequestPermissionRequest, responder, _cx| {
                 let _ = responder.respond(permission_response(&request, false));
@@ -375,7 +369,7 @@ impl ReplayBuilder {
                 out.push(AcpHistoryLine {
                     id,
                     kind: "agent".to_string(),
-                    sources: extract_sources(&text),
+                    sources: Vec::new(),
                     text,
                     reasoning: (!reasoning.is_empty()).then_some(reasoning),
                     parts: line.parts,
@@ -412,14 +406,9 @@ pub async fn load_acp_session(
     let last_replay: Arc<Mutex<std::time::Instant>> =
         Arc::new(Mutex::new(std::time::Instant::now()));
     let last_replay_for_notif = last_replay.clone();
-    let terminals = Arc::new(tokio::sync::Mutex::new(AcpTerminalManager::with_cwd(
-        cwd.clone(),
-    )));
+    let terminals = acp_terminals(Some(cwd.clone()));
 
-    let result = agent_client_protocol::Client
-        .builder()
-        .name("agentero")
-        .with_handler(AcpTerminalHandler::new(terminals))
+    let result = agentero_acp_builder!(terminals)
         .on_receive_notification(
             async move |notification: SessionNotification, _cx| {
                 if let Ok(mut at) = last_replay_for_notif.lock() {
@@ -644,7 +633,7 @@ mod replay_builder_tests {
     }
 
     #[test]
-    fn agent_turns_recover_sources_from_replayed_text() {
+    fn agent_turns_no_longer_extract_sources_from_replayed_text() {
         let mut b = ReplayBuilder::default();
         b.push_agent_chunk(
             false,
@@ -653,7 +642,7 @@ mod replay_builder_tests {
         );
 
         let (lines, _) = b.finish();
-        assert_eq!(lines[0].sources, vec!["papers/a/NOTES.md".to_string()]);
+        assert!(lines[0].sources.is_empty());
     }
 
     #[test]

@@ -3,13 +3,10 @@
 use crate::config;
 use crate::error::CliError;
 use crate::output::to_value;
-use crate::resolve::{looks_like_vault, resolve_vault, GlobalOpts};
-use agentero_core::features::catalog::{self, papers};
+use crate::resolve::GlobalOpts;
 use agentero_core::features::vault as vault_svc;
 use clap::{Subcommand, ValueHint};
-use serde::Serialize;
 use serde_json::{json, Value};
-use std::fs;
 use std::path::{Path, PathBuf};
 
 #[derive(Debug, Subcommand)]
@@ -23,53 +20,14 @@ pub enum VaultCmd {
         #[arg(long = "open")]
         open: bool,
     },
-    /// Print the resolved vault absolute path.
-    Which,
-    /// Read-only discovery summary.
-    Info,
-    /// List known vaults recorded by `vault use` / `vault create`.
+    /// List known vaults recorded by `vault create`.
     List,
-    /// Persist CLI default_vault.
-    Use {
-        #[arg(value_hint = ValueHint::DirPath)]
-        path: PathBuf,
-    },
-}
-
-#[derive(Debug, Serialize)]
-#[serde(rename_all = "camelCase")]
-struct VaultInfoData {
-    path: String,
-    valid: bool,
-    schema_version: Option<i32>,
-    counts: VaultCounts,
-    has_agents_md: bool,
-    layers: VaultLayers,
-}
-
-#[derive(Debug, Serialize)]
-#[serde(rename_all = "camelCase")]
-struct VaultCounts {
-    papers: usize,
-    unread: usize,
-    notes_files: usize,
-}
-
-#[derive(Debug, Serialize)]
-struct VaultLayers {
-    #[serde(rename = "L0")]
-    l0: String,
-    #[serde(rename = "L1")]
-    l1: String,
 }
 
 pub async fn run(cmd: VaultCmd, globals: &GlobalOpts) -> Result<Value, CliError> {
     match cmd {
         VaultCmd::Create { path, open } => create(&path, open, globals),
-        VaultCmd::Which => which(globals),
-        VaultCmd::Info => info(globals),
         VaultCmd::List => list(globals),
-        VaultCmd::Use { path } => use_vault(&path, globals),
     }
 }
 
@@ -121,85 +79,6 @@ fn create(path: &Path, open: bool, globals: &GlobalOpts) -> Result<Value, CliErr
     Ok(v)
 }
 
-fn which(globals: &GlobalOpts) -> Result<Value, CliError> {
-    let vault = resolve_vault(globals)?;
-    let path = vault.to_string_lossy().to_string();
-    Ok(json!({ "path": path }))
-}
-
-fn info(globals: &GlobalOpts) -> Result<Value, CliError> {
-    let vault = resolve_vault(globals)?;
-    let path = vault.to_string_lossy().to_string();
-    let valid = looks_like_vault(&vault);
-
-    let (schema_version, papers, unread) = match catalog::ensure_catalog(&vault) {
-        Ok(conn) => {
-            let ver = catalog::schema_version(&conn).ok();
-            drop(conn);
-            let rows = papers::list_all(&vault).unwrap_or_default();
-            let unread = rows.iter().filter(|r| !r.is_read).count();
-            (ver, rows.len(), unread)
-        }
-        Err(_) => (None, 0, 0),
-    };
-
-    let notes_files = count_md_files(&vault.join("notes"));
-    let has_agents_md = vault.join("AGENTS.md").is_file();
-
-    let data = VaultInfoData {
-        path,
-        valid,
-        schema_version,
-        counts: VaultCounts {
-            papers,
-            unread,
-            notes_files,
-        },
-        has_agents_md,
-        layers: VaultLayers {
-            l0: "AGENTS.md".into(),
-            l1: "catalog.sqlite (use: paper list)".into(),
-        },
-    };
-    let style = globals.style;
-    let valid_s = if data.valid {
-        style.ok("yes")
-    } else {
-        style.bright_red("no")
-    };
-    let schema = data
-        .schema_version
-        .map(|v| v.to_string())
-        .unwrap_or_else(|| "?".into());
-    let mut v = to_value(&data)?;
-    if let Some(obj) = v.as_object_mut() {
-        obj.insert(
-            "lines".into(),
-            json!([
-                format!("{} {}", style.key("vault"), style.path(&data.path)),
-                format!(
-                    "{} {}  {} {}  {} {}  {} {}  {} {}",
-                    style.key("valid"),
-                    valid_s,
-                    style.key("schema"),
-                    style.dim(&schema),
-                    style.key("papers"),
-                    style.bold(&data.counts.papers.to_string()),
-                    style.key("unread"),
-                    if data.counts.unread > 0 {
-                        style.bright_yellow(&data.counts.unread.to_string())
-                    } else {
-                        style.dim("0")
-                    },
-                    style.key("notes"),
-                    style.dim(&data.counts.notes_files.to_string()),
-                ),
-            ]),
-        );
-    }
-    Ok(v)
-}
-
 fn list(globals: &GlobalOpts) -> Result<Value, CliError> {
     let default = config::load().ok().and_then(|c| c.default_vault);
     let known = config::list_known_vaults()?;
@@ -227,7 +106,11 @@ fn list(globals: &GlobalOpts) -> Result<Value, CliError> {
         .collect();
 
     if lines.is_empty() {
-        lines.push(style.dim("No known vaults. Use `agentero vault use <PATH>` or `agentero vault create <PATH>` to record one.").to_string());
+        lines.push(
+            style
+                .dim("No known vaults. Use `agentero vault create <PATH>` to record one.")
+                .to_string(),
+        );
     }
 
     let mut v = json!({ "vaults": items });
@@ -236,57 +119,4 @@ fn list(globals: &GlobalOpts) -> Result<Value, CliError> {
         obj.insert("count".into(), json!(items.len()));
     }
     Ok(v)
-}
-
-fn use_vault(path: &Path, globals: &GlobalOpts) -> Result<Value, CliError> {
-    let abs = if path.is_absolute() {
-        path.to_path_buf()
-    } else {
-        std::env::current_dir()?.join(path)
-    };
-    if !abs.is_dir() {
-        return Err(CliError::vault_not_found(format!(
-            "not a directory: {}",
-            abs.display()
-        )));
-    }
-    let abs = abs.canonicalize().unwrap_or(abs);
-    config::record_vault(&abs)?;
-    let abs_str = abs.to_string_lossy().to_string();
-    config::set_key("default_vault", &abs_str)?;
-    let style = globals.style;
-    Ok(json!({
-        "defaultVault": abs_str,
-        "lines": [format!(
-            "{} {}",
-            style.key("default_vault"),
-            style.path(&abs_str)
-        )]
-    }))
-}
-
-fn count_md_files(root: &Path) -> usize {
-    if !root.is_dir() {
-        return 0;
-    }
-    let mut n = 0usize;
-    let mut stack = vec![root.to_path_buf()];
-    while let Some(dir) = stack.pop() {
-        let Ok(entries) = fs::read_dir(&dir) else {
-            continue;
-        };
-        for entry in entries.flatten() {
-            let p = entry.path();
-            if p.is_dir() {
-                stack.push(p);
-            } else if p
-                .extension()
-                .and_then(|e| e.to_str())
-                .is_some_and(|e| e.eq_ignore_ascii_case("md"))
-            {
-                n += 1;
-            }
-        }
-    }
-    n
 }

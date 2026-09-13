@@ -1499,8 +1499,8 @@ Host 作为 ACP Client：按注册表 spawn 用户本机 Agent（`cwd` = 当前 
   reasoningEffort?: string; // 仅写入当前 ACP 会话声明的 thought_level 选项
   fastMode?: boolean; // 仅写入当前 ACP 会话声明的 fast model_config 选项
   skillIds?: string[]; // 已发现的本机 SKILL.md id，最多 5 个
-  autoApprove?: boolean; // 默认 false；true 时选择 ACP 返回的第一个权限选项
-  permissionMode?: string; // "restricted" | "ask" | "auto"；"ask" 时每个 ACP 权限请求转交用户（agent:permission-request）
+  permissionMode?: string; // 首选："restricted" | "ask" | "auto"；"ask" 时每个 ACP 权限请求转交用户（agent:permission-request）
+  // autoApprove?: boolean; // 已弃用；Host 仍兼容旧客户端，新代码请用 permissionMode
   responseLanguage?: string; // 强制回答/笔记语言（如 zh-CN）；省略或 auto 时不注入
   personalPrompt?: string; // 用户个人偏好提示词；省略或空时不注入
   hideFromChatHistory?: boolean; // 默认 false；true 时不写入 Vault Codex 会话索引（精读 / PDF 划词提问等）
@@ -2409,7 +2409,7 @@ CLI 不再暴露 usage 命令；查询与清理通过桌面端设置 / Host API 
 |---|---|
 | `open` / `<PATH>` | 深链唤起桌面 App（`agentero://open?path=…`） |
 | `vault create` | `services::vault::create_vault` / `vault_create`（幂等脚手架；缺失根目录仅 `create` 会新建，`vault_ensure` 对缺失路径报错） |
-| `vault which\|info\|list\|use` | CLI 自管解析 + catalog `ensure_catalog` / `schema_version` |
+| `vault list` | CLI 自管解析 + catalog `ensure_catalog` / `schema_version` |
 | `tree` | 磁盘扫描（非 Library 虚拟节点） |
 | `paper list\|get\|paths\|delete\|set-read\|tag list\|set\|add\|rm` | `catalog::papers::*`（含 `set_tags` / `list_all_tags`）/ `paper_*` |
 | `paper list --tag` / `--query` 含 tags | CLI 侧过滤（读 `list_all`）；Host `paper_list` 仍全量 |

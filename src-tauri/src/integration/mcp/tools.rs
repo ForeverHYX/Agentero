@@ -1,9 +1,12 @@
 //! MCP tools + ServerHandler.
 
 use super::icons;
+use super::layout;
 use super::notes::{self, WriteMode};
 use super::paper;
-use super::resources::{self, VAULT_NAME, VAULT_URI};
+use super::resources::{
+    self, INVARIANTS_NAME, INVARIANTS_URI, SKILL_NAME, SKILL_URI, VAULT_NAME, VAULT_URI,
+};
 use super::McpController;
 use crate::core::error::AppError;
 use crate::features::paper::catalog::{self, papers};
@@ -58,6 +61,12 @@ struct PaperListArgs {
     unread: bool,
     #[serde(default)]
     limit: Option<u32>,
+    /// Extra fields on top of id/path/title (e.g. year, tags, authors, isRead).
+    #[serde(default)]
+    fields: Vec<String>,
+    /// Emit the previous full metadata row shape.
+    #[serde(default)]
+    full: bool,
 }
 
 #[derive(Debug, Deserialize, schemars::JsonSchema)]
@@ -65,6 +74,39 @@ struct PaperListArgs {
 struct PaperRefArgs {
     /// Paper id or vault-relative folder path (`papers/…`).
     r#ref: String,
+}
+
+#[derive(Debug, Deserialize, schemars::JsonSchema)]
+#[serde(rename_all = "camelCase")]
+struct PaperSetReadArgs {
+    /// Paper id or vault-relative folder path (`papers/…`).
+    r#ref: String,
+    /// Default true.
+    #[serde(default = "default_true")]
+    is_read: bool,
+}
+
+fn default_true() -> bool {
+    true
+}
+
+#[derive(Debug, Deserialize, schemars::JsonSchema)]
+#[serde(rename_all = "camelCase")]
+struct LayoutListArgs {
+    r#ref: String,
+    /// Filter kinds: figure|image|chart|table|algorithm|formula (OR).
+    #[serde(default)]
+    kind: Vec<String>,
+    #[serde(default)]
+    min_score: Option<f64>,
+}
+
+#[derive(Debug, Deserialize, schemars::JsonSchema)]
+#[serde(rename_all = "camelCase")]
+struct LayoutGetArgs {
+    r#ref: String,
+    /// Region id from layout_list (e.g. figure-3).
+    id: String,
 }
 
 #[derive(Debug, Deserialize, schemars::JsonSchema)]
@@ -150,7 +192,7 @@ fn clamp_limit(raw: Option<u32>) -> usize {
 #[tool_router]
 impl AgenteroMcp {
     #[tool(
-        description = "List papers in the open vault with catalog metadata (id, path, title, authors, year, tags, doi, arxivId, publication, status, isRead). Abstract is omitted; use paper_get for the full record."
+        description = "List papers in the open vault. Default rows are only id/path/title (token-cheap). Pass fields (year, tags, authors, isRead, …) or full=true for more. Abstract is only on paper_get."
     )]
     async fn paper_list(
         &self,
@@ -166,6 +208,8 @@ impl AgenteroMcp {
             &args.tag,
             args.unread,
             clamp_limit(args.limit),
+            &args.fields,
+            args.full,
         ) {
             Ok(items) => Ok(Json(paper::PaperListOut { items })),
             Err(e) => Err(tool_err(e)),
@@ -345,6 +389,55 @@ impl AgenteroMcp {
             Err(e) => Err(tool_err(e)),
         }
     }
+
+    #[tool(
+        description = "Set catalog is_read for a paper (does not run paper-reader). Default isRead=true."
+    )]
+    async fn paper_set_read(
+        &self,
+        Parameters(args): Parameters<PaperSetReadArgs>,
+    ) -> Result<Json<paper::PaperGetOut>, CallToolResult> {
+        let vault = match self.ctrl.local_vault() {
+            Ok(v) => v,
+            Err(e) => return Err(tool_err(e)),
+        };
+        match paper::set_read(&vault, &args.r#ref, args.is_read) {
+            Ok(row) => Ok(Json(row)),
+            Err(e) => Err(tool_err(e)),
+        }
+    }
+
+    #[tool(
+        description = "List sidebar layout regions (figures/tables/algorithms/formulas) from layout-index.json. Requires desktop layout analysis first."
+    )]
+    async fn layout_list(
+        &self,
+        Parameters(args): Parameters<LayoutListArgs>,
+    ) -> Result<Json<layout::LayoutListOut>, CallToolResult> {
+        let vault = match self.ctrl.local_vault() {
+            Ok(v) => v,
+            Err(e) => return Err(tool_err(e)),
+        };
+        match layout::list(&vault, &args.r#ref, &args.kind, args.min_score) {
+            Ok(out) => Ok(Json(out)),
+            Err(e) => Err(tool_err(e)),
+        }
+    }
+
+    #[tool(description = "Get one layout region by id (e.g. figure-3) from layout-index.json.")]
+    async fn layout_get(
+        &self,
+        Parameters(args): Parameters<LayoutGetArgs>,
+    ) -> Result<Json<layout::LayoutGetOut>, CallToolResult> {
+        let vault = match self.ctrl.local_vault() {
+            Ok(v) => v,
+            Err(e) => return Err(tool_err(e)),
+        };
+        match layout::get(&vault, &args.r#ref, &args.id) {
+            Ok(out) => Ok(Json(out)),
+            Err(e) => Err(tool_err(e)),
+        }
+    }
 }
 
 #[tool_handler]
@@ -356,9 +449,14 @@ impl ServerHandler for AgenteroMcp {
                 .enable_resources()
                 .build(),
         )
-        .with_instructions(
-            "Agentero research vault MCP. Read resource agentero://vault first, then paper_list / paper_get. ref is a paper id or vault-relative path. Notes writes only touch NOTES.md.",
-        )
+        .with_instructions(concat!(
+            "Agentero research vault MCP (local vault; App must be open). ",
+            "Read agentero://vault, then agentero://agent-invariants. ",
+            "paper_list defaults to id/path/title only — pass fields or full when needed. ",
+            "ref is a paper id or vault-relative path. Notes writes only touch NOTES.md. ",
+            "Confirm with the user before replace of user-written NOTES. ",
+            "Optional: agentero://skills/agentero-cli for the bundled CLI skill body."
+        ))
         .with_server_info(
             Implementation::new("agentero", env!("CARGO_PKG_VERSION"))
                 .with_title("Agentero")
@@ -372,12 +470,21 @@ impl ServerHandler for AgenteroMcp {
         _request: Option<PaginatedRequestParams>,
         _context: RequestContext<RoleServer>,
     ) -> Result<ListResourcesResult, McpError> {
-        Ok(ListResourcesResult::with_all_items(vec![Resource::new(
-            VAULT_URI, VAULT_NAME,
-        )
-        .with_title("Current vault")
-        .with_mime_type("text/markdown")
-        .with_icons(icons::server_icons())]))
+        let icons = icons::server_icons();
+        Ok(ListResourcesResult::with_all_items(vec![
+            Resource::new(VAULT_URI, VAULT_NAME)
+                .with_title("Current vault")
+                .with_mime_type("text/markdown")
+                .with_icons(icons.clone()),
+            Resource::new(INVARIANTS_URI, INVARIANTS_NAME)
+                .with_title("Agent invariants")
+                .with_mime_type("text/markdown")
+                .with_icons(icons.clone()),
+            Resource::new(SKILL_URI, SKILL_NAME)
+                .with_title("Bundled agentero-cli skill")
+                .with_mime_type("text/markdown")
+                .with_icons(icons),
+        ]))
     }
 
     async fn read_resource(
@@ -385,14 +492,16 @@ impl ServerHandler for AgenteroMcp {
         request: ReadResourceRequestParams,
         _context: RequestContext<RoleServer>,
     ) -> Result<ReadResourceResponse, McpError> {
-        if request.uri != VAULT_URI {
+        let Some((markdown, _mime)) = resources::read(&request.uri, &self.ctrl) else {
             return Err(McpError::resource_not_found(
                 format!("unknown resource {}", request.uri),
                 None,
             ));
-        }
-        let markdown = resources::vault_markdown(&self.ctrl);
-        Ok(ReadResourceResult::new(vec![ResourceContents::text(markdown, VAULT_URI)]).into())
+        };
+        Ok(
+            ReadResourceResult::new(vec![ResourceContents::text(markdown, request.uri.clone())])
+                .into(),
+        )
     }
 }
 

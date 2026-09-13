@@ -122,7 +122,7 @@ tunnel-client run --profile agentero
 1. ChatGPT **Settings → Security and login** 打开 Developer mode。
 2. [Connectors](https://chatgpt.com/#settings/Connectors)（或 [Plugins](https://chatgpt.com/plugins)）点 `+`。
 3. **Connection** 选 **Tunnel**，选列表里的隧道或粘贴 `tunnel_id`。
-4. 发现 tools 后，先读资源 `agentero://vault`，再 `paper_list`。
+4. 发现 tools 后，先读 `agentero://vault` 与 `agentero://agent-invariants`，再 `paper_list`（默认只有 id/path/title）。
 
 官方：[Secure MCP Tunnel](https://developers.openai.com/api/docs/guides/secure-mcp-tunnels)。
 
@@ -130,10 +130,13 @@ tunnel-client run --profile agentero
 
 ## 能做什么
 
-- `paper_list` / `paper_get` — 论文 metadata
+- `paper_list` / `paper_get` — 论文 metadata（list 默认瘦字段；`fields` / `full` 按需）
+- `paper_set_read` — 标记已读/未读
 - `import_id` — arXiv / DOI / URL 入库
 - `paper_notes_get` / `paper_notes_write` — 读写该篇 `NOTES.md`
 - `paper_tag_add` / `paper_tag_rm` — 标签
+- `layout_list` / `layout_get` — 侧栏图/表/公式索引（需先在 App 跑版面分析）
+- Resources：`agentero://vault`、`agentero://agent-invariants`、`agentero://skills/agentero-cli`
 
 ## 常见问题
 

@@ -151,6 +151,16 @@ export type AgentResultPayload = {
 	providerSessionId?: string | null;
 };
 
+export type CitationTarget = {
+	paperPath: string;
+	path: string;
+	fragment: string;
+	pageIndex: number;
+	bbox: { x: number; y: number; w: number; h: number };
+	title?: string | null;
+	regionId: string;
+};
+
 export type AgentStreamKind = "message" | "thought";
 
 export type AgentStreamEvent = {
@@ -526,8 +536,6 @@ export async function runOnce(request: {
 	fastMode?: boolean;
 	/** Local SKILL.md identifiers selected through the composer. */
 	skillIds?: string[];
-	/** Select the agent's first ACP permission option for this run. */
-	autoApprove?: boolean;
 	/** ACP permission handling: "restricted" | "ask" | "auto" (from settings). */
 	permissionMode?: string;
 	/**
@@ -581,7 +589,6 @@ export async function runOnce(request: {
 					request.preferHighestReasoningEffort ?? false,
 				fastMode: request.fastMode,
 				skillIds: request.skillIds ?? [],
-				autoApprove: request.autoApprove ?? false,
 				permissionMode: request.permissionMode,
 				responseLanguage,
 				personalPrompt,
@@ -701,6 +708,17 @@ export async function warmAgent(request: {
 			}),
 		AGENT_CALL_OPTS,
 	);
+}
+
+/** Resolve an inline citation link to PDF page/bbox coordinates. */
+export async function resolvePdfCitation(
+	vaultPath: string,
+	source: string,
+): Promise<CitationTarget> {
+	return (await callApiResult(
+		() => commands.agentResolveCitation(vaultPath, source),
+		AGENT_CALL_OPTS,
+	)) as CitationTarget;
 }
 
 export function listenAgentStream(

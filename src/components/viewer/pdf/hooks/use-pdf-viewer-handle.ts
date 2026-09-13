@@ -32,7 +32,11 @@ import type { PdfVisualSessionTrace } from "@/lib/pdf/agent-trace";
 import { deletePdfAskThread, type PdfAskThread } from "@/lib/pdf/ask";
 import { isHighlightObject } from "@/lib/pdf/highlight/annotation-store";
 import type { PdfHighlight } from "@/lib/pdf/highlight/types";
-import { setFocusedLayoutRegion } from "@/lib/pdf/layout";
+import {
+	expandFocusBboxForOverlay,
+	layoutKindFromRegionId,
+	setFocusedLayoutRegion,
+} from "@/lib/pdf/layout";
 import type { ActiveSelectionCard } from "@/lib/pdf/selection";
 
 /** Longest edge of a figure-rail thumbnail crop (px). */
@@ -165,11 +169,34 @@ export function usePdfViewerHandle({
 				});
 			},
 			scrollToLayoutRegion: (region) => {
+				const kind = region.kind ?? layoutKindFromRegionId(region.id);
+				const bbox = expandFocusBboxForOverlay(region.bbox, kind);
+				const page =
+					docCapRef.current?.getDocument(docId)?.pages[region.pageIndex];
+				const pageSize = page?.size;
+				const pageCoordinates = pageSize
+					? {
+							x: bbox.x * pageSize.width,
+							y: bbox.y * pageSize.height,
+						}
+					: undefined;
 				scrollRef.current?.scrollToPage({
 					pageNumber: region.pageIndex + 1,
 					behavior: "instant",
+					...(pageCoordinates
+						? { pageCoordinates, alignX: 0, alignY: 18 }
+						: {}),
 				});
-				setFocusedLayoutRegion(docId, region.id);
+				setFocusedLayoutRegion(
+					docId,
+					region.id,
+					{
+						pageIndex: region.pageIndex,
+						bbox,
+						kind,
+					},
+					{ flash: true },
+				);
 			},
 			renderRegion: async ({ pageIndex, bbox, maxEdgePx }) => {
 				const eng = engineRef.current;

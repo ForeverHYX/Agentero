@@ -3636,7 +3636,7 @@
 </tr>
 <tr>
 <td>位置</td>
-<td>记忆阅读位置；从 <code>#page=</code> / <code>#section=</code> 等引用打开时，一次性 pending 页意图优先于恢复上次阅读位置，并短时重试跳转，避免先闪到目标页再被拉回第 1 页</td>
+<td>记忆阅读位置；从 <code>#page=</code> / <code>#section=</code> 等引用打开时，一次性 pending 页意图优先于恢复上次阅读位置，并短时重试跳转，避免先闪到目标页再被拉回第 1 页；跳转后在目标 bbox 上闪黄色半透明高亮块（~1.6s 淡出）。细条 <code>#section=</code> 标题扩成标题下预览块，并 <code>scrollToPage({ pageCoordinates })</code> 滚到该 y</td>
 </tr>
 <tr>
 <td>文中链接</td>

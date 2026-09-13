@@ -171,8 +171,9 @@ export function TocSidebar(props: TocSideBarProps) {
 					id="toc_wrap"
 					className="max-h-[min(46vh,28rem)] overflow-y-auto overscroll-contain [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
 				>
-					{state.headingList.map((item) => {
+					{state.headingList.map((item, index) => {
 						const active = item.id === state.activeContentId;
+						const depth = Math.min(Math.max(item.depth || 1, 1), 6);
 
 						return (
 							<button
@@ -182,11 +183,15 @@ export function TocSidebar(props: TocSideBarProps) {
 								aria-current={active ? "location" : undefined}
 								aria-label={item.title}
 								data-active={active}
+								style={{ paddingLeft: 4 + (depth - 1) * 10 }}
 								className={cn(
-									"group/item flex h-5 w-full items-center justify-between gap-0 rounded-sm px-1 outline-none",
+									"group/item flex h-5 w-full items-center justify-between gap-0 rounded-sm pr-1 outline-none",
+									// Breathing room before each top-level section heading.
+									index > 0 && depth === 1 && "mt-1.5",
 									"group-hover/toc:gap-1.5 group-focus-within/toc:gap-1.5",
 									"transition-[background-color,color] duration-200 ease-out",
 									"text-muted-foreground hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring",
+									depth === 1 && "text-foreground/80",
 									active && "text-foreground hover:text-foreground",
 								)}
 								onClick={(event) => onContentClick(event, item, "smooth")}
@@ -198,7 +203,11 @@ export function TocSidebar(props: TocSideBarProps) {
 										"group-hover/toc:translate-x-0 group-hover/toc:opacity-100",
 										"group-focus-within/toc:translate-x-0 group-focus-within/toc:opacity-100",
 										"motion-reduce:transition-none",
-										active ? "font-semibold" : "font-normal",
+										active
+											? "font-semibold"
+											: depth === 1
+												? "font-medium"
+												: "font-normal",
 									)}
 								>
 									{item.title}

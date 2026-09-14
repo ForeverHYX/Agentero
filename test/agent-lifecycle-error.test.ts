@@ -12,6 +12,13 @@ describe("lifecycleErrorMessage", () => {
 			"agent.npmCacheWriteFailed",
 		);
 	});
+	it("recognizes legacy npm ERR output", () => {
+		const raw =
+			"npm ERR! code EPERM\nnpm ERR! Log files were not written due to an error writing to the directory: C:\\npm-cache\\_logs";
+		expect(lifecycleErrorMessage(raw, t)).toContain(
+			"agent.npmCacheWriteFailed",
+		);
+	});
 	it("keeps unrelated installer output", () => {
 		expect(lifecycleErrorMessage("npm error network timeout", t)).toBe(
 			"npm error network timeout",

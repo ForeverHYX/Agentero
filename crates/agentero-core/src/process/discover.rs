@@ -170,7 +170,12 @@ pub fn resolve_command(command: &str) -> Option<PathBuf> {
 
     // Prefer `which` with current PATH first.
     if let Ok(found) = which::which(command) {
-        return Some(found);
+        // `which` only checks that a directory entry exists. Re-apply our
+        // platform executable validation so a text file renamed to `.exe`
+        // cannot trigger Windows' misleading 16-bit application dialog.
+        if is_executable(&found) {
+            return Some(found);
+        }
     }
 
     resolve_command_in_paths(command, &path_entries())

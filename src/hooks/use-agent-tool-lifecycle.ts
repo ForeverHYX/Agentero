@@ -135,7 +135,9 @@ export function useAgentToolLifecycle(opts: {
 				);
 				return true;
 			} catch (e) {
-				const message = lifecycleErrorMessage(errorText(e), t);
+				const message = lifecycleErrorMessage(errorText(e), (key, options) =>
+					t(key, { ...options, defaultValue: "" }),
+				);
 				// User-initiated cancel is not an error: no toast, no red banner.
 				if (message !== BACKGROUND_TASK_CANCELLED_MESSAGE) {
 					onError?.(message);

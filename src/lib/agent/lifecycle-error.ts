@@ -1,9 +1,12 @@
-type Translate = (key: string, options?: Record<string, string>) => string;
+type Translate = (
+	key: "agent.npmCacheWriteFailed",
+	options: Record<string, string>,
+) => string;
 
 export function lifecycleErrorMessage(message: string, t: Translate): string {
 	const normalized = message.toLowerCase();
 	const npmCacheWriteFailure =
-		normalized.includes("npm error") &&
+		(normalized.includes("npm error") || normalized.includes("npm err!")) &&
 		(normalized.includes("eperm") ||
 			normalized.includes("operation was rejected by your operating system")) &&
 		(normalized.includes("cache") ||

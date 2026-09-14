@@ -1476,6 +1476,27 @@ Agent：`agent_run_once` / `agent_warm` 在 vault 为 `remote:…` 时经 SSH `b
 
 - **参数 / 返回**：同 `catalog:export_papers_md`（`content` 为 BibTeX 文本）。
 
+### 3.6.2 网页论文代理（`agentero-web` scheme）
+
+「网页」类论文（有 `html_url` 无本地 PDF）由前端 iframe 经 Host 注册的 `agentero-web` 自定义 scheme 加载（`app/mod.rs` 注册，实现 `features/web/proxy.rs`）。这是 discovery 站点代理之外唯一允许**任意 host** 的代理，因此绝不开放中继：
+
+- **allowlist**（进程级 `RwLock<HashSet>`，`features/web/allowlist.rs`）：请求 host、重定向的每一跳 host 都必须在表内，否则 403 / 报错；只收公网 DNS 名（拒绝 IP 字面量 / localhost / `.local` / `.internal` / `.arpa` / 无点主机）。
+- **响应重建**：`text/html` 且 `looks_like_document` 时剥掉上游 CSP / X-Frame-Options，注入 `<base href>`（相对资源直载真实 origin，不经代理）与选区桥脚本（postMessage 协议见 [../frontend/web-view.md](../frontend/web-view.md)）；其余响应原样透传。请求只转发 content-type / accept / accept-language，不带 cookie / Origin。
+
+#### `web_proxy_allow_host`
+
+前端打开网页论文前 ensure 其 host 进入 allowlist（幂等；规范化后不合法的主机丢弃并 warn）。
+
+- **参数**（invoke 字段名 `args`）：
+
+```ts
+{
+  host: string;
+}
+```
+
+- **返回**：`ApiResult<boolean>` —— host 是否被接受（`false` = 非公网 DNS 名）。
+
 ### 3.7 Agent 工作流（ACP Client + BYOA）
 
 Host 作为 ACP Client：按注册表 spawn 用户本机 Agent（`cwd` = 当前 Vault），通过 stdio JSON-RPC 会话。**不** 内置 agent 二进制；**不** 在 config 中要求模型 API Key。

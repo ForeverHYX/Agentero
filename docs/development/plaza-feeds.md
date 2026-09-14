@@ -98,7 +98,7 @@ MVP **不做**：`@handle` 展开、OPML、登录态、RSSHub 拼接。
 | **列表卡** | 全部条目 | 标题；「全部」下显示来源+日期，单源下日期与标题同行。摘要去掉 arXiv 编号 / Announce Type | 点卡片进详情 |
 | **详情** | 同上 | 打开时解析全文（RSS 摘要不够则抓 `item.url` → HTML→Markdown）。整篇是一份 Markdown：`# 标题` + 正文，走 `MessageResponse`。文末 `[...]` 会剥掉。入库 / 打开原文在顶栏。正文可划词：**提问**（浮层 Ask 卡，会话内 ephemeral，不写 `marks/`）/ **加入对话**（pin 到 Agent composer）/ 复制 | 返回列表 |
 
-- **划词与 Agent（#421）**：详情正文 DOM 选区后浮出文字按钮 Add to chat / Quick chat（`PlazaSelectionMenu`）。Quick chat 复用 PDF `AskPopover` + 内存 `PdfAskThread`（空 rects），`runOnce({ hideFromChatHistory: true })`，Agent 取自设置里的划词提问席位；关闭即丢，不落盘。Add to chat：`publishSelection({ origin: "markdown" })` → pin → 打开右侧 Agent。实现：`plaza-feeds-item.tsx`、`use-plaza-feed-selection.ts`、`plaza-selection-menu.tsx`、`lib/plaza/ask-prompt.ts`。
+- **划词与 Agent（#421）**：详情正文 DOM 选区后浮出文字按钮 Add to chat / Quick chat（`PlazaSelectionMenu`）。Quick chat 复用 PDF `AskPopover` + 内存 `PdfAskThread`（空 rects），`runOnce({ hideFromChatHistory: true })`，Agent 取自设置里的划词提问席位；关闭即丢，不落盘。Add to chat：`publishSelection({ origin: "markdown" })` → pin → 打开右侧 Agent。实现：`plaza-feeds-item.tsx`、`use-plaza-feed-selection.ts`（Ask 运行生命周期在共享 hook `components/selection/use-selection-ask.ts`，网页论文划词同用，见 [../frontend/web-view.md](../frontend/web-view.md)）、`plaza-selection-menu.tsx`、`lib/plaza/ask-prompt.ts`。
 - 入库复用 `importPlazaPaper` / `lookupSubmit`：arXiv 喂 `https://arxiv.org/abs/{id}`；DOI 喂 `https://doi.org/{doi}`。入库不自动打开论文。
 - 入库中按钮 busy；成功 Toast + 该行变为「已入库」（本机缓存记 `importedAt`，刷新不丢）。
 - 失败 `notifyError`，不在侧栏挂错误条。

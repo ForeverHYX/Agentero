@@ -15,7 +15,11 @@ import { logger } from "@/lib/core/logger";
 import { LAYOUT_SIDEBAR_MIN_SCORE } from "@/lib/pdf/layout/constants";
 import {
 	isAlgorithmLayoutKind,
+	isFigureLayoutKind,
+	isFormulaLayoutKind,
+	isFormulaNumberLayoutKind,
 	isLayoutTranslatableKind,
+	isTableLayoutKind,
 } from "@/lib/pdf/layout/labels";
 import {
 	buildLayoutTranslateChains,
@@ -152,6 +156,45 @@ export function isInsideAlgorithmRegion(
 	return false;
 }
 
+/**
+ * True when a candidate text region is substantially inside a protected
+ * layout region on the same page. Formula/image OCR must remain in the source
+ * PDF: replacing it with a translated overlay corrupts equations and hides
+ * figure pixels. This is the box-level counterpart to BabelDOC's formula
+ * component preservation.
+ */
+export function isInsideProtectedLayoutRegion(
+	region: PdfLayoutRegion,
+	protectedRegions: readonly PdfLayoutRegion[],
+	coverage = 0.6,
+): boolean {
+	for (const protectedRegion of protectedRegions) {
+		if (protectedRegion.pageIndex !== region.pageIndex) continue;
+		if (bboxCoveredBy(region.bbox, protectedRegion.bbox) >= coverage) {
+			return true;
+		}
+	}
+	return false;
+}
+
+/**
+ * Formula OCR can be emitted in a body-text box which also contains the prose
+ * before or after a display equation. We currently have region geometry rather
+ * than BabelDOC's character-level formula components, so any real overlap is
+ * unsafe to translate: skipping that box preserves the equation and prevents
+ * its paper-colour overlay from hiding the source formula.
+ */
+export function overlapsProtectedLayoutRegion(
+	region: PdfLayoutRegion,
+	protectedRegions: readonly PdfLayoutRegion[],
+): boolean {
+	return protectedRegions.some(
+		(protectedRegion) =>
+			protectedRegion.pageIndex === region.pageIndex &&
+			bboxCoveredBy(region.bbox, protectedRegion.bbox) > 0.005,
+	);
+}
+
 /** "Algorithm 1" / "Alg. 2" style titles — keep original, do not translate. */
 export function isAlgorithmTitleText(text: string): boolean {
 	const t = text.trim();
@@ -196,6 +239,19 @@ export function listTranslatableLayoutRegions(
 	const referenceBlocks = regions.filter(
 		(r) => isReferenceLayoutLabel(r.label) && r.score >= minScore,
 	);
+	// Formula blocks (including equation numbers) are preserved in the source
+	// PDF. Text boxes that OCR emits over diagrams/tables are likewise not prose
+	// and must not become paper-colour overlays over the original pixels.
+	const formulas = regions.filter(
+		(r) =>
+			(isFormulaLayoutKind(r.kind) || isFormulaNumberLayoutKind(r.kind)) &&
+			r.score >= minScore,
+	);
+	const visualBlocks = regions.filter(
+		(r) =>
+			(isFigureLayoutKind(r.kind) || isTableLayoutKind(r.kind)) &&
+			r.score >= minScore,
+	);
 	const out: LayoutTranslateRegion[] = [];
 	for (const r of regions) {
 		// Never translate algorithm detections themselves.
@@ -211,6 +267,14 @@ export function listTranslatableLayoutRegions(
 		if (isInsideAlgorithmRegion(r, algorithms)) continue;
 		// Text/headers nested inside a reference block (e.g. multi-line cites).
 		if (isInsideAlgorithmRegion(r, referenceBlocks)) continue;
+		if (overlapsProtectedLayoutRegion(r, formulas)) continue;
+		// A figure title/caption is intentionally eligible; text OCR inside the
+		// visual host is not. Captions are normally separate boxes adjacent to it.
+		if (
+			r.kind !== "figure_title" &&
+			isInsideProtectedLayoutRegion(r, visualBlocks)
+		)
+			continue;
 		const full = normalizeLayoutSourceText(layoutRegionSourceText(r), r.kind);
 		if (!full) continue;
 		if (isAlgorithmTitleText(full)) continue;

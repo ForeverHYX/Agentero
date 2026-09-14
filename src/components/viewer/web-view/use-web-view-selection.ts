@@ -24,6 +24,7 @@ import {
 } from "@/components/selection/use-selection-ask";
 import type { ScreenPoint } from "@/components/viewer/pdf/types";
 import {
+	bridgeSelectionBottomRight,
 	bridgeSelectionScreen,
 	parseWebBridgeMessage,
 } from "@/components/viewer/web-view/bridge-message";
@@ -69,6 +70,8 @@ const COPIED_LABEL_DURATION_MS = 1000;
 export type WebViewSelectionMenu = {
 	text: string;
 	screen: ScreenPoint;
+	/** Selection bottom-right corner — where the translate card opens. */
+	bottomRight: ScreenPoint;
 };
 
 /** Message the app sends into the frame (`source` marker the bridge checks). */
@@ -209,7 +212,13 @@ export function useWebViewSelection({
 	const handleTranslate = useCallback(() => {
 		if (!menu) return;
 		const quote = menu.text;
-		const screen = menu.screen;
+		// Anchor below-right of the selection: SelectionCard opens to the right
+		// of (or right-aligned under) the anchor, and `trackPin` places its top
+		// 8px above the anchor — +8 lands it right under the selected text.
+		const screen = {
+			x: menu.bottomRight.x,
+			y: menu.bottomRight.y + 8,
+		};
 		setMenu(null);
 		clearCopiedLabel();
 
@@ -404,7 +413,11 @@ export function useWebViewSelection({
 					}
 					const ir = iframe.getBoundingClientRect();
 					const screen = bridgeSelectionScreen(msg.rect, ir);
-					setMenu({ text: msg.text, screen });
+					setMenu({
+						text: msg.text,
+						screen,
+						bottomRight: bridgeSelectionBottomRight(msg.rect, ir),
+					});
 					// The bridge already execCommand-copied inside the frame; the
 					// app-side write can be refused while focus sits there — try
 					// anyway so the label only shows on a real copy.

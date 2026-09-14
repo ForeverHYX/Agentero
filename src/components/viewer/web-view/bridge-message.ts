@@ -80,3 +80,19 @@ export function bridgeSelectionScreen(
 		y: iframeRect.y + rect.y,
 	};
 }
+
+/**
+ * Bottom-right corner of the selection in app viewport coordinates. Translate
+ * cards anchor here so they open below-right of the selected text instead of
+ * on top of its first lines (a cross-paragraph selection's bounding rect
+ * reaches far down the page, making a top anchor cover body text).
+ */
+export function bridgeSelectionBottomRight(
+	rect: WebBridgeRect,
+	iframeRect: { x: number; y: number },
+): { x: number; y: number } {
+	return {
+		x: iframeRect.x + rect.x + rect.width,
+		y: iframeRect.y + rect.y + rect.height,
+	};
+}

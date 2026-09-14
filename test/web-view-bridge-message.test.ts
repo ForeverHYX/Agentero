@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+	bridgeSelectionBottomRight,
 	bridgeSelectionScreen,
 	parseWebBridgeMessage,
 } from "@/components/viewer/web-view/bridge-message";
@@ -120,5 +121,16 @@ describe("bridgeSelectionScreen", () => {
 				{ x: 40, y: 12 },
 			),
 		).toEqual({ x: 170, y: 212 });
+	});
+});
+
+describe("bridgeSelectionBottomRight", () => {
+	it("anchors at the selection's bottom-right corner (translate cards)", () => {
+		expect(
+			bridgeSelectionBottomRight(
+				{ x: 100, y: 200, width: 60, height: 8 },
+				{ x: 40, y: 12 },
+			),
+		).toEqual({ x: 200, y: 220 });
 	});
 });

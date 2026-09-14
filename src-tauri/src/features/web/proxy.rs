@@ -208,10 +208,7 @@ fn target_from_uri(uri: &tauri::http::Uri) -> Option<Target> {
     if !path.starts_with('/') || path.contains("..") {
         return None;
     }
-    let query = uri
-        .query()
-        .map(|q| format!("?{q}"))
-        .unwrap_or_default();
+    let query = uri.query().map(|q| format!("?{q}")).unwrap_or_default();
     if host == "localhost" || host == "agentero-web.localhost" {
         // The first path segment carries the upstream host.
         let rest = path.strip_prefix('/')?;
@@ -352,8 +349,8 @@ pub fn handle(request: tauri::http::Request<Vec<u8>>, responder: tauri::UriSchem
                 outgoing = outgoing.body(body);
             }
             let remote = outgoing.send().await.map_err(|e| e.to_string())?;
-            let status = StatusCode::from_u16(remote.status().as_u16())
-                .unwrap_or(StatusCode::BAD_GATEWAY);
+            let status =
+                StatusCode::from_u16(remote.status().as_u16()).unwrap_or(StatusCode::BAD_GATEWAY);
             let content_type = remote
                 .headers()
                 .get(reqwest::header::CONTENT_TYPE)
@@ -411,8 +408,10 @@ mod tests {
         assert_eq!(t.host, "arxiv.org");
         assert_eq!(t.path_query, "/abs/1234?fmt=html");
         // Windows WebView2 form.
-        let t = target_from_uri(&uri("http://agentero-web.localhost/blog.nature.com/posts/x"))
-            .expect("target");
+        let t = target_from_uri(&uri(
+            "http://agentero-web.localhost/blog.nature.com/posts/x",
+        ))
+        .expect("target");
         assert_eq!(t.host, "blog.nature.com");
         assert_eq!(t.path_query, "/posts/x");
     }
@@ -438,7 +437,9 @@ mod tests {
     fn injects_base_and_bridge_after_head_open() {
         let html = "<html><head><title>t</title><link rel=\"stylesheet\" href=\"/css/main.css\"></head><body></body></html>";
         let out = inject_document(html, "https://arxiv.org/abs/1234");
-        let base = out.find("<base href=\"https://arxiv.org/abs/1234\">").expect("base");
+        let base = out
+            .find("<base href=\"https://arxiv.org/abs/1234\">")
+            .expect("base");
         let bridge = out.find("agentero-web").expect("bridge");
         let title = out.find("<title>").expect("title after injections");
         // Both land before any URL-bearing node (the stylesheet link).
@@ -454,7 +455,9 @@ mod tests {
         let html = "<html><body><header><h1>x</h1></header></body></html>";
         let out = inject_document(html, "https://example.com/a");
         // No <head> → prepended wholesale, body content preserved.
-        let base = out.find("<base href=\"https://example.com/a\">").expect("base");
+        let base = out
+            .find("<base href=\"https://example.com/a\">")
+            .expect("base");
         assert_eq!(base, 0);
         assert!(out.contains("<header>"));
     }

@@ -404,35 +404,42 @@ const ChatTranscriptRow = memo(function ChatTranscriptRow({
 		});
 		return (
 			<Message from="user" className="max-w-[85%]">
-				{/* Visual / image chips above the text bubble (not inside it). */}
+				{/* Visual chips above the text bubble (not inside it). */}
 				{visuals.length > 0 ? (
 					<ChatVisualAnnotations annotations={visuals} />
 				) : null}
-				{attachedImages.length > 0 ? (
-					<ChatAttachedImages images={attachedImages} />
-				) : null}
-				{/* Free-text only: skip empty bubble when the turn is image/visual-only. */}
-				{userDisplay ? (
-					<MessageContent className="rounded-2xl px-4 py-2.5">
-						<MessageResponse className="text-base leading-relaxed">
-							{userDisplay}
-						</MessageResponse>
-					</MessageContent>
-				) : null}
-				{/* Align under user content (Message is full-width) */}
-				<MessageActions className="-mt-1 ml-auto opacity-0 transition-opacity group-hover:opacity-100 focus-within:opacity-100">
-					{activeTabIsRunning || !userDisplay ? null : (
-						<MessageAction
-							tooltip={t("edit.action")}
-							label={t("edit.action")}
-							disabled={submitting || switching}
-							onClick={() => handlers.onStartEditing(line.id, userDisplay)}
-						>
-							<Pencil className="size-3.5" />
-						</MessageAction>
-					)}
-					<CopyAction text={copyPayload} />
-				</MessageActions>
+				{/*
+				 * Right-anchored content block. Hover actions float at its
+				 * bottom-left corner, out of layout flow — a hidden action row
+				 * used to add a blank line between the user turn and the reply.
+				 */}
+				<div className="relative ml-auto w-fit max-w-full">
+					{attachedImages.length > 0 ? (
+						<ChatAttachedImages images={attachedImages} />
+					) : null}
+					{/* Free-text only: skip empty bubble when the turn is image/visual-only. */}
+					{userDisplay ? (
+						<MessageContent className="rounded-2xl px-4 py-2.5">
+							<MessageResponse className="text-base leading-relaxed">
+								{userDisplay}
+							</MessageResponse>
+						</MessageContent>
+					) : null}
+					{/* Hovers beside the bubble's bottom-left, outside the box. */}
+					<MessageActions className="absolute right-full bottom-0 mr-1.5 opacity-0 transition-opacity group-hover:opacity-100 focus-within:opacity-100">
+						{activeTabIsRunning || !userDisplay ? null : (
+							<MessageAction
+								tooltip={t("edit.action")}
+								label={t("edit.action")}
+								disabled={submitting || switching}
+								onClick={() => handlers.onStartEditing(line.id, userDisplay)}
+							>
+								<Pencil className="size-3.5" />
+							</MessageAction>
+						)}
+						<CopyAction text={copyPayload} />
+					</MessageActions>
+				</div>
 			</Message>
 		);
 	}

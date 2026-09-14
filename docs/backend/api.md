@@ -2225,7 +2225,7 @@ Windows：未设 `XDG_CONFIG_HOME` 时回退 `%APPDATA%/agentero/`。旧版 macO
 
 - **参数**：无
 - **返回** `ApiResult<BuiltinProviderStatus>`：`{ available, baseUrl, translateModel, embeddingModel, ocrModel }`
-- **`available`**：本次构建是否编译进了 `AGENTERO_BUILTIN_API_KEY`。`false` 时前端隐藏或禁用内置选项，默认回落到 `tencenttransmart` / `local`，embedding 穿透到已存值。
+- **`available`**：本次构建是否编译进了 `AGENTERO_BUILTIN_API_KEY`。`false` 时前端隐藏或禁用内置选项，默认回落到 `tencenttransmart` / `local`，空的 embedding 配置回落到自定义未配置状态。
 - **不含任何 key 派生物**：无前缀、无长度、无 `*` 掩码、无 hash。内置 key 也不写 `AppSettings`，因此既不出现在 `settings_get` 里也不出现在 `settings.json` 里。
 - **同步命令**：纯读编译期常量，无 IO；AGENTS.md 对同步命令的警告只针对在其中 build `WebviewWindow`。
 - 前端只消费 `available`；`baseUrl` 与三个 model id 供 Host 内部解析凭证，不显示到 UI。
@@ -2382,7 +2382,7 @@ CLI 不再暴露 usage 命令；查询与清理通过桌面端设置 / Host API 
 
 - **陈旧短路**：非 `force` 且 `computed_at` 为当天、分类集合一致时，直接返回存量，不发任何网络请求。所以 `vault:opened` 的预热调用通常是零成本的。
 - **缓存**：`embed_cache(text_hash, model, dim, vector)` 按 sha256(title+abstract)+model 存小端 f32 向量，语料只 embed 一次；主键含 model，所以换 embedding 模型不会读到旧向量。`arxiv_rec_state` 单行存上次运行，**不按 model 建键**：切换 embedding 来源后的当天首次运行仍会复用存量结果，除非 `force`（既存行为）。均在 catalog schema v6。
-- **凭据**：读设置 `embedding`。`source`（`"builtin"` | `"custom"`）决定用哪一套：非 `custom` 且本次构建注入了内置 provider key 时用构建期网关三元组，否则用已存的 Base URL / API Key / Model。请求都是 `POST {baseUrl}/embeddings`（OpenAI 兼容）。见 [builtin-provider.md](builtin-provider.md) §Embedding。
+- **凭据**：读设置 `embedding`。`source`（`"builtin"` | `"custom"`）决定用哪一套：非 `custom` 且本次构建注入了内置 provider key 时用构建期网关三元组，否则用已存的 Base URL / API Key / Model；空配置会返回 `recommend.no_embedding`。请求都是 `POST {baseUrl}/embeddings`（OpenAI 兼容）。见 [builtin-provider.md](builtin-provider.md) §Embedding。
 - **结构化错误**（前端转空态）：`recommend.no_embedding` 端点未配置（自定义来源缺字段，或构建无内置 key 且未填 BYOK）、`recommend.empty_corpus` 库里没摘要、`recommend.no_candidates` 分类下无新论文。
 
 前端入口：`src/lib/recommend/`。

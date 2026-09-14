@@ -78,15 +78,15 @@ describe("defaults (browser-dev, no Host key)", () => {
 		expect(DEFAULT_LAYOUT_SETTINGS.parserBackend).toBe("local");
 	});
 
-	it("defaults the embedding source to builtin (Host falls through harmlessly)", () => {
-		expect(DEFAULT_SETTINGS.embedding.source).toBe("builtin");
+	it("defaults the embedding source to custom", () => {
+		expect(DEFAULT_SETTINGS.embedding.source).toBe("custom");
 	});
 });
 
 describe("embedding source migration", () => {
 	const cases: Array<[string, Record<string, unknown>, "builtin" | "custom"]> =
 		[
-			["empty object infers builtin", {}, "builtin"],
+			["empty object infers custom without a Host key", {}, "custom"],
 			[
 				"baseUrl set infers custom",
 				{ baseUrl: "https://api.openai.com/v1" },
@@ -110,8 +110,8 @@ describe("embedding source migration", () => {
 				{ source: "weird", baseUrl: "x" },
 				"custom",
 			],
-			["unknown value re-inferred when empty", { source: "weird" }, "builtin"],
-			["empty source string infers builtin", { source: "" }, "builtin"],
+			["unknown value re-inferred when empty", { source: "weird" }, "custom"],
+			["empty source string infers custom", { source: "" }, "custom"],
 			[
 				"empty source string infers custom",
 				{ source: "", model: "m" },

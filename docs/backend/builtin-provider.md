@@ -152,14 +152,14 @@
 
 `EmbeddingSettings` 新增 `source: "builtin" | "custom"`。它是普通的 `#[serde(default)]`（空串即「未设置」），**不是** `default = "..."` 返回 `"builtin"`：否则一个填了 BYOK 字段但没有 `source` 键的旧 `settings.json`，与「用户显式选了内置」无法区分。
 
-**迁移规则**（Rust `resolve_embedding_source()` 与前端 `normalizeEmbeddingSettings` 必须逐条一致）：
+**迁移规则**（Rust `resolve_embedding_source()` 与前端浏览器 dev 默认保持同一安全方向）：
 
 1. 显式的 `"builtin"` / `"custom"` 优先；
 2. 否则 `baseUrl` / `apiKey` / `model` 任一非空（全 `*` 掩码也算非空）⇒ `"custom"`；
-3. 三项全空 ⇒ `"builtin"`；
+3. 三项全空 ⇒ 有编译期 key 的构建为 `"builtin"`，无 key 的源码 / 浏览器 dev 构建为 `"custom"`；
 4. 未知值按 2–3 重新推断。
 
-也就是说：已经填过自定义端点的老用户**不会被静默切走**，只有真正全新 / 全空的配置才变成内置。
+也就是说：已经填过自定义端点的老用户**不会被静默切走**；真正全新 / 全空的配置只在官方这类已注入 key 的构建里变成内置。
 
 `embedding_config()` 在解析出的 source 非 `"custom"` 且 `builtin::available()` 时返回网关三元组；否则穿透到已存值。这条链路只服务 arXiv 每日推荐（[../development/plaza.md](../development/plaza.md) §3.4），Host 命令 `recommend_arxiv` 透明继承，无需改动。
 
@@ -202,7 +202,7 @@
 | `default_translate_provider()` | `agentero` | `tencenttransmart` |
 | `default_parser_backend()` | `agentero` | `local` |
 | `default_layout_backend()` | `local` | `local` |
-| `EmbeddingSettings::source`（推断） | `builtin`（仅当 BYOK 三项全空） | `builtin`（同左；但 `embedding_config()` 穿透到空值 → 功能禁用） |
+| `EmbeddingSettings::source`（推断） | `builtin`（仅当 BYOK 三项全空） | `custom`（空字段 → `embedding_config()` 为 `None`，功能禁用） |
 
 新装用户没有 `settings.json`，`read_file` 返回 `AppSettings::default()`，因此**由 Rust 的 `default_*()` 决定首次安装的取值**。前端 TS 的 defaults 只在浏览器 dev（无 Tauri、也就不可能有 key）里生效，所以刻意保持在非内置值上，两边不需要一致。
 

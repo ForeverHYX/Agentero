@@ -1088,10 +1088,12 @@ fn normalize(s: &mut AppSettings) {
     normalize_layout_provider_configs(&mut s.layout.provider_configs);
 }
 
-/// Migration rule for `EmbeddingSettings::source`, mirrored case-for-case by the
-/// frontend normalizer: an explicit value wins, otherwise any populated BYOK
-/// field (an all-`*` mask counts as populated) implies a custom endpoint and an
-/// all-empty triple implies the built-in one.
+/// Migration rule for `EmbeddingSettings::source`: an explicit value wins,
+/// otherwise any populated BYOK field (an all-`*` mask counts as populated)
+/// implies a custom endpoint. An all-empty triple uses the built-in endpoint
+/// only in builds that actually carry the compiled-in key; source builds without
+/// that key fall back to `custom` so the settings UI does not show an unusable
+/// built-in provider.
 fn resolve_embedding_source(settings: &EmbeddingSettings) -> String {
     let explicit = settings.source.trim().to_ascii_lowercase();
     if explicit == EMBEDDING_SOURCE_BUILTIN || explicit == EMBEDDING_SOURCE_CUSTOM {
@@ -1100,7 +1102,7 @@ fn resolve_embedding_source(settings: &EmbeddingSettings) -> String {
     let configured = !settings.base_url.trim().is_empty()
         || !settings.api_key.trim().is_empty()
         || !settings.model.trim().is_empty();
-    if configured {
+    if configured || !builtin::available() {
         EMBEDDING_SOURCE_CUSTOM.to_string()
     } else {
         EMBEDDING_SOURCE_BUILTIN.to_string()
@@ -1597,9 +1599,14 @@ mod tests {
 
     #[test]
     fn embedding_source_is_inferred_only_when_unset() {
+        let empty_default_source = if builtin::available() {
+            "builtin"
+        } else {
+            "custom"
+        };
         let mut fresh = AppSettings::default();
         normalize(&mut fresh);
-        assert_eq!(fresh.embedding.source, "builtin");
+        assert_eq!(fresh.embedding.source, empty_default_source);
 
         // Legacy file: BYOK fields populated, no `source` key at all.
         let mut legacy: AppSettings = serde_json::from_str(
@@ -1627,7 +1634,7 @@ mod tests {
         let mut unknown = AppSettings::default();
         unknown.embedding.source = "gateway".into();
         normalize(&mut unknown);
-        assert_eq!(unknown.embedding.source, "builtin");
+        assert_eq!(unknown.embedding.source, empty_default_source);
     }
 
     #[test]

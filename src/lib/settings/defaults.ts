@@ -14,7 +14,7 @@ export const DEFAULT_PDF_ASK_SETTINGS: PdfAskSettings = {
 };
 
 export const DEFAULT_EMBEDDING_SETTINGS: EmbeddingSettings = {
-	source: "builtin",
+	source: "custom",
 	baseUrl: "",
 	apiKey: "",
 	model: "",

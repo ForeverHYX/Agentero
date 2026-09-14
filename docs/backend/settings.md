@@ -21,7 +21,7 @@
 
 settings 不存内置 provider 的任何凭证；它只在**读取时**把 id `agentero` 解析到构建期注入的凭证（见 [builtin-provider.md](builtin-provider.md)）。
 
-- **`embedding.source`**（`"builtin"` | `"custom"`）：普通 `#[serde(default)]`，空串即「未设置」，**不是**返回 `"builtin"` 的 default fn——否则一个填了 BYOK 端点但没有 `source` 键的旧 `settings.json`，与「用户显式选了内置」无法区分。`normalize()` 里的 `resolve_embedding_source()` 推断：显式值优先 → `baseUrl`/`apiKey`/`model` 任一非空（全 `*` 掩码也算非空）⇒ `custom` → 三项全空 ⇒ `builtin`。该规则必须与前端 `normalizeEmbeddingSettings` **逐条一致**（它在 Host load、legacy 迁移、每次保存、`settings_set` 回显、`settings:changed` 时都会跑）。已填过自定义端点的老用户不会被静默切走。
+- **`embedding.source`**（`"builtin"` | `"custom"`）：普通 `#[serde(default)]`，空串即「未设置」，**不是**返回 `"builtin"` 的 default fn——否则一个填了 BYOK 端点但没有 `source` 键的旧 `settings.json`，与「用户显式选了内置」无法区分。`normalize()` 里的 `resolve_embedding_source()` 推断：显式值优先 → `baseUrl`/`apiKey`/`model` 任一非空（全 `*` 掩码也算非空）⇒ `custom` → 三项全空时，有编译期 key 的构建 ⇒ `builtin`，无 key 的源码 / dev 构建 ⇒ `custom`。前端浏览器 dev 默认也保持在 `custom`。已填过自定义端点的老用户不会被静默切走。
 - **`embedding_config()`**：source 非 `custom` 且 `builtin::available()` 时返回网关三元组；无编译期 key 时穿透到已存值，仍为空则 `None`，让 `recommend.no_embedding` 照常触发。
 - **`layout_api_key` / `layout_base_url` / `layout_model`** 在 **getter 层**特判内置 id，这样所有调用方（`body_engines/mod.rs`、`layout/hosted/commands.rs`）自动正确，不必各自加分支。`layout_prompt` / `layout_language` / `layout_is_ocr` **不特判** → `None` / `None` / `false`：提示词由 VLM 引擎按 model id 推导，后两项是 MinerU 专用。
 - **`layout_provider_settings_key("agentero")`** 返回 `"agentero"`，只为给 parser 凭证 `HashMap` 一个稳定的键；它不对应任何落盘卡片。

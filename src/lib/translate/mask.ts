@@ -1,7 +1,7 @@
 /**
- * Protect tokens that MT engines mangle (inline math, LaTeX commands, model
- * identifiers, URLs, DOIs) by swapping them for opaque placeholders before
- * the request and restoring them afterwards.
+ * Protect tokens that MT engines mangle (inline math, LaTeX commands, URLs,
+ * DOIs) by swapping them for opaque placeholders before the request and
+ * restoring them afterwards.
  */
 
 export type MaskedToken = {
@@ -36,13 +36,6 @@ const MASK_PATTERNS: RegExp[] = [
 	/\\\((?:[^\\]|\\[^)]){1,200}?\\\)/g,
 	// LaTeX commands with or without a braced argument.
 	/\\[A-Za-z]+(?:\{[^{}]{0,120}\})?/g,
-	// Research-model and implementation identifiers. Keep acronyms (DDPM,
-	// CLIP), letter-number names (GPT-4, SDXL-1.0) and interior-capital names
-	// (MotionDiffuse) intact; ordinary prose is deliberately left translatable.
-	/\b(?:[A-Z]{2,}[A-Z0-9_-]*|[A-Za-z]+\d+[A-Za-z0-9_.-]*|[A-Z]?[a-z]+(?:[A-Z][A-Za-z0-9]*)+)\b/g,
-	// Bare single-letter variables occasionally escape the PDF text layer
-	// without math delimiters. Do not mask the English articles/pronouns a/I.
-	/\b(?![AaIi]\b)[A-Za-z]\b/g,
 	// Links and identifiers.
 	/https?:\/\/[^\s、，。]+/g,
 	/\bdoi:\s*10\.\d{4,9}\/\S+/gi,

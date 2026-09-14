@@ -243,21 +243,6 @@ describe("inline token masking", () => {
 		expect(restored.text).toBe(source);
 	});
 
-	it("masks model identifiers and bare variable letters without masking prose", () => {
-		const source =
-			"DDPM improves MotionDiffuse with GPT-4; let x be a latent variable.";
-		const masked = maskInlineTokens(source);
-		expect(masked.text).not.toContain("DDPM");
-		expect(masked.text).not.toContain("MotionDiffuse");
-		expect(masked.text).not.toContain("GPT-4");
-		expect(masked.text).not.toContain(" x ");
-		expect(masked.text).toContain(" be a latent variable.");
-		expect(restoreInlineTokens(masked.text, masked.tokens)).toMatchObject({
-			text: source,
-			missing: 0,
-		});
-	});
-
 	it("tolerates padded placeholders and reports dropped ones", () => {
 		const masked = maskInlineTokens("value $x$ and $y$");
 		const [first, second] = masked.tokens;

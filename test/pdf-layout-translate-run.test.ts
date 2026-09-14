@@ -100,16 +100,4 @@ describe("runLayoutRegionTranslate paragraph chains", () => {
 		expect(runTranslate).toHaveBeenCalledTimes(2);
 		expect(out[0]?.translated).toBe("参见 https://example.com/x 获取细节。");
 	});
-
-	it("restores protected model identifiers in translated prose", async () => {
-		runTranslate.mockResolvedValueOnce("⟦0⟧ 改进了 ⟦1⟧。");
-		const items = [item("a", "DDPM improves MotionDiffuse.", 0)];
-
-		const out = await runLayoutRegionTranslate({ items, onUpdate: () => {} });
-
-		expect(runTranslate.mock.calls[0]?.[0]).toMatchObject({
-			text: "⟦0⟧ improves ⟦1⟧.",
-		});
-		expect(out[0]?.translated).toBe("DDPM 改进了 MotionDiffuse。");
-	});
 });

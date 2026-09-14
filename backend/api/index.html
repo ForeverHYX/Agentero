@@ -2693,6 +2693,34 @@
 </li>
         
           <li class="md-nav__item">
+  <a href="#362-agentero-web-scheme" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        3.6.2 网页论文代理（agentero-web scheme）
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="3.6.2 网页论文代理（agentero-web scheme）">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#web_proxy_allow_host" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        web_proxy_allow_host
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+          <li class="md-nav__item">
   <a href="#37-agent-acp-client-byoa" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -5470,6 +5498,34 @@
 </li>
         
           <li class="md-nav__item">
+  <a href="#362-agentero-web-scheme" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        3.6.2 网页论文代理（agentero-web scheme）
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="3.6.2 网页论文代理（agentero-web scheme）">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#web_proxy_allow_host" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        web_proxy_allow_host
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+          <li class="md-nav__item">
   <a href="#37-agent-acp-client-byoa" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -7928,6 +7984,25 @@ Host (Tauri + Rust)
 <p>从 catalog 生成 BibTeX 汇总（历史 <code>library.bib</code> 形态）。</p>
 <ul>
 <li><strong>参数 / 返回</strong>：同 <code>catalog:export_papers_md</code>（<code>content</code> 为 BibTeX 文本）。</li>
+</ul>
+<h3 id="362-agentero-web-scheme">3.6.2 网页论文代理（<code>agentero-web</code> scheme）<a class="headerlink" href="#362-agentero-web-scheme" title="Permanent link">&para;</a></h3>
+<p>「网页」类论文（有 <code>html_url</code> 无本地 PDF）由前端 iframe 经 Host 注册的 <code>agentero-web</code> 自定义 scheme 加载（<code>app/mod.rs</code> 注册，实现 <code>features/web/proxy.rs</code>）。这是 discovery 站点代理之外唯一允许<strong>任意 host</strong> 的代理，因此绝不开放中继：</p>
+<ul>
+<li><strong>allowlist</strong>（进程级 <code>RwLock&lt;HashSet&gt;</code>，<code>features/web/allowlist.rs</code>）：请求 host、重定向的每一跳 host 都必须在表内，否则 403 / 报错；只收公网 DNS 名（拒绝 IP 字面量 / localhost / <code>.local</code> / <code>.internal</code> / <code>.arpa</code> / 无点主机）。</li>
+<li><strong>响应重建</strong>：<code>text/html</code> 且 <code>looks_like_document</code> 时剥掉上游 CSP / X-Frame-Options，注入 <code>&lt;base href&gt;</code>（相对资源直载真实 origin，不经代理）与选区桥脚本（postMessage 协议见 <a href="../../frontend/web-view/">../frontend/web-view.md</a>）；其余响应原样透传。请求只转发 content-type / accept / accept-language，不带 cookie / Origin。</li>
+</ul>
+<h4 id="web_proxy_allow_host"><code>web_proxy_allow_host</code><a class="headerlink" href="#web_proxy_allow_host" title="Permanent link">&para;</a></h4>
+<p>前端打开网页论文前 ensure 其 host 进入 allowlist（幂等；规范化后不合法的主机丢弃并 warn）。</p>
+<ul>
+<li><strong>参数</strong>（invoke 字段名 <code>args</code>）：</li>
+</ul>
+<div class="codehilite"><pre><span></span><code><span class="p">{</span>
+<span class="w">  </span><span class="nx">host</span><span class="o">:</span><span class="w"> </span><span class="kt">string</span><span class="p">;</span>
+<span class="p">}</span>
+</code></pre></div>
+
+<ul>
+<li><strong>返回</strong>：<code>ApiResult&lt;boolean&gt;</code> —— host 是否被接受（<code>false</code> = 非公网 DNS 名）。</li>
 </ul>
 <h3 id="37-agent-acp-client-byoa">3.7 Agent 工作流（ACP Client + BYOA）<a class="headerlink" href="#37-agent-acp-client-byoa" title="Permanent link">&para;</a></h3>
 <p>Host 作为 ACP Client：按注册表 spawn 用户本机 Agent（<code>cwd</code> = 当前 Vault），通过 stdio JSON-RPC 会话。<strong>不</strong> 内置 agent 二进制；<strong>不</strong> 在 config 中要求模型 API Key。</p>

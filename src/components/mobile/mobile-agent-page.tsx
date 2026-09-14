@@ -1,3 +1,4 @@
+import type { TFunction } from "i18next";
 import { LoaderCircle } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -24,6 +25,8 @@ import type {
 	AcpListSessionsResult,
 	AgentLine,
 	AgentPermissionRequest,
+	AgentStatusEvent,
+	AgentTurnPhase,
 } from "@/components/mobile/types";
 import { Button } from "@/components/ui/button";
 import {
@@ -37,6 +40,26 @@ import {
 import { displayHistoryTitle } from "@/lib/agent/prompt-display";
 import { bridgeRpc } from "@/lib/bridge/client";
 import { cn } from "@/lib/core/utils";
+
+const phaseLabelKey: Record<
+	AgentTurnPhase,
+	"agent.starting" | "agent.waitingModel" | "agent.reconnecting"
+> = {
+	starting: "agent.starting",
+	"waiting-model": "agent.waitingModel",
+	reconnecting: "agent.reconnecting",
+};
+
+/** Backend loading phase → status text; null falls back to the thinking label. */
+function phaseStatusLabel(
+	phase: AgentStatusEvent | null,
+	t: TFunction<"mobile", undefined>,
+): string | null {
+	if (!phase) return null;
+	const base = t(phaseLabelKey[phase.phase]);
+	const detail = phase.detail?.trim();
+	return detail ? `${base} ${detail}` : base;
+}
 
 export function MobileAgentPage({
 	selectedAgentId,
@@ -57,6 +80,7 @@ export function MobileAgentPage({
 		sending,
 		restoring,
 		permission,
+		phase,
 		restore,
 		send,
 		respondToPermission,
@@ -65,6 +89,10 @@ export function MobileAgentPage({
 		sessionId,
 		onSessionId,
 	});
+	const streamingAssistant = [...lines]
+		.reverse()
+		.find((line) => line.role === "assistant" && line.streaming);
+	const pendingLabel = phaseStatusLabel(phase, t);
 
 	return (
 		<>
@@ -83,7 +111,24 @@ export function MobileAgentPage({
 								title={t("agent.empty")}
 							/>
 						) : (
-							lines.map((line) => <MobileChatLine key={line.id} line={line} />)
+							<>
+								{lines.map((line) => (
+									<MobileChatLine
+										key={line.id}
+										line={line}
+										label={line === streamingAssistant ? pendingLabel : null}
+									/>
+								))}
+								{sending && !streamingAssistant ? (
+									<Message from="assistant" className="max-w-full">
+										<MessageContent className="text-base leading-6">
+											<Shimmer className="text-sm">
+												{pendingLabel ?? t("agent.thinking")}
+											</Shimmer>
+										</MessageContent>
+									</Message>
+								) : null}
+							</>
 						)}
 					</ConversationContent>
 					<ConversationScrollButton className="bottom-3 size-8 shadow-md" />
@@ -127,7 +172,14 @@ export function MobileAgentPage({
 	);
 }
 
-function MobileChatLine({ line }: { line: AgentLine }) {
+function MobileChatLine({
+	line,
+	label = null,
+}: {
+	line: AgentLine;
+	/** Phase-aware status text for the streaming placeholder. */
+	label?: string | null;
+}) {
 	const { t } = useTranslation("mobile");
 	const showThinking =
 		line.role === "assistant" && !line.text.trim() && line.streaming;
@@ -144,7 +196,7 @@ function MobileChatLine({ line }: { line: AgentLine }) {
 				)}
 			>
 				{showThinking ? (
-					<Shimmer className="text-sm">{t("agent.thinking")}</Shimmer>
+					<Shimmer className="text-sm">{label ?? t("agent.thinking")}</Shimmer>
 				) : (
 					<MessageResponse isAnimating={line.streaming}>
 						{line.text}

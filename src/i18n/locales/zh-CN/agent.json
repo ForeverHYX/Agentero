@@ -122,6 +122,9 @@
 		"thinking": "思考中",
 		"reasoning": "思考过程",
 		"plan": "规划中",
+		"starting": "启动 Agent 中…",
+		"waitingModel": "等待模型输出…",
+		"reconnecting": "上游重连中",
 		"elapsed": "{{count}}秒"
 	},
 	"copy": "复制",

@@ -6,8 +6,10 @@ use tokio::sync::watch;
 
 /// In-memory controls for active one-shot ACP sessions.
 ///
-/// ACP connections are intentionally short-lived today, so cancellation state is
-/// runtime-only and is removed as soon as the corresponding session finishes.
+/// Cancellation state is runtime-only and is removed as soon as the corresponding
+/// session finishes. Connections themselves may outlive a turn in the warm pool
+/// (`session::AgentWarmPool`), but pooled turns still key their cancellation
+/// here for the duration of the prompt.
 pub struct AgentRunController {
     cancellations: Mutex<HashMap<String, watch::Sender<bool>>>,
 }

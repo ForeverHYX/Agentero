@@ -1,8 +1,8 @@
 use crate::features::agent::models::{
     AgentCollaborationEvent, AgentCommand, AgentCommandInput, AgentCommandsEvent,
     AgentEffortChoice, AgentEffortEvent, AgentFastModeEvent, AgentModeChoice, AgentModelChoice,
-    AgentModelsEvent, AgentPlanEntry, AgentPlanEvent, AgentSessionInfoEvent, AgentStreamKind,
-    AgentToolEvent, AgentUsageEvent,
+    AgentModelsEvent, AgentPlanEntry, AgentPlanEvent, AgentSessionInfoEvent, AgentStatusEvent,
+    AgentStreamKind, AgentToolEvent, AgentUsageEvent,
 };
 use crate::features::agent::runtime::events::AgentEventEmitter;
 use agent_client_protocol::schema::v1::{
@@ -549,6 +549,15 @@ pub(crate) fn emit_rich_session_update(
             );
         }
         SessionUpdate::SessionInfoUpdate(info) => {
+            // Upstream reconnects surface as `_meta.error` (e.g. codex-acp's
+            // "Reconnecting... 2/5") with no title/updated_at — forward them as
+            // `agent:status` so the UI can show a reconnecting state.
+            if let Some(detail) = reconnect_detail(info) {
+                let _ = app.emit(
+                    "agent:status",
+                    AgentStatusEvent::reconnecting(session_id, Some(detail)),
+                );
+            }
             let pick = |v: &MaybeUndefined<String>| match v {
                 MaybeUndefined::Value(s) if !s.trim().is_empty() => Some(s.clone()),
                 _ => None,
@@ -570,6 +579,82 @@ pub(crate) fn emit_rich_session_update(
             );
         }
         _ => {}
+    }
+}
+
+/// Extract the upstream reconnect counter from a `SessionInfoUpdate`'s
+/// `_meta.error` (codex-acp emits `"Reconnecting... 2/5"` on upstream loss).
+/// Returns `Some("2/5")` only for reconnect messages carrying a `n/m` token;
+/// missing meta, unrelated errors, or a missing counter yield `None`.
+pub(crate) fn reconnect_detail(
+    info: &agent_client_protocol::schema::v1::SessionInfoUpdate,
+) -> Option<String> {
+    let error = info.meta.as_ref()?.get("error")?.as_str()?.trim();
+    if !error.to_ascii_lowercase().starts_with("reconnect") {
+        return None;
+    }
+    let token = error.split_whitespace().next_back()?;
+    let (attempts, total) = token.split_once('/')?;
+    if attempts.is_empty()
+        || total.is_empty()
+        || !attempts.bytes().all(|b| b.is_ascii_digit())
+        || !total.bytes().all(|b| b.is_ascii_digit())
+    {
+        return None;
+    }
+    Some(token.to_string())
+}
+
+#[cfg(test)]
+mod reconnect_detail_tests {
+    use super::reconnect_detail;
+    use agent_client_protocol::schema::v1::SessionInfoUpdate;
+
+    fn info_with_meta(error: Option<&str>) -> SessionInfoUpdate {
+        let mut info = SessionInfoUpdate::new();
+        if let Some(error) = error {
+            let mut meta = serde_json::Map::new();
+            meta.insert("error".to_string(), serde_json::json!(error));
+            info.meta = Some(meta);
+        }
+        info
+    }
+
+    #[test]
+    fn extracts_reconnect_counter() {
+        assert_eq!(
+            reconnect_detail(&info_with_meta(Some("Reconnecting... 2/5"))),
+            Some("2/5".to_string())
+        );
+        assert_eq!(
+            reconnect_detail(&info_with_meta(Some("reconnecting 10/30"))),
+            Some("10/30".to_string())
+        );
+    }
+
+    #[test]
+    fn missing_meta_or_unrelated_error_yields_none() {
+        assert_eq!(reconnect_detail(&info_with_meta(None)), None);
+        assert_eq!(
+            reconnect_detail(&info_with_meta(Some("request timed out"))),
+            None
+        );
+        assert_eq!(
+            reconnect_detail(&info_with_meta(Some("responseStreamDisconnected"))),
+            None
+        );
+    }
+
+    #[test]
+    fn reconnect_without_counter_yields_none() {
+        assert_eq!(
+            reconnect_detail(&info_with_meta(Some("Reconnecting..."))),
+            None
+        );
+        assert_eq!(
+            reconnect_detail(&info_with_meta(Some("Reconnecting soon 2/x"))),
+            None
+        );
     }
 }
 

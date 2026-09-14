@@ -36,6 +36,16 @@ export type AgentFailedEvent = {
 	error?: string;
 };
 
+/** Loading phase of a turn bridged from the desktop host. */
+export type AgentTurnPhase = "starting" | "waiting-model" | "reconnecting";
+
+export type AgentStatusEvent = {
+	sessionId: string;
+	phase: AgentTurnPhase;
+	/** e.g. "2/5" attempt counter for reconnecting. */
+	detail?: string | null;
+};
+
 export type AcpSessionInfo = {
 	sessionId: string;
 	title?: string;

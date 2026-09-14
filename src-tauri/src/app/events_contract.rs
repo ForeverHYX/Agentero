@@ -192,6 +192,10 @@ pub struct AgentSessionInfoEvt(pub crate::features::agent::models::AgentSessionI
 pub struct AgentFailedEvt(pub crate::features::agent::models::AgentFailedEvent);
 
 #[derive(specta::Type, tauri_specta::Event)]
+#[tauri_specta(event_name = "agent:status")]
+pub struct AgentStatusEvt(pub crate::features::agent::models::AgentStatusEvent);
+
+#[derive(specta::Type, tauri_specta::Event)]
 #[tauri_specta(event_name = "agent:stream")]
 pub struct AgentStreamEvt(pub crate::features::agent::models::AgentStreamEvent);
 
@@ -389,7 +393,7 @@ use std::path::{Path, PathBuf};
 /// Every event name registered in this file (the desktop contract surface).
 fn registered_event_names() -> BTreeSet<String> {
     use tauri_specta::Event as _;
-    let names: [&str; 42] = [
+    let names: [&str; 43] = [
         JobOfferEvent::NAME,
         JobChangedEvent::NAME,
         JobCompletedEvent::NAME,
@@ -417,6 +421,7 @@ fn registered_event_names() -> BTreeSet<String> {
         AgentUsageEvt::NAME,
         AgentSessionInfoEvt::NAME,
         AgentFailedEvt::NAME,
+        AgentStatusEvt::NAME,
         AgentStreamEvt::NAME,
         AgentCompletedEvent::NAME,
         BridgeHostStatusEvent::NAME,

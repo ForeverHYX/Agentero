@@ -1,16 +1,11 @@
 //! Single-turn ACP run orchestration (prompt → session → stream → complete).
 
 use crate::core::error::AppError;
-use crate::features::agent::acp::ask_user::GrokAskUserRequest;
 use crate::features::agent::acp::client::{
-    acp_err, acp_terminals, agentero_acp_builder, cancelled_payload, client_initialize_request,
-    simplified_agent_cwd, timed_acp_initialize, timed_acp_request, to_acp_agent,
-    wait_for_cancellation,
+    acp_err, acp_terminals, cancelled_payload, client_initialize_request, simplified_agent_cwd,
+    timed_acp_initialize, timed_acp_request, to_acp_agent, wait_for_cancellation,
 };
-use crate::features::agent::acp::interaction::{
-    await_grok_ask_user, await_user_elicitation, await_user_permission, permission_response,
-    PermissionPolicy,
-};
+use crate::features::agent::acp::interaction::PermissionPolicy;
 use crate::features::agent::acp::terminal::AcpTerminalManager;
 use crate::features::agent::acp::updates::{
     collaboration_from_config_options, effort_from_config_options, emit_rich_session_update,
@@ -18,8 +13,8 @@ use crate::features::agent::acp::updates::{
     models_from_config_options, stream_from_update,
 };
 use crate::features::agent::models::{
-    AgentDescriptor, AgentFailedEvent, AgentResultPayload, AgentStreamEvent, AgentStreamKind,
-    AgentTemplate, PromptImage,
+    AgentDescriptor, AgentFailedEvent, AgentResultPayload, AgentStatusEvent, AgentStreamEvent,
+    AgentStreamKind, AgentTemplate, PromptImage,
 };
 use crate::features::agent::prompt::envelope::build_prompt;
 use crate::features::agent::prompt::skills::{
@@ -29,11 +24,14 @@ use crate::features::agent::runtime::events::AgentEventEmitter;
 use crate::features::agent::runtime::gates::{AskUserGate, ElicitationGate, PermissionGate};
 use crate::features::agent::runtime::stream::{StreamCoalescer, STREAM_COALESCE_WINDOW};
 use crate::features::agent::session::config::RunPreferences;
+use crate::features::agent::session::handlers::{
+    agentero_turn_builder, clear_turn, install_turn, new_registry, ActiveTurn,
+};
+use crate::features::agent::session::pool::{pool_key, AgentWarmPool, PooledSlot};
 use agent_client_protocol::schema::v1::{
-    CancelNotification, ContentBlock, CreateElicitationRequest, ImageContent, LoadSessionRequest,
-    NewSessionRequest, PromptRequest, RequestPermissionRequest, ResumeSessionRequest,
-    SessionConfigId, SessionConfigOptionValue, SessionId, SessionNotification, SessionUpdate,
-    SetSessionConfigOptionRequest, TextContent,
+    CancelNotification, ContentBlock, ImageContent, LoadSessionRequest, NewSessionRequest,
+    PromptRequest, ResumeSessionRequest, SessionConfigId, SessionConfigOptionValue, SessionId,
+    SessionNotification, SessionUpdate, SetSessionConfigOptionRequest, TextContent,
 };
 use agent_client_protocol::{Agent, ConnectionTo};
 use std::path::{Path, PathBuf};
@@ -43,6 +41,8 @@ use tokio::sync::watch;
 use uuid::Uuid;
 
 /// Input for one `run_once` turn. Collapses the previous 24 positional params.
+/// Clone so a failed pooled attempt can fall back to the cold path unchanged.
+#[derive(Clone)]
 pub struct RunOnceParams {
     pub app: AgentEventEmitter,
     pub desc: AgentDescriptor,
@@ -69,9 +69,12 @@ pub struct RunOnceParams {
     pub cancellation: watch::Receiver<bool>,
     pub remote: Option<Arc<dyn crate::features::agent::remote_host::RemoteAgentLaunch>>,
     pub resume_session_id: Option<String>,
+    /// Pool of warm connections consulted before the cold spawn chain.
+    pub warm_pool: Option<Arc<AgentWarmPool>>,
 }
 
 /// Prompt/cwd prepared before any ACP I/O.
+#[derive(Clone)]
 struct RunTurnPrep {
     full_prompt: String,
     prompt_images: Vec<PromptImage>,
@@ -103,6 +106,30 @@ enum TurnPhase<T> {
     Ready(T),
     /// The run was cancelled; `agent:completed` was already emitted.
     Cancelled(AgentResultPayload),
+}
+
+/// Error from the prompt phase tagged by whether the `PromptRequest` was
+/// already dispatched: only pre-prompt failures let the pooled path hand off
+/// to the cold retry; post-prompt failures are terminal.
+struct PromptPhaseError {
+    pre_prompt: bool,
+    error: agent_client_protocol::Error,
+}
+
+impl PromptPhaseError {
+    fn pre_prompt(error: agent_client_protocol::Error) -> Self {
+        Self {
+            pre_prompt: true,
+            error,
+        }
+    }
+
+    fn post_prompt(error: agent_client_protocol::Error) -> Self {
+        Self {
+            pre_prompt: false,
+            error,
+        }
+    }
 }
 
 /// Emit `agent:failed` for a run that could not start or complete.
@@ -188,9 +215,9 @@ async fn prepare_run_turn(params: &RunOnceParams) -> Result<RunTurnPrep, AppErro
 /// Shared state for one `run_once` turn, cloned into the ACP notification /
 /// permission / elicitation handlers and the connection turn future.
 #[derive(Clone)]
-struct RunOnceContext {
-    app: AgentEventEmitter,
-    session_id: String,
+pub(crate) struct RunOnceContext {
+    pub(crate) app: AgentEventEmitter,
+    pub(crate) session_id: String,
     message_id: String,
     agent_id: String,
     /// pi-acp forwards a CLI startup banner that must be dropped from the stream.
@@ -247,9 +274,22 @@ impl RunOnceContext {
         }
     }
 
+    /// Pooled-path constructor: share the terminal manager (and cwd default)
+    /// of the warm connection the run is about to reuse, so terminal requests
+    /// from the agent route to the manager this run's UI can observe.
+    pub(crate) fn with_terminals(
+        params: &RunOnceParams,
+        cwd: std::path::PathBuf,
+        terminals: Arc<tokio::sync::Mutex<AcpTerminalManager>>,
+    ) -> Self {
+        let mut ctx = Self::new(params, cwd);
+        ctx.terminals = terminals;
+        ctx
+    }
+
     /// Relay one `SessionNotification`: buffer + coalesce stream chunks, and
     /// forward rich updates (tool/plan/usage/config/commands) to the webview.
-    fn relay_session_notification(&self, notification: &SessionNotification) {
+    pub(crate) fn relay_session_notification(&self, notification: &SessionNotification) {
         if !self.live_stream.load(Ordering::SeqCst) {
             // Still allow usage / command / config during load settle.
             match &notification.update {
@@ -354,74 +394,22 @@ impl RunOnceContext {
             },
         };
 
-        agentero_acp_builder!(self.terminals.clone())
-            .on_receive_notification(
-                {
-                    let state = self.clone();
-                    async move |notification: SessionNotification, _cx| {
-                        state.relay_session_notification(&notification);
-                        Ok(())
-                    }
-                },
-                agent_client_protocol::on_receive_notification!(),
-            )
-            .on_receive_request(
-                {
-                    let state = self.clone();
-                    async move |request: RequestPermissionRequest, responder, _cx| {
-                        let response = match permission_policy {
-                            PermissionPolicy::Restricted => permission_response(&request, false),
-                            PermissionPolicy::Auto => permission_response(&request, true),
-                            PermissionPolicy::Ask => {
-                                await_user_permission(
-                                    &state.app,
-                                    &permission_gate,
-                                    &state.session_id,
-                                    &request,
-                                )
-                                .await
-                            }
-                        };
-                        let _ = responder.respond(response);
-                        Ok(())
-                    }
-                },
-                agent_client_protocol::on_receive_request!(),
-            )
-            .on_receive_request(
-                {
-                    let state = self.clone();
-                    async move |request: CreateElicitationRequest, responder, _cx| {
-                        let response = await_user_elicitation(
-                            &state.app,
-                            &elicitation_gate,
-                            &state.session_id,
-                            &request,
-                        )
-                        .await;
-                        let _ = responder.respond(response);
-                        Ok(())
-                    }
-                },
-                agent_client_protocol::on_receive_request!(),
-            )
-            .on_receive_request(
-                {
-                    let state = self.clone();
-                    async move |request: GrokAskUserRequest, responder, _cx| {
-                        let response = await_grok_ask_user(
-                            &state.app,
-                            &ask_user_gate,
-                            &state.session_id,
-                            &request,
-                        )
-                        .await;
-                        let _ = responder.respond(response);
-                        Ok(())
-                    }
-                },
-                agent_client_protocol::on_receive_request!(),
-            )
+        // Cold path: the turn registry is pre-filled for the whole connection
+        // lifetime, so the shared handlers behave exactly like the previous
+        // inline closures. Idle hooks are unused (no pool owns this socket).
+        let registry = new_registry();
+        let _replaced = install_turn(
+            &registry,
+            ActiveTurn {
+                ctx: self.clone(),
+                permission_policy,
+                permission_gate,
+                elicitation_gate,
+                ask_user_gate,
+                activity: None,
+            },
+        );
+        agentero_turn_builder!(self.terminals.clone(), registry, None)
             .connect_with(acp, {
                 let state = self.clone();
                 move |connection: ConnectionTo<Agent>| async move {
@@ -454,18 +442,45 @@ impl RunOnceContext {
             TurnPhase::Ready(session) => session,
             TurnPhase::Cancelled(payload) => return Ok(payload),
         };
+        self.prompt_phase(
+            &connection,
+            &mut cancellation,
+            session,
+            &preferences,
+            full_prompt,
+            prompt_images,
+        )
+        .await
+        .map_err(|e| e.error)
+    }
+
+    /// Prompt phase shared by the cold and pooled paths: apply preferences,
+    /// emit `agent:status` (waiting-model), dispatch the prompt, finalize.
+    /// Errors carry a pre/post-prompt marker so the pooled path can choose
+    /// between a cold handoff and a terminal `agent:failed`.
+    #[allow(clippy::too_many_arguments)]
+    async fn prompt_phase(
+        &self,
+        connection: &ConnectionTo<Agent>,
+        cancellation: &mut watch::Receiver<bool>,
+        session: ConnectedSession,
+        preferences: &RunPreferences,
+        full_prompt: String,
+        prompt_images: Vec<PromptImage>,
+    ) -> Result<AgentResultPayload, PromptPhaseError> {
         let config_options = match self
             .apply_session_preferences(
-                &connection,
-                &mut cancellation,
+                connection,
+                cancellation,
                 &session.acp_session_id,
                 session.config_options,
-                &preferences,
+                preferences,
             )
-            .await?
+            .await
         {
-            TurnPhase::Ready(options) => options,
-            TurnPhase::Cancelled(payload) => return Ok(payload),
+            Ok(TurnPhase::Ready(options)) => options,
+            Ok(TurnPhase::Cancelled(payload)) => return Ok(payload),
+            Err(error) => return Err(PromptPhaseError::pre_prompt(error)),
         };
         emit_session_config_options(&self.app, &self.session_id, &self.agent_id, &config_options);
 
@@ -501,11 +516,16 @@ impl RunOnceContext {
         }
 
         let session_id = session.acp_session_id.clone();
+        // Status: the prompt is on the wire; the next signal is model output.
+        let _ = self.app.emit(
+            "agent:status",
+            AgentStatusEvent::waiting_model(self.session_id.as_str()),
+        );
         let prompt_response = tokio::select! {
             response = connection
                 .send_request(PromptRequest::new(session_id.clone(), content_blocks.clone()))
-                .block_task() => response.map_err(|e| acp_err(format!("prompt: {e}"))),
-            () = wait_for_cancellation(&mut cancellation) => {
+                .block_task() => response.map_err(|e| PromptPhaseError::post_prompt(acp_err(format!("prompt: {e}")))),
+            () = wait_for_cancellation(cancellation) => {
                 let _ = connection
                     .send_notification(CancelNotification::new(session_id.clone()));
                 return Ok(self.cancel_completed(Some(session_id.to_string())));
@@ -571,51 +591,14 @@ impl RunOnceContext {
         };
 
         let (acp_session_id, config_options) = if let Some(ref rid) = resume_id {
-            if can_resume {
-                let resp = tokio::select! {
-                    result = timed_acp_request(
-                        "session/resume",
-                        connection
-                            .send_request(ResumeSessionRequest::new(
-                                SessionId::new(rid.as_str()),
-                                cwd.to_path_buf(),
-                            ))
-                            .block_task(),
-                    ) => result?,
-                    () = wait_for_cancellation(&mut *cancellation) => {
-                        return Ok(TurnPhase::Cancelled(self.cancel_completed(Some(rid.clone()))));
-                    }
-                };
-                (
-                    SessionId::new(rid.as_str()),
-                    resp.config_options.unwrap_or_default(),
-                )
-            } else {
-                // resume_id is Some only when can_resume || can_load.
-                // Grok and similar: continue across process restarts via
-                // session/load (requires mcpServers; schema defaults to []).
-                let resp = tokio::select! {
-                    result = timed_acp_request(
-                        "session/load",
-                        connection
-                            .send_request(
-                                LoadSessionRequest::new(
-                                    SessionId::new(rid.as_str()),
-                                    cwd.to_path_buf(),
-                                )
-                                .mcp_servers(vec![]),
-                            )
-                            .block_task(),
-                    ) => result?,
-                    () = wait_for_cancellation(&mut *cancellation) => {
-                        return Ok(TurnPhase::Cancelled(self.cancel_completed(Some(rid.clone()))));
-                    }
-                };
-                (
-                    SessionId::new(rid.as_str()),
-                    resp.config_options.unwrap_or_default(),
-                )
-            }
+            let session = match self
+                .open_resume_on(connection, cancellation, rid, cwd, can_resume)
+                .await?
+            {
+                TurnPhase::Ready(session) => session,
+                TurnPhase::Cancelled(payload) => return Ok(TurnPhase::Cancelled(payload)),
+            };
+            (session.acp_session_id, session.config_options)
         } else {
             let new_session = tokio::select! {
                 result = timed_acp_request(
@@ -639,6 +622,63 @@ impl RunOnceContext {
             config_options,
             resume_id,
         }))
+    }
+
+    /// Continue `rid` on an established connection: `session/resume` when
+    /// advertised, else `session/load` (Grok-style agents). Shared by the
+    /// cold connect phase and the pooled run path.
+    async fn open_resume_on(
+        &self,
+        connection: &ConnectionTo<Agent>,
+        cancellation: &mut watch::Receiver<bool>,
+        rid: &str,
+        cwd: &Path,
+        can_resume: bool,
+    ) -> Result<TurnPhase<ConnectedSession>, agent_client_protocol::Error> {
+        if can_resume {
+            let resp = tokio::select! {
+                result = timed_acp_request(
+                    "session/resume",
+                    connection
+                        .send_request(ResumeSessionRequest::new(
+                            SessionId::new(rid),
+                            cwd.to_path_buf(),
+                        ))
+                        .block_task(),
+                ) => result?,
+                () = wait_for_cancellation(&mut *cancellation) => {
+                    return Ok(TurnPhase::Cancelled(self.cancel_completed(Some(rid.to_string()))));
+                }
+            };
+            Ok(TurnPhase::Ready(ConnectedSession {
+                acp_session_id: SessionId::new(rid),
+                config_options: resp.config_options.unwrap_or_default(),
+                resume_id: Some(rid.to_string()),
+            }))
+        } else {
+            // Called only when can_resume || can_load. Grok and similar:
+            // continue across process restarts via session/load (requires
+            // mcpServers; schema defaults to []).
+            let resp = tokio::select! {
+                result = timed_acp_request(
+                    "session/load",
+                    connection
+                        .send_request(
+                            LoadSessionRequest::new(SessionId::new(rid), cwd.to_path_buf())
+                                .mcp_servers(vec![]),
+                        )
+                        .block_task(),
+                ) => result?,
+                () = wait_for_cancellation(&mut *cancellation) => {
+                    return Ok(TurnPhase::Cancelled(self.cancel_completed(Some(rid.to_string()))));
+                }
+            };
+            Ok(TurnPhase::Ready(ConnectedSession {
+                acp_session_id: SessionId::new(rid),
+                config_options: resp.config_options.unwrap_or_default(),
+                resume_id: Some(rid.to_string()),
+            }))
+        }
     }
 
     /// Apply the user's model / collaboration / effort / fast-mode preferences
@@ -806,10 +846,184 @@ impl RunOnceContext {
     }
 }
 
+/// dsh keeps sessions in-process and never advertises resume/load, so pooling
+/// would change its "continue degrades to a fresh session" semantics; every
+/// other template can reuse a warm connection.
+fn poolable_template(template: &AgentTemplate) -> bool {
+    !matches!(template, AgentTemplate::Dsh)
+}
+
+/// Terminal outcome of a pooled run: `Done` finishes the run (result or
+/// post-prompt error → `agent:failed` upstream); `Handoff` marks a pre-prompt
+/// failure that should fall back to the cold path.
+enum PooledOutcome {
+    Done(Result<AgentResultPayload, agent_client_protocol::Error>),
+    Handoff,
+}
+
+/// Run one turn on a pooled warm connection: install the turn into the slot's
+/// registry, resolve the session (slot's own, or resume/load on the same
+/// connection), then reuse the shared prompt phase. Every exit path clears
+/// the registry — a stale turn would route later notifications to a dead
+/// emitter. Ok/cancel release the slot back to the pool (the connection
+/// survives to serve the next turn); errors evict it.
+async fn run_on_pooled(
+    pool: &Arc<AgentWarmPool>,
+    mut slot: PooledSlot,
+    params: &RunOnceParams,
+    prep: &RunTurnPrep,
+) -> PooledOutcome {
+    let registry = slot.registry.clone();
+    let mut cancellation = params.cancellation.clone();
+    let state = RunOnceContext::with_terminals(params, prep.cwd.clone(), slot.terminals.clone());
+
+    let prev = install_turn(
+        &registry,
+        ActiveTurn {
+            ctx: state.clone(),
+            permission_policy: params.permission_policy,
+            permission_gate: params.permission_gate.clone(),
+            elicitation_gate: params.elicitation_gate.clone(),
+            ask_user_gate: params.ask_user_gate.clone(),
+            activity: Some(slot.activity.clone()),
+        },
+    );
+    if prev.is_some() {
+        log::warn!(
+            target: "agentero::agent",
+            "agent={} pooled turn registry was not empty; replacing",
+            params.desc.id
+        );
+    }
+    slot.bump();
+
+    // Resolve the session: no resume id (or one matching the warm session)
+    // prompts directly on the pooled session; a different id continues it via
+    // session/resume|load on the same connection.
+    let session = match params.resume_session_id.as_deref() {
+        Some(rid) if rid != slot.acp_session_id.to_string() => {
+            if !slot.can_resume && !slot.can_load {
+                // Neither continue capability: hand off so the cold path raises
+                // the user-facing "agent does not support continuing" error.
+                // The connection itself is healthy — release, don't evict.
+                clear_turn(&registry);
+                pool.release(slot);
+                return PooledOutcome::Handoff;
+            }
+            match state
+                .open_resume_on(
+                    &slot.connection,
+                    &mut cancellation,
+                    rid,
+                    &prep.cwd,
+                    slot.can_resume,
+                )
+                .await
+            {
+                Ok(TurnPhase::Ready(session)) => session,
+                Ok(TurnPhase::Cancelled(payload)) => {
+                    clear_turn(&registry);
+                    slot.mark_used();
+                    pool.release(slot);
+                    return PooledOutcome::Done(Ok(payload));
+                }
+                Err(error) => {
+                    // Pre-prompt failure on a warm socket: the connection is
+                    // suspect — evict and let the cold path retry cleanly.
+                    log::debug!(
+                        target: "agentero::agent",
+                        "agent={} pooled session/load failed: {error}",
+                        params.desc.id
+                    );
+                    clear_turn(&registry);
+                    pool.evict(&slot);
+                    return PooledOutcome::Handoff;
+                }
+            }
+        }
+        _ => ConnectedSession {
+            acp_session_id: slot.acp_session_id.clone(),
+            config_options: slot.config_options.clone(),
+            resume_id: None,
+        },
+    };
+    let used_session_id = session.acp_session_id.clone();
+    slot.mark_used();
+
+    let preferences = RunPreferences {
+        model_id: params.preferred_model_id.clone(),
+        collaboration_mode_id: params.preferred_collaboration_mode_id.clone(),
+        reasoning_effort: params.preferred_reasoning_effort.clone(),
+        prefer_highest_reasoning_effort: params.prefer_highest_reasoning_effort,
+        fast_mode: params.fast_mode,
+    };
+    let result = state
+        .prompt_phase(
+            &slot.connection,
+            &mut cancellation,
+            session,
+            &preferences,
+            prep.full_prompt.clone(),
+            prep.prompt_images.clone(),
+        )
+        .await;
+
+    clear_turn(&registry);
+    match result {
+        Ok(payload) => {
+            // Record the session that actually served the turn so the next
+            // turn's provider session id matches the slot.
+            slot.acp_session_id = used_session_id;
+            pool.release(slot);
+            PooledOutcome::Done(Ok(payload))
+        }
+        Err(e) => {
+            pool.evict(&slot);
+            if e.pre_prompt {
+                PooledOutcome::Handoff
+            } else {
+                // Flush any buffered stream text before the failure lands.
+                state.coalescer.flush();
+                PooledOutcome::Done(Err(e.error))
+            }
+        }
+    }
+}
+
 /// One-shot prompt: spawn → initialize → session → prompt → stream events → completed/failed.
+/// A healthy pooled warm connection short-circuits the spawn chain.
 pub async fn run_once(params: RunOnceParams) -> Result<AgentResultPayload, AppError> {
     // Phase 1 — prompt: skill instructions + template envelope + cwd.
     let prep = prepare_run_turn(&params).await?;
+
+    // Phase 1.5 — pooled warm connection: skip spawn → initialize →
+    // session/new entirely when a healthy slot matches this run.
+    if let Some(pool) = params.warm_pool.clone() {
+        if poolable_template(&params.desc.template) {
+            let key = pool_key(&params.desc.id, prep.cwd.clone(), params.remote.as_ref());
+            if let Some(slot) = pool.take(&key).await {
+                match run_on_pooled(&pool, slot, &params, &prep).await {
+                    PooledOutcome::Done(result) => {
+                        return match result {
+                            Ok(payload) => Ok(payload),
+                            Err(e) => {
+                                let msg = e.to_string();
+                                emit_run_failed(&params.app, &params.session_id, &msg);
+                                Err(AppError::domain("acp", format!("acp: {msg}")))
+                            }
+                        };
+                    }
+                    PooledOutcome::Handoff => {
+                        log::warn!(
+                            target: "agentero::agent",
+                            "agent={} pooled connection failed pre-prompt; retrying cold",
+                            params.desc.id
+                        );
+                    }
+                }
+            }
+        }
+    }
 
     // Phase 2 — spawn the ACP agent process (local, or SSH wrapper for remote).
     let acp = match to_acp_agent(&params.desc, Some(&prep.cwd), params.remote.as_deref()) {

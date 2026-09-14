@@ -589,6 +589,7 @@ export const events = {
 	agentPlan: makeEvent<AgentPlanEvt>("agent:plan"),
 	agentRegistryChanged: makeEvent<AgentRegistryChangedEvent>("agent:registry-changed"),
 	agentSessionInfo: makeEvent<AgentSessionInfoEvt_Deserialize>("agent:session-info"),
+	agentStatus: makeEvent<AgentStatusEvt_Deserialize>("agent:status"),
 	agentStream: makeEvent<AgentStreamEvt>("agent:stream"),
 	agentTool: makeEvent<AgentToolEvt_Deserialize>("agent:tool"),
 	agentUsage: makeEvent<AgentUsageEvt>("agent:usage"),
@@ -1142,6 +1143,48 @@ export type AgentSkill = {
 	name: string,
 	description?: string,
 };
+
+/**
+ *  Phase transition of an in-flight agent turn, driving the streaming UI's
+ *  loading states (label + animation) before the first output arrives.
+ */
+export type AgentStatusEvent = AgentStatusEvent_Serialize | AgentStatusEvent_Deserialize;
+
+/**
+ *  Phase transition of an in-flight agent turn, driving the streaming UI's
+ *  loading states (label + animation) before the first output arrives.
+ */
+export type AgentStatusEvent_Deserialize = {
+	sessionId: string,
+	/**
+	 *  `starting` (spawn/connect) | `waiting-model` (prompt sent, no output
+	 *  yet) | `reconnecting` (upstream connection lost, agent retries).
+	 */
+	phase: string,
+	/**  Optional context, e.g. the reconnect attempt counter (`2/5`). */
+	detail?: string | null,
+};
+
+/**
+ *  Phase transition of an in-flight agent turn, driving the streaming UI's
+ *  loading states (label + animation) before the first output arrives.
+ */
+export type AgentStatusEvent_Serialize = {
+	sessionId: string,
+	/**
+	 *  `starting` (spawn/connect) | `waiting-model` (prompt sent, no output
+	 *  yet) | `reconnecting` (upstream connection lost, agent retries).
+	 */
+	phase: string,
+	/**  Optional context, e.g. the reconnect attempt counter (`2/5`). */
+	detail?: string | null,
+};
+
+export type AgentStatusEvt = AgentStatusEvt_Serialize | AgentStatusEvt_Deserialize;
+
+export type AgentStatusEvt_Deserialize = AgentStatusEvent_Deserialize;
+
+export type AgentStatusEvt_Serialize = AgentStatusEvent_Serialize;
 
 export type AgentStreamEvent = {
 	sessionId: string,

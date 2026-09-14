@@ -274,6 +274,22 @@ export type AgentFailedEvent = {
 	error: string;
 };
 
+/** Loading phase of a turn: before spawn, waiting for first model output, or upstream reconnect. */
+export type AgentTurnPhase = "starting" | "waiting-model" | "reconnecting";
+
+export type AgentStatusEvent = {
+	sessionId: string;
+	phase: AgentTurnPhase;
+	/** e.g. "2/5" attempt counter for reconnecting. */
+	detail?: string | null;
+};
+
+/** Runtime-tracked phase state for a session's current turn. */
+export type AgentPhaseState = {
+	phase: AgentTurnPhase;
+	detail?: string;
+};
+
 export type PermissionOption = {
 	optionId: string;
 	name: string;
@@ -743,6 +759,14 @@ export function listenAgentFailed(
 	return events
 		.agentFailed(getCurrentWebviewWindow())
 		.listen((message) => handler(message.payload));
+}
+
+export function listenAgentStatus(
+	handler: (e: AgentStatusEvent) => void,
+): Promise<UnlistenFn> {
+	return events
+		.agentStatus(getCurrentWebviewWindow())
+		.listen((message) => handler(message.payload as AgentStatusEvent));
 }
 
 export function listenAgentTool(

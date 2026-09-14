@@ -257,6 +257,7 @@ fn export_typescript_bindings() {
             crate::app::events_contract::AgentUsageEvt,
             crate::app::events_contract::AgentSessionInfoEvt,
             crate::app::events_contract::AgentFailedEvt,
+            crate::app::events_contract::AgentStatusEvt,
             crate::app::events_contract::AgentStreamEvt,
             crate::app::events_contract::AgentCompletedEvent,
             crate::app::events_contract::BridgeHostStatusEvent,

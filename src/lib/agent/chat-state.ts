@@ -3,9 +3,11 @@
  * Kept free of React so unit tests can cover stream merge + option building.
  */
 import type { ToolUIPart } from "ai";
+import type { TFunction } from "i18next";
 import type {
 	AgentListResponse,
 	AgentModelChoice,
+	AgentPhaseState,
 	AgentPlanEntry,
 	AgentPlanEvent,
 	AgentResultPayload,
@@ -32,6 +34,36 @@ export type ChatVisualAnnotation = {
 	/** Vault-relative paper path when known. */
 	paperPath?: string;
 };
+
+/**
+ * Label for the streaming activity row. Backend phases outrank part-derived
+ * labels (reconnecting with its detail > waiting-model > starting), and the
+ * part fallback mirrors the pre-phase behavior: latest tool title, else
+ * reasoning text, else plan, else the generic thinking label.
+ */
+export function streamingLabel(
+	phase: AgentPhaseState | null | undefined,
+	parts: AgentPart[],
+	t: TFunction<"agent", undefined>,
+): string {
+	if (phase?.phase === "reconnecting") {
+		const base = t("streaming.reconnecting");
+		const detail = phase.detail?.trim();
+		return detail ? `${base} ${detail}` : base;
+	}
+	if (phase?.phase === "waiting-model") return t("streaming.waitingModel");
+	if (phase?.phase === "starting") return t("streaming.starting");
+
+	const lastNonText = [...parts].reverse().find((p) => p.type !== "text");
+	if (lastNonText?.type === "tool") {
+		return lastNonText.tool.title || lastNonText.tool.kind;
+	}
+	if (lastNonText?.type === "reasoning") {
+		return lastNonText.text.trim() || t("streaming.reasoning");
+	}
+	if (lastNonText?.type === "plan") return t("streaming.plan");
+	return t("streaming.thinking");
+}
 
 export type ToolUiState = {
 	id: string;

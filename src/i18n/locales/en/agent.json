@@ -122,6 +122,9 @@
 		"thinking": "Thinking",
 		"reasoning": "Reasoning",
 		"plan": "Planning",
+		"starting": "Starting agent…",
+		"waitingModel": "Waiting for model…",
+		"reconnecting": "Upstream reconnecting",
 		"elapsed": "{{count}}s"
 	},
 	"copy": "Copy",

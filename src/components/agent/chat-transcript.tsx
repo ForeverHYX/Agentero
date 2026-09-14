@@ -71,6 +71,7 @@ import {
 	CollapsibleTrigger,
 } from "@/components/ui/collapsible";
 import { Skeleton } from "@/components/ui/skeleton";
+import type { AgentPhaseState } from "@/lib/agent/api";
 import {
 	type AgentPart,
 	agentTextFromParts,
@@ -80,6 +81,7 @@ import {
 	parseAskUserQuestions,
 	SUGGESTION_KEYS,
 	SUGGESTION_WORKFLOW,
+	streamingLabel,
 	toolPartState,
 } from "@/lib/agent/chat-state";
 import { stripInlineTokens } from "@/lib/agent/composer-inline-tokens";
@@ -189,9 +191,12 @@ function AgentProcessCollapsible({
 function StreamingActivityRow({
 	parts,
 	streaming,
+	phase = null,
 }: {
 	parts: AgentPart[];
 	streaming: boolean;
+	/** Backend loading phase (starting / waiting-model / reconnecting) outranks part-derived labels. */
+	phase?: AgentPhaseState | null;
 }) {
 	const { t } = useTranslation("agent");
 	const [elapsed, setElapsed] = useState(0);
@@ -208,21 +213,16 @@ function StreamingActivityRow({
 
 	if (!streaming) return null;
 
-	const lastNonText = [...parts].reverse().find((p) => p.type !== "text");
-	let label: string;
-	if (lastNonText?.type === "tool") {
-		label = lastNonText.tool.title || lastNonText.tool.kind;
-	} else if (lastNonText?.type === "reasoning") {
-		label = lastNonText.text.trim() || t("streaming.reasoning");
-	} else if (lastNonText?.type === "plan") {
-		label = t("streaming.plan");
-	} else {
-		label = t("streaming.thinking");
-	}
+	const label = streamingLabel(phase, parts, t);
 
 	return (
 		<div className="flex w-full items-center gap-2 text-muted-foreground text-sm">
-			<AgentThinkingOrb parts={parts} streaming={streaming} showLabel={false} />
+			<AgentThinkingOrb
+				parts={parts}
+				streaming={streaming}
+				phase={phase}
+				showLabel={false}
+			/>
 			<span className="min-w-0 flex-1 truncate">{label}</span>
 			<span className="text-xs tabular-nums">
 				{t("streaming.elapsed", { count: elapsed })}
@@ -309,6 +309,7 @@ const ChatTranscriptRow = memo(function ChatTranscriptRow({
 	handlers,
 	partOpenState,
 	onPartOpenChange,
+	phase = null,
 }: {
 	line: ChatLine;
 	activeTabId: string;
@@ -326,6 +327,8 @@ const ChatTranscriptRow = memo(function ChatTranscriptRow({
 	 */
 	partOpenState: Record<string, boolean>;
 	onPartOpenChange: (key: string, open: boolean) => void;
+	/** Loading phase, only passed to the last streaming agent row. */
+	phase?: AgentPhaseState | null;
 }) {
 	const { t } = useTranslation("agent");
 	const { onOpenSource } = handlers;
@@ -618,9 +621,16 @@ const ChatTranscriptRow = memo(function ChatTranscriptRow({
 									renderAgentPart(part, index, false),
 								)}
 							</>
-						) : isStreaming && nonTextParts.length > 0 ? (
+						) : isStreaming &&
+							(nonTextParts.length > 0 || parts.length === 0) ? (
 							<>
-								<StreamingActivityRow parts={parts} streaming={isStreaming} />
+								{/* Empty parts: send → first chunk used to render nothing; the
+								    phase label + orb now fill that gap. */}
+								<StreamingActivityRow
+									parts={parts}
+									streaming={isStreaming}
+									phase={phase}
+								/>
 								{textParts.map((part, index) =>
 									renderAgentPart(part, index, false),
 								)}
@@ -680,6 +690,7 @@ function TranscriptBody({
 	partOpenState,
 	onPartOpenChange,
 	forceVirtualize,
+	phase,
 }: {
 	lines: ChatLine[];
 	activeTabId: string;
@@ -693,6 +704,8 @@ function TranscriptBody({
 	partOpenState: Record<string, boolean>;
 	onPartOpenChange: (key: string, open: boolean) => void;
 	forceVirtualize?: boolean;
+	/** Loading phase, forwarded only to the last streaming agent row. */
+	phase?: AgentPhaseState | null;
 }) {
 	const { rowVirtualizer, virtualized } = useTranscriptVirtualizer({
 		lines,
@@ -710,6 +723,17 @@ function TranscriptBody({
 		}
 	}, [editingLineId, virtualized, lines, rowVirtualizer]);
 
+	// Only the last streaming agent row carries the phase, so memoized
+	// history rows do not re-render on every phase change.
+	let lastStreamingAgentId: string | null = null;
+	for (let index = lines.length - 1; index >= 0; index -= 1) {
+		const line = lines[index];
+		if (line.kind === "agent" && line.streaming) {
+			lastStreamingAgentId = line.id;
+			break;
+		}
+	}
+
 	const renderRow = (line: ChatLine) => {
 		const isEditing = editingLineId === line.id;
 		return (
@@ -725,6 +749,7 @@ function TranscriptBody({
 				handlers={handlers}
 				partOpenState={partOpenState}
 				onPartOpenChange={onPartOpenChange}
+				phase={phase && line.id === lastStreamingAgentId ? phase : null}
 			/>
 		);
 	};
@@ -782,6 +807,7 @@ export function ChatTranscript({
 	onStartEditing,
 	onSendSuggestion,
 	onOpenSource,
+	phase = null,
 }: {
 	lines: ChatLine[];
 	activeTabId: string;
@@ -807,6 +833,8 @@ export function ChatTranscript({
 	onSendSuggestion: (label: string, workflow?: string) => void;
 	/** Open a vault path / paper (or external URL) from Sources / inline citation. */
 	onOpenSource?: (source: string) => void;
+	/** Loading phase of the in-flight turn (starting / waiting-model / reconnecting). */
+	phase?: AgentPhaseState | null;
 }) {
 	const { t } = useTranslation("agent");
 	const restoringHistorySession =
@@ -934,6 +962,7 @@ export function ChatTranscript({
 						partOpenState={partOpenState}
 						onPartOpenChange={handlePartOpenChange}
 						forceVirtualize={forceVirtualize}
+						phase={phase}
 					/>
 				)}
 			</ConversationContent>

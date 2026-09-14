@@ -626,6 +626,46 @@ pub struct AgentFailedEvent {
     pub error: String,
 }
 
+/// Phase transition of an in-flight agent turn, driving the streaming UI's
+/// loading states (label + animation) before the first output arrives.
+#[derive(specta::Type, Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct AgentStatusEvent {
+    pub session_id: String,
+    /// `starting` (spawn/connect) | `waiting-model` (prompt sent, no output
+    /// yet) | `reconnecting` (upstream connection lost, agent retries).
+    pub phase: String,
+    /// Optional context, e.g. the reconnect attempt counter (`2/5`).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub detail: Option<String>,
+}
+
+impl AgentStatusEvent {
+    pub fn starting(session_id: impl Into<String>) -> Self {
+        Self {
+            session_id: session_id.into(),
+            phase: "starting".to_string(),
+            detail: None,
+        }
+    }
+
+    pub fn waiting_model(session_id: impl Into<String>) -> Self {
+        Self {
+            session_id: session_id.into(),
+            phase: "waiting-model".to_string(),
+            detail: None,
+        }
+    }
+
+    pub fn reconnecting(session_id: impl Into<String>, detail: Option<String>) -> Self {
+        Self {
+            session_id: session_id.into(),
+            phase: "reconnecting".to_string(),
+            detail,
+        }
+    }
+}
+
 /// A single session entry from ACP `session/list`.
 #[derive(Debug, Clone, Serialize, Deserialize, specta::Type)]
 #[serde(rename_all = "camelCase")]
@@ -759,4 +799,27 @@ pub struct AskUserResponseRequest {
     /// Parallel answer strings (multi-select joined with ", ").
     #[serde(default)]
     pub answers: Option<Vec<String>>,
+}
+
+#[cfg(test)]
+mod agent_status_event_tests {
+    use super::AgentStatusEvent;
+
+    #[test]
+    fn serializes_camel_case_and_omits_missing_detail() {
+        let plain = AgentStatusEvent::waiting_model("session-1");
+        assert_eq!(
+            serde_json::to_value(&plain).unwrap(),
+            serde_json::json!({ "sessionId": "session-1", "phase": "waiting-model" })
+        );
+        let with_detail = AgentStatusEvent::reconnecting("session-1", Some("2/5".to_string()));
+        assert_eq!(
+            serde_json::to_value(&with_detail).unwrap(),
+            serde_json::json!({
+                "sessionId": "session-1",
+                "phase": "reconnecting",
+                "detail": "2/5"
+            })
+        );
+    }
 }

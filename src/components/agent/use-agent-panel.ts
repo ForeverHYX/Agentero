@@ -232,6 +232,7 @@ export function useAgentPanel({
 		applyPlanEvent,
 		completeSession,
 		failSession,
+		phaseBySession,
 	} = useAgentSessionRuntime({
 		refs,
 		t,
@@ -548,6 +549,8 @@ export function useAgentPanel({
 		hydratingSessionId,
 		selected,
 		activeTabIsRunning,
+		/** Loading phase of the active tab's in-flight turn (starting / waiting / reconnecting). */
+		activePhase: phaseBySession[activeTabId] ?? null,
 		submitting,
 		switching,
 		editingLineId,

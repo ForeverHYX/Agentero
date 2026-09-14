@@ -12,7 +12,9 @@ import type {
 	AgentLine,
 	AgentPermissionRequest,
 	AgentResultEvent,
+	AgentStatusEvent,
 	AgentStreamEvent,
+	AgentTurnPhase,
 } from "@/components/mobile/types";
 import { bridgeRpc, listenBridgeEvent } from "@/lib/bridge/client";
 import { toSafeDisposer } from "@/lib/core/tauri-events";
@@ -38,6 +40,8 @@ export function useMobileAgentChat({
 	const [permission, setPermission] = useState<AgentPermissionRequest | null>(
 		null,
 	);
+	/** Loading phase of the in-flight turn (label under the sending state). */
+	const [phase, setPhase] = useState<AgentStatusEvent | null>(null);
 	const sessionRef = useRef<string | null>(sessionId);
 	const pendingPermissionRef = useRef<AgentPermissionRequest | null>(null);
 	pendingPermissionRef.current = permission;
@@ -90,13 +94,28 @@ export function useMobileAgentChat({
 			toSafeDisposer(
 				listenBridgeEvent<AgentStreamEvent>("agent:stream", (event) => {
 					if (!active || event.sessionId !== sessionRef.current) return;
+					setPhase(null);
 					setLines((current) => appendStreamChunk(current, event.chunk));
+				}),
+			),
+			toSafeDisposer(
+				listenBridgeEvent<AgentStatusEvent>("agent:status", (event) => {
+					if (!active || event.sessionId !== sessionRef.current) return;
+					if (
+						event.phase !== "starting" &&
+						event.phase !== "waiting-model" &&
+						event.phase !== "reconnecting"
+					) {
+						return;
+					}
+					setPhase({ ...event, phase: event.phase as AgentTurnPhase });
 				}),
 			),
 			toSafeDisposer(
 				listenBridgeEvent<AgentResultEvent>("agent:completed", (event) => {
 					if (!active || event.sessionId !== sessionRef.current) return;
 					setSending(false);
+					setPhase(null);
 					setLines((current) => completeStream(current, event.content));
 				}),
 			),
@@ -104,6 +123,7 @@ export function useMobileAgentChat({
 				listenBridgeEvent<AgentFailedEvent>("agent:failed", (event) => {
 					if (!active || event.sessionId !== sessionRef.current) return;
 					setSending(false);
+					setPhase(null);
 					setLines((current) =>
 						appendAssistantLine(current, event.error || t("agent.failed")),
 					);
@@ -148,6 +168,7 @@ export function useMobileAgentChat({
 			if (!next || sending) return;
 			setLines((previous) => appendUserLine(previous, next));
 			setSending(true);
+			setPhase(null);
 			try {
 				const accepted = await bridgeRpc<{ sessionId: string }>(
 					"agent_run_once",
@@ -161,6 +182,7 @@ export function useMobileAgentChat({
 				onSessionId(accepted.sessionId);
 			} catch (error) {
 				setSending(false);
+				setPhase(null);
 				setLines((current) =>
 					appendAssistantLine(
 						current,
@@ -177,6 +199,7 @@ export function useMobileAgentChat({
 		sending,
 		restoring,
 		permission,
+		phase,
 		restore,
 		send,
 		respondToPermission,

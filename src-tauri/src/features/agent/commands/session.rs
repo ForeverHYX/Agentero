@@ -10,7 +10,7 @@ use crate::features::agent::remote_host::RemoteAgentHosts;
 use crate::features::agent::runtime::gates::AskUserGate;
 use crate::features::agent::service;
 use crate::features::agent::{
-    warm_agent, AgentEventEmitter, AgentRegistry, AgentRunController, AgentWarmGate,
+    warm_agent, AgentEventEmitter, AgentRegistry, AgentRunController, AgentWarmGate, AgentWarmPool,
     ElicitationGate, PermissionGate,
 };
 use std::sync::Arc;
@@ -117,6 +117,7 @@ pub async fn agent_warm(
     registry: State<'_, AgentRegistry>,
     remote_registry: State<'_, Arc<dyn RemoteAgentHosts>>,
     warm_gate: State<'_, AgentWarmGate>,
+    pool: State<'_, Arc<AgentWarmPool>>,
     request: WarmRequest,
 ) -> Result<ApiResult<WarmResult>, String> {
     let desc = match registry.resolve_default(request.agent_id.as_deref()) {
@@ -170,6 +171,7 @@ pub async fn agent_warm(
         request.model_id,
         request.collaboration_mode_id,
         remote,
+        pool.inner().clone(),
     )
     .await;
     if result.ok {

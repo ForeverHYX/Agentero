@@ -18,10 +18,12 @@ import {
 	type AgentEffortChoice,
 	type AgentModeChoice,
 	type AgentModelChoice,
+	type AgentPhaseState,
 	type AgentPlanEvent,
 	type AgentResultPayload,
 	type AgentStreamEvent,
 	type AgentToolEvent,
+	type AgentTurnPhase,
 	displayHistoryTitle,
 	listenAgentCollaboration,
 	listenAgentCommands,
@@ -32,6 +34,7 @@ import {
 	listenAgentModels,
 	listenAgentPlan,
 	listenAgentSessionInfo,
+	listenAgentStatus,
 	listenAgentStream,
 	listenAgentTool,
 	listenAgentUsage,
@@ -131,6 +134,8 @@ export type AgentSessionRuntime = {
 	applyPlanEvent: (ev: AgentPlanEvent) => void;
 	completeSession: (ev: AgentResultPayload) => void;
 	failSession: (sessionId: string, error: string) => void;
+	/** Live turn phase per session (drives the streaming activity label/orb). */
+	phaseBySession: Record<string, AgentPhaseState>;
 };
 
 export function useAgentSessionRuntime({
@@ -181,6 +186,26 @@ export function useAgentSessionRuntime({
 		],
 	);
 
+	// OpenCode / Claude / Codex tool-shaped ask → bottom form surface (not transcript).
+	// Declared before applyToolEvent so the promote path can set it.
+	const [toolAskUserRequest, setToolAskUserRequest] =
+		useState<ToolAskUserRequest | null>(null);
+
+	/** Backend loading phase of the current turn, keyed by runtime session. */
+	const [phaseBySession, setPhaseBySession] = useState<
+		Record<string, AgentPhaseState>
+	>({});
+
+	/** Drop the phase once real output arrives / the turn finalizes. */
+	const clearPhase = useCallback((sessionId: string) => {
+		setPhaseBySession((prev) => {
+			if (!prev[sessionId]) return prev;
+			const next = { ...prev };
+			delete next[sessionId];
+			return next;
+		});
+	}, []);
+
 	const applyStreamEvent = useCallback(
 		(ev: AgentStreamEvent) => {
 			if (!isChatOwnedSession(ev.sessionId)) return;
@@ -192,6 +217,8 @@ export function useAgentSessionRuntime({
 			}
 			const slices = classifyStreamChunk(streamKind, ev.chunk, parser);
 			if (slices.length === 0) return;
+			// Real model output arrived — the loading phase is over.
+			clearPhase(ev.sessionId);
 			updateSessionLines(ev.sessionId, (prev) => {
 				const next = [...prev];
 				const last = next[next.length - 1];
@@ -208,17 +235,13 @@ export function useAgentSessionRuntime({
 				return next;
 			});
 		},
-		[isChatOwnedSession, thinkParsersRef, updateSessionLines],
+		[clearPhase, isChatOwnedSession, thinkParsersRef, updateSessionLines],
 	);
-
-	// OpenCode / Claude / Codex tool-shaped ask → bottom form surface (not transcript).
-	// Declared before applyToolEvent so the promote path can set it.
-	const [toolAskUserRequest, setToolAskUserRequest] =
-		useState<ToolAskUserRequest | null>(null);
 
 	const applyToolEvent = useCallback(
 		(ev: AgentToolEvent) => {
 			if (!isChatOwnedSession(ev.sessionId)) return;
+			clearPhase(ev.sessionId);
 			updateSessionLines(ev.sessionId, (prev) =>
 				applyToolToLines(prev, {
 					id: ev.toolCallId,
@@ -249,12 +272,13 @@ export function useAgentSessionRuntime({
 				);
 			}
 		},
-		[isChatOwnedSession, updateSessionLines],
+		[clearPhase, isChatOwnedSession, updateSessionLines],
 	);
 
 	const applyPlanEvent = useCallback(
 		(ev: AgentPlanEvent) => {
 			if (!isChatOwnedSession(ev.sessionId)) return;
+			clearPhase(ev.sessionId);
 			updateSessionLines(ev.sessionId, (prev) => {
 				const next = [...prev];
 				const last = next[next.length - 1];
@@ -266,7 +290,7 @@ export function useAgentSessionRuntime({
 				return next;
 			});
 		},
-		[isChatOwnedSession, updateSessionLines],
+		[clearPhase, isChatOwnedSession, updateSessionLines],
 	);
 
 	const deferSessionEvent = useCallback(
@@ -374,6 +398,7 @@ export function useAgentSessionRuntime({
 	const completeSession = useCallback(
 		(ev: AgentResultPayload) => {
 			if (!isChatOwnedSession(ev.sessionId)) return;
+			clearPhase(ev.sessionId);
 			if (ev.providerSessionId) {
 				// Durable source session for next turn (Host: resume or load).
 				if (activeTabRef.current === ev.sessionId) {
@@ -503,6 +528,7 @@ export function useAgentSessionRuntime({
 		[
 			activeConversationRef,
 			activeTabRef,
+			clearPhase,
 			finalizeAskThreads,
 			finalizeVisualTraces,
 			isChatOwnedSession,
@@ -516,6 +542,7 @@ export function useAgentSessionRuntime({
 	const failSession = useCallback(
 		(sessionId: string, error: string) => {
 			if (!isChatOwnedSession(sessionId)) return;
+			clearPhase(sessionId);
 			const failedLine: ChatLine = errorChatLine(error);
 			updateSessionLines(sessionId, (prev) => {
 				const next = [...prev];
@@ -548,6 +575,7 @@ export function useAgentSessionRuntime({
 			});
 		},
 		[
+			clearPhase,
 			finalizeAskThreads,
 			finalizeVisualTraces,
 			isChatOwnedSession,
@@ -663,6 +691,34 @@ export function useAgentSessionRuntime({
 				}
 				failSession(ev.sessionId, ev.error);
 			});
+			const uStatus = await listenAgentStatus((ev) => {
+				if (!isChatOwnedSession(ev.sessionId)) return;
+				const phase = ev.phase as AgentTurnPhase;
+				if (
+					phase !== "starting" &&
+					phase !== "waiting-model" &&
+					phase !== "reconnecting"
+				) {
+					return;
+				}
+				const detail = ev.detail?.trim();
+				setPhaseBySession((prev) => {
+					const current = prev[ev.sessionId];
+					if (
+						current?.phase === phase &&
+						current.detail === (detail || undefined)
+					) {
+						return prev;
+					}
+					return {
+						...prev,
+						[ev.sessionId]: {
+							phase,
+							detail: detail || undefined,
+						},
+					};
+				});
+			});
 
 			if (cancelled) {
 				u1();
@@ -677,6 +733,7 @@ export function useAgentSessionRuntime({
 				uFast();
 				u2();
 				u3();
+				uStatus();
 				return;
 			}
 			unsubs.push(
@@ -692,6 +749,7 @@ export function useAgentSessionRuntime({
 				uFast,
 				u2,
 				u3,
+				uStatus,
 			);
 			setAgentListenersReady(true);
 		})();
@@ -711,6 +769,7 @@ export function useAgentSessionRuntime({
 		completeSession,
 		deferSessionEvent,
 		failSession,
+		isChatOwnedSession,
 		pendingTerminalEventsRef,
 		setAcpCommandsByAgent,
 		setAgentListenersReady,
@@ -727,5 +786,6 @@ export function useAgentSessionRuntime({
 		applyPlanEvent,
 		completeSession,
 		failSession,
+		phaseBySession,
 	};
 }

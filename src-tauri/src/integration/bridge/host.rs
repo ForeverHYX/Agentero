@@ -38,13 +38,14 @@ use tokio::sync::{mpsc, oneshot, watch};
 const PAIRING_TIMEOUT: Duration = Duration::from_secs(300);
 const RECONNECT_DELAY: Duration = Duration::from_secs(2);
 const MAX_BRIDGE_READ_BYTES: usize = 256 * 1024;
-const FORWARDED_AGENT_EVENTS: [&str; 7] = [
+const FORWARDED_AGENT_EVENTS: [&str; 8] = [
     "agent:stream",
     "agent:completed",
     "agent:failed",
     "agent:tool",
     "agent:plan",
     "agent:usage",
+    "agent:status",
     "agent:permission-request",
 ];
 

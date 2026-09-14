@@ -184,6 +184,7 @@ export const AgentPanel = memo(function AgentPanel({
 		hydratingSessionId,
 		selected,
 		activeTabIsRunning,
+		activePhase,
 		submitting,
 		switching,
 		editingLineId,
@@ -355,6 +356,7 @@ export const AgentPanel = memo(function AgentPanel({
 						hydratingSessionId={hydratingSessionId}
 						compact={composerCompact}
 						activeTabIsRunning={activeTabIsRunning}
+						phase={activePhase}
 						submitting={submitting}
 						switching={switching}
 						editingLineId={editingLineId}

@@ -111,6 +111,9 @@ pub fn run() {
         .manage(settings_store)
         .manage(AgentRegistry::load())
         .manage(AgentRunController::new())
+        .manage(std::sync::Arc::new(
+            crate::features::agent::session::pool::AgentWarmPool::new(),
+        ))
         .manage(crate::features::agent::AgentWarmGate::new())
         .manage(crate::features::agent::PermissionGate::new())
         .manage(crate::features::agent::ElicitationGate::new())

@@ -10,8 +10,8 @@ use crate::core::log_util::{trunc, OpTimer};
 use crate::features::agent::acp::client::simplified_agent_cwd;
 use crate::features::agent::models::{
     AcpListSessionsResult, AcpLoadSessionResult, AgentListResponse, AgentOnly, AgentRegistryState,
-    AskUserResponseRequest, CatalogScanResponse, ElicitationResponseRequest, PermissionResponded,
-    PermissionResponseRequest, ProbeResult, RunOnceAccepted, RunOnceRequest,
+    AgentStatusEvent, AskUserResponseRequest, CatalogScanResponse, ElicitationResponseRequest,
+    PermissionResponded, PermissionResponseRequest, ProbeResult, RunOnceAccepted, RunOnceRequest,
 };
 use crate::features::agent::remote_host::RemoteAgentHosts;
 use crate::features::agent::runtime::gates::{
@@ -19,9 +19,11 @@ use crate::features::agent::runtime::gates::{
 };
 use crate::features::agent::{
     list_acp_sessions, load_acp_session, new_ids, probe_agent, run_once, AgentEventEmitter,
-    AgentRegistry, AgentRunController, AgentWarmGate, PermissionPolicy, RunOnceParams,
+    AgentRegistry, AgentRunController, AgentWarmGate, AgentWarmPool, PermissionPolicy,
+    RunOnceParams,
 };
 use std::path::PathBuf;
+use std::sync::Arc;
 use tauri::{AppHandle, Emitter, Manager};
 
 pub fn list_from_state(state: AgentRegistryState) -> AgentListResponse {
@@ -213,9 +215,18 @@ pub async fn accept_run_once(
 
     let app_handle = window.app_handle().clone();
     let events = AgentEventEmitter::new(app_handle.clone(), window.label());
+    // `starting` lands before the accepted ids return, so the webview can paint
+    // a loading state for the placeholder line at t=0 (before any stream event).
+    let _ = events.emit(
+        "agent:status",
+        AgentStatusEvent::starting(session_id.as_str()),
+    );
     let permission_gate = gate.clone();
     let elicitation_gate = elicitation_gate.clone();
     let ask_user_gate = ask_user_gate.clone();
+    // Pooled warm connections live in managed state so run_once can skip the
+    // spawn → initialize → session/new cold chain when a healthy slot matches.
+    let warm_pool = Arc::clone(window.app_handle().state::<Arc<AgentWarmPool>>().inner());
     let permission_policy = match request.permission_mode.as_deref() {
         Some("auto") => PermissionPolicy::Auto,
         Some("ask") => PermissionPolicy::Ask,
@@ -254,6 +265,7 @@ pub async fn accept_run_once(
             cancellation,
             remote: remote_for_spawn,
             resume_session_id: request.session_id.clone(),
+            warm_pool: Some(warm_pool),
         })
         .await;
         if run_result.is_ok() {

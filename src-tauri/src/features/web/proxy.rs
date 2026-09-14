@@ -7,8 +7,13 @@
 //! hardcoded constant — serves any host on the [`allowlist`](super::allowlist),
 //! which the frontend seeds with a paper's host before loading its frame.
 //!
-//! Documents get two injections right after `<head>` opens:
+//! Documents get two injections right after `<head>` opens, plus one deletion:
 //!
+//! - `<meta http-equiv="Content-Security-Policy">` is stripped. Sites that
+//!   embed their CSP in HTML (not headers) would enforce it inside the frame,
+//!   where `'self'` is the proxy origin — so the site's own stylesheets and
+//!   scripts, steered to the real origin by the `<base>`, all fail the policy
+//!   and the page renders as unstyled HTML.
 //! - `<base href="https://<host>/<dir>/">` — every relative, root-relative and
 //!   protocol-relative subresource (stylesheets, images, fonts, CSS `url()`)
 //!   then resolves against the real origin and loads directly from the site,
@@ -285,18 +290,101 @@ fn find_head_open(html: &str) -> Option<usize> {
     }
 }
 
-/// Inject the `<base>` + bridge right after `<head>` opens.
+/// Prepare a proxied document: drop any in-HTML CSP, then inject the `<base>`
+/// + bridge right after `<head>` opens.
 ///
 /// The `<base>` must precede every URL-bearing node in `<head>` (stylesheets,
 /// preload links) to steer their resolution to the real origin — injecting at
 /// `</head>` the way the 广场 proxies do would leave early links resolving
 /// against the proxy scheme.
 fn inject_document(html: &str, base_url: &str) -> String {
+    let html = strip_meta_csp(html);
     let head = format!("<base href=\"{}\">{}", escape_attr(base_url), WEB_BRIDGE);
-    match find_head_open(html) {
+    match find_head_open(&html) {
         Some(at) => format!("{}{}{}", &html[..at], head, &html[at..]),
         None => format!("{head}{html}"),
     }
+}
+
+/// Delete every `<meta http-equiv="content-security-policy">` tag.
+///
+/// Header CSP already dies in the response rebuild; this catches sites that
+/// embed the policy in HTML instead. Tags may span lines, and the `http-equiv`
+/// / `content` attributes may appear in either order, so the tag is parsed
+/// attribute by attribute rather than pattern-matched. CSP values cannot
+/// contain `>` (a policy with `>` is unparseable), so cutting each tag at the
+/// next `>` cannot clip mid-value.
+fn strip_meta_csp(html: &str) -> String {
+    let lower = html.to_ascii_lowercase();
+    let mut out = String::with_capacity(html.len());
+    let mut copied = 0usize;
+    let mut scan = 0usize;
+    while let Some(found) = lower[scan..].find("<meta") {
+        let start = scan + found;
+        let Some(gt) = lower[start..].find('>').map(|at| start + at) else {
+            break;
+        };
+        let end = gt + 1;
+        if meta_sets_csp(&lower[start..end]) {
+            out.push_str(&html[copied..start]);
+            copied = end;
+        }
+        scan = end;
+    }
+    out.push_str(&html[copied..]);
+    out
+}
+
+/// Whether a lowercased `<meta …>` tag (including its `>`) sets a CSP.
+fn meta_sets_csp(tag: &str) -> bool {
+    let bytes = tag.as_bytes();
+    // `<metadata>`-style prefixes must not match (same caveat as
+    // `find_head_open`'s `<header>` guard).
+    match tag[5..].chars().next() {
+        Some(c) if c.is_ascii_whitespace() || c == '>' || c == '/' => {}
+        _ => return false,
+    }
+    let mut at = 5usize;
+    while at < bytes.len() {
+        while at < bytes.len() && bytes[at].is_ascii_whitespace() {
+            at += 1;
+        }
+        let name_start = at;
+        while at < bytes.len() && !bytes[at].is_ascii_whitespace() && bytes[at] != b'=' {
+            at += 1;
+        }
+        let name = &tag[name_start..at];
+        while at < bytes.len() && bytes[at].is_ascii_whitespace() {
+            at += 1;
+        }
+        if at >= bytes.len() || bytes[at] != b'=' {
+            // A valueless attribute (or stray text); nothing to compare.
+            continue;
+        }
+        at += 1;
+        while at < bytes.len() && bytes[at].is_ascii_whitespace() {
+            at += 1;
+        }
+        let quoted = at < bytes.len() && (bytes[at] == b'"' || bytes[at] == b'\'');
+        if quoted {
+            at += 1;
+        }
+        let value_start = at;
+        while at < bytes.len() {
+            let b = bytes[at];
+            if quoted && (b == b'"' || b == b'\'') {
+                break;
+            }
+            if !quoted && (b.is_ascii_whitespace() || b == b'>') {
+                break;
+            }
+            at += 1;
+        }
+        if name == "http-equiv" && &tag[value_start..at] == "content-security-policy" {
+            return true;
+        }
+    }
+    false
 }
 
 /// The `<base>` for a page served from `final_url` (after redirects): the
@@ -472,6 +560,42 @@ mod tests {
     fn base_url_drops_the_query() {
         assert_eq!(base_url_for("https://x.com/a/b?pg=2"), "https://x.com/a/b");
         assert_eq!(base_url_for("https://x.com/a/b"), "https://x.com/a/b");
+    }
+
+    /// SvelteKit sites (e.g. justin.poehnelt.com) ship a multi-line CSP meta;
+    /// left in place, its `style-src 'self'` blocks the site's own stylesheets
+    /// once the `<base>` steers them to the real origin, and the page renders
+    /// unstyled. (Fix: HTML-embedded CSP must not survive the proxy.)
+    #[test]
+    fn strips_multiline_csp_meta() {
+        let html = "<html><head>\n<meta\n  http-equiv=\"Content-Security-Policy\"\n  content=\"default-src 'self'; style-src 'self' 'unsafe-inline'\">\n<link rel=\"stylesheet\" href=\"/app.css\"></head></html>";
+        let out = inject_document(html, "https://x.com/a");
+        assert!(!out.to_ascii_lowercase().contains("content-security-policy"));
+        // Everything around the removed tag survives, including the stylesheet.
+        assert!(out.contains("<link rel=\"stylesheet\" href=\"/app.css\">"));
+        assert!(out.contains("<base href=\"https://x.com/a\">"));
+        assert!(out.ends_with("</html>"));
+    }
+
+    #[test]
+    fn strips_csp_meta_regardless_of_attribute_order_or_case() {
+        // `content` first, mixed-case directive name, single quotes.
+        let html = "<head><meta content='Content-Security-Policy' http-equiv='Content-Security-Policy'><title>t</title></head>";
+        assert!(!strip_meta_csp(html)
+            .to_lowercase()
+            .contains("content-security-policy"));
+        // Unquoted attribute value.
+        assert!(
+            !strip_meta_csp("<meta http-equiv=Content-Security-Policy content=x>").contains("CSP")
+        );
+    }
+
+    #[test]
+    fn keeps_unrelated_and_body_metas() {
+        let html = "<head><meta charset=\"utf-8\"><meta name=\"description\" content=\"csp talk: Content-Security-Policy explained\"></head><body><p>a &lt; metaphor</p></body>";
+        let out = strip_meta_csp(html);
+        assert!(out.contains("<meta charset=\"utf-8\">"));
+        assert!(out.contains("Content-Security-Policy explained"));
     }
 
     /// The bridge reports selections with a viewport rect the app positions

@@ -6,6 +6,7 @@ import {
 	runToolLifecycle as runAgentToolLifecycle,
 	type ToolLifecycleAction,
 } from "@/lib/agent";
+import { lifecycleErrorMessage } from "@/lib/agent/lifecycle-error";
 import { BACKGROUND_TASK_CANCELLED_MESSAGE } from "@/lib/core/background-tasks";
 import { commands, events } from "@/lib/core/bindings";
 import { errorText } from "@/lib/core/error";
@@ -134,7 +135,7 @@ export function useAgentToolLifecycle(opts: {
 				);
 				return true;
 			} catch (e) {
-				const message = errorText(e);
+				const message = lifecycleErrorMessage(errorText(e), t);
 				// User-initiated cancel is not an error: no toast, no red banner.
 				if (message !== BACKGROUND_TASK_CANCELLED_MESSAGE) {
 					onError?.(message);

@@ -29,15 +29,13 @@ papers/<id>/
 For a paper folder, use the richest available source in this order:
 
 1. `source/**/*.{tex,ltx}` — prefer for structure, equations, citations, experiments
-2. `{paper}/PAPER.md` — LiteParse body when no TeX
-3. If neither: `agentero paper parse {paper}`, then read the generated `PAPER.md`
-4. Local PDF under the paper folder — last resort
+2. `{paper}/PAPER.md` - text parsed by agentero
+3. If neither, use agentero CLI to parse paper, then read the generated `PAPER.md`
+4. Local PDF under the paper folder — last resort. If methods above work, DO NOT use tools like `pdftotext`
 
-`NOTES.md` is the user's working note, not the paper body. Read it for context;
-preserve user-written content; never treat it as a substitute for the source.
-
-When the user already gives a paper path, start from that folder (NOTES → body).
-Do not list the whole catalog first.
+- `NOTES.md` is the user's working note, not the paper body. Read it for context;
+- preserve user-written content; never treat it as a substitute for the source
+- When the user already gives a paper path, start from that folder (NOTES → body).Do not list the whole catalog first
 
 ## Chat rules
 

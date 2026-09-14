@@ -4,6 +4,7 @@ import { defineStepper } from "@stepperize/react";
 export const onboardingFlow = defineStepper([
 	{ id: "welcome" },
 	{ id: "theme" },
+	{ id: "proxy" },
 	{ id: "agent" },
 	{ id: "translate" },
 	{ id: "layout" },

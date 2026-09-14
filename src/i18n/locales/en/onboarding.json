@@ -5,6 +5,7 @@
 	"steps": {
 		"welcome": "Welcome",
 		"theme": "Appearance",
+		"proxy": "Network",
 		"agent": "Agent",
 		"translate": "Translation",
 		"layout": "Figures & formulas",
@@ -18,6 +19,14 @@
 		"modeLight": "Light",
 		"modeDark": "Dark",
 		"uiThemeSelect": "Select {{name}}"
+	},
+	"proxy": {
+		"title": "Set up network access",
+		"desc": "Use a local proxy when academic sites, GitHub, or Agent downloads need one.",
+		"hint": "Leave the switch off to connect directly, or enable it for a local HTTP/SOCKS proxy.",
+		"urlLabel": "Proxy URL",
+		"enabledLabel": "Enable network proxy",
+		"probe": "Probe"
 	},
 	"agent": {
 		"title": "Choose your AI assistant",

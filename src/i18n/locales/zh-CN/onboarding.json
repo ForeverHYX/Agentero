@@ -5,6 +5,7 @@
 	"steps": {
 		"welcome": "欢迎",
 		"theme": "外观",
+		"proxy": "网络",
 		"agent": "Agent",
 		"translate": "翻译",
 		"layout": "图表公式",
@@ -18,6 +19,14 @@
 		"modeLight": "浅色",
 		"modeDark": "深色",
 		"uiThemeSelect": "选择 {{name}}"
+	},
+	"proxy": {
+		"title": "配置网络访问",
+		"desc": "如果访问学术站点、GitHub 或下载 Agent 需要代理，可以先在这里配置。",
+		"hint": "关闭时直连；开启后使用本机 HTTP/SOCKS 代理。",
+		"urlLabel": "代理地址",
+		"enabledLabel": "启用网络代理",
+		"probe": "探测"
 	},
 	"agent": {
 		"title": "选一个 AI 助手",

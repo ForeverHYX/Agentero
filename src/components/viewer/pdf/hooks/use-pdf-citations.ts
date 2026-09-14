@@ -446,13 +446,19 @@ export function usePdfCitations({
 						openExternalUrl(result.uri);
 						return;
 					}
-					if (result.outcome === "navigated" && destination) {
-						onInternalJumpRef.current?.(destination);
+					if (result.outcome === "navigated") {
+						// The page scrolled the link out from under the stationary
+						// pointer, so no pointerleave will ever fire — drop the card
+						// here or it lingers over the destination (#528).
+						clearCitationPreview();
+						if (destination) {
+							onInternalJumpRef.current?.(destination);
+						}
 					}
 				})
 				.catch(() => {});
 		},
-		[annotationCap, docId],
+		[annotationCap, docId, clearCitationPreview],
 	);
 
 	const handleCitationLinkHover = useCallback(

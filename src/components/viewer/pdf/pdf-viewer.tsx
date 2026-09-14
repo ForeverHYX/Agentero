@@ -805,6 +805,9 @@ function PdfViewerInner({
 		onPreviewShow: () => clearCrossrefPreviewRef.current(),
 		onBeforeInternalJump: captureJumpOrigin,
 		onInternalJump: (target) => {
+			// Same as the citation card: the scroll strands a stationary pointer,
+			// so dismiss the crossref preview with the jump it caused (#528).
+			clearCrossrefPreviewRef.current();
 			commitJumpOrigin();
 			flashJumpTarget(target);
 		},

@@ -1,0 +1,509 @@
+//! Generic `agentero-web` proxy for HTML paper reading.
+//!
+//! The viewer frame loads remote pages as `agentero-web://localhost/<host>/<path>`
+//! (Windows WebView2 surfaces the same shape as `http://agentero-web.localhost/…`).
+//! Rebuilding the response here drops the upstream `X-Frame-Options` / CSP that
+//! would refuse the embed, and — unlike the 广场 site proxies, whose origin is a
+//! hardcoded constant — serves any host on the [`allowlist`](super::allowlist),
+//! which the frontend seeds with a paper's host before loading its frame.
+//!
+//! Documents get two injections right after `<head>` opens:
+//!
+//! - `<base href="https://<host>/<dir>/">` — every relative, root-relative and
+//!   protocol-relative subresource (stylesheets, images, fonts, CSS `url()`)
+//!   then resolves against the real origin and loads directly from the site,
+//!   never through the proxy. Only page navigations need to stay proxied, and
+//!   those are rewritten by the bridge at click time.
+//! - [`WEB_BRIDGE`] — the selection / shortcut / navigation bridge that lets
+//!   the app see and act on text selected inside the cross-origin frame.
+
+use super::allowlist;
+use tauri::http::{header, Response, StatusCode};
+
+/// Reuse the 广场 proxy's header filter (content negotiation only, never
+/// credential-bearing headers: the proxy carries no login state).
+use crate::features::paper::discovery::proxy::looks_like_document;
+
+/// Marker every bridge → app message carries.
+pub const BRIDGE_SOURCE: &str = "agentero-web";
+
+/// Selection / shortcut / navigation bridge injected into proxied documents.
+///
+/// Vanilla ES5 in an IIFE with no namespace leakage (the 广场 NAV_BRIDGE
+/// pattern). Talks to the app window via `postMessage`; the app validates
+/// `event.origin` against the proxy origin.
+const WEB_BRIDGE: &str = r##"<script>
+(function () {
+  try {
+    // Only the top-level proxied document talks to the app. A nested frame on
+    // the same proxy origin has a readable parent and stays uninstrumented.
+    try {
+      if (parent === window) return;
+      void parent.location.href;
+      return;
+    } catch (e) {}
+    var post = function (message) {
+      message.source = "agentero-web";
+      parent.postMessage(message, "*");
+    };
+    // The upstream host rides in the first path segment of the proxy URL.
+    var host = "";
+    try {
+      host = decodeURIComponent((location.pathname.match(/^\/([^/]+)/) || [])[1] || "") || "";
+    } catch (e) {}
+
+    // ---- selection → app toolbar -----------------------------------------
+    var MAX_SELECTION_CHARS = 4000;
+    var sendSelection = function () {
+      var text = "";
+      var rect = null;
+      var sel = window.getSelection();
+      if (sel && sel.rangeCount > 0 && !sel.isCollapsed) {
+        text = (sel.toString() || "")
+          .replace(/\s+/g, " ")
+          .trim()
+          .slice(0, MAX_SELECTION_CHARS);
+        if (text) {
+          var r = sel.getRangeAt(0).getBoundingClientRect();
+          if (r.width !== 0 || r.height !== 0) {
+            rect = { x: r.left, y: r.top, width: r.width, height: r.height };
+          }
+        }
+      }
+      if (text && rect) {
+        // Raw copy inside the frame: the app's clipboard write can be refused
+        // while focus sits in this cross-origin frame.
+        try { document.execCommand("copy"); } catch (e) {}
+      }
+      post({ type: "selection", text: text, rect: rect, url: location.href });
+    };
+    var scheduleSelection = function () {
+      // Let the browser finish updating the selection first.
+      requestAnimationFrame(function () { setTimeout(sendSelection, 0); });
+    };
+    document.addEventListener("mouseup", scheduleSelection);
+    document.addEventListener("keyup", function (event) {
+      var key = event.key || "";
+      if (key === "Shift" || key.indexOf("Arrow") === 0) scheduleSelection();
+    });
+
+    // The app hides its toolbar while the page scrolls (plaza parity).
+    var scrollPending = false;
+    window.addEventListener("scroll", function () {
+      if (scrollPending) return;
+      scrollPending = true;
+      setTimeout(function () {
+        scrollPending = false;
+        post({ type: "scroll" });
+      }, 150);
+    }, true);
+
+    // ---- shortcuts → app handlers -----------------------------------------
+    // Keyboard events land in this frame, never in the app window; ⌘K / ⌘L
+    // must be carried over explicitly.
+    var isEditable = function (el) {
+      if (!el || !el.nodeName) return false;
+      var name = el.nodeName.toLowerCase();
+      return (
+        name === "input" ||
+        name === "textarea" ||
+        name === "select" ||
+        el.isContentEditable === true
+      );
+    };
+    document.addEventListener("keydown", function (event) {
+      if (event.altKey || !(event.metaKey || event.ctrlKey)) return;
+      if (isEditable(event.target)) return;
+      var key = (event.key || "").toLowerCase();
+      if (key !== "k" && key !== "l") return;
+      event.preventDefault();
+      post({ type: "shortcut", id: key === "k" ? "quickChat" : "addToChat" });
+    }, true);
+
+    // ---- navigation policy --------------------------------------------------
+    // Same-site navigations stay inside the proxy so the bridge survives;
+    // everything else belongs to the system browser, where the user has a
+    // real session.
+    document.addEventListener("click", function (event) {
+      var anchor =
+        event.target && event.target.closest
+          ? event.target.closest("a[href]")
+          : null;
+      if (!anchor) return;
+      var raw = anchor.getAttribute("href");
+      if (!raw || raw.charAt(0) === "#" || /^javascript:/i.test(raw)) return;
+      var url;
+      try {
+        url = new URL(anchor.href, location.href);
+      } catch (e) {
+        return;
+      }
+      if (url.protocol !== "http:" && url.protocol !== "https:") {
+        // Never leak our private scheme to the system browser.
+        event.preventDefault();
+        return;
+      }
+      event.preventDefault();
+      event.stopPropagation();
+      if (host && url.hostname === host) {
+        location.assign("/" + host + url.pathname + url.search + url.hash);
+        return;
+      }
+      post({ type: "external", url: url.href });
+    }, true);
+
+    // SPA routers push site-root paths; keep the host segment in the URL.
+    if (host) {
+      ["pushState", "replaceState"].forEach(function (name) {
+        var original = history[name];
+        if (typeof original !== "function") return;
+        history[name] = function (state, title, url) {
+          if (
+            typeof url === "string" &&
+            url.charAt(0) === "/" &&
+            url.charAt(1) !== "/" &&
+            url.indexOf("/" + host + "/") !== 0
+          ) {
+            arguments[2] = "/" + host + url;
+          }
+          return original.apply(history, arguments);
+        };
+      });
+    }
+
+    // ---- app → frame --------------------------------------------------------
+    window.addEventListener("message", function (event) {
+      var data = event.data;
+      if (!data || data.source !== "agentero-web-host") return;
+      if (data.type === "clearSelection") {
+        var sel = window.getSelection();
+        if (sel) sel.removeAllRanges();
+      } else if (data.type === "copySelection") {
+        try { document.execCommand("copy"); } catch (e) {}
+      }
+    });
+  } catch (e) {}
+})();
+</script>"##;
+
+/// Where a proxy request goes upstream.
+struct Target {
+    host: String,
+    /// Path + query; the path always starts with '/'.
+    path_query: String,
+}
+
+/// Parse the upstream target from an `agentero-web` request URI.
+///
+/// Two shapes arrive:
+/// - host-in-path `agentero-web://localhost/<host>/<path>` — the iframe's src
+///   and every link the bridge rewrites; on Windows WebView2 the same shape
+///   arrives as `http://agentero-web.localhost/<host>/<path>` because custom
+///   schemes are surfaced as `http://<scheme>.localhost`,
+/// - direct-host `agentero-web://<host>/<path>` — protocol-relative URLs the
+///   page resolved against the custom scheme (macOS/Linux).
+fn target_from_uri(uri: &tauri::http::Uri) -> Option<Target> {
+    let host = uri.host()?;
+    let path = uri.path();
+    if !path.starts_with('/') || path.contains("..") {
+        return None;
+    }
+    let query = uri
+        .query()
+        .map(|q| format!("?{q}"))
+        .unwrap_or_default();
+    if host == "localhost" || host == "agentero-web.localhost" {
+        // The first path segment carries the upstream host.
+        let rest = path.strip_prefix('/')?;
+        let (upstream, tail) = rest.split_once('/')?;
+        if upstream.is_empty() {
+            return None;
+        }
+        Some(Target {
+            host: upstream.to_string(),
+            path_query: format!("/{tail}{query}"),
+        })
+    } else {
+        Some(Target {
+            host: host.to_string(),
+            path_query: format!("{path}{query}"),
+        })
+    }
+}
+
+/// The proxy client: shared proxy config, but every redirect hop must itself
+/// be allowlisted — reqwest's default follow would happily relay a hop into
+/// hosts the frontend never allowed.
+fn proxy_client() -> &'static reqwest::Client {
+    static CLIENT: std::sync::OnceLock<reqwest::Client> = std::sync::OnceLock::new();
+    CLIENT.get_or_init(|| {
+        crate::core::http::client_builder()
+            .redirect(reqwest::redirect::Policy::custom(|attempt| {
+                if attempt.previous().len() >= crate::core::http::DEFAULT_REDIRECT_LIMIT {
+                    return attempt.error("too many redirects");
+                }
+                match attempt.url().host_str() {
+                    Some(host) if allowlist::is_allowed(host) => attempt.follow(),
+                    // Error rather than `stop()`: a passed-through 3xx would
+                    // navigate the frame to a real origin and silently drop
+                    // the bridge.
+                    _ => attempt.error("agentero-web: redirect target not allowed"),
+                }
+            }))
+            .build()
+            .expect("agentero-web proxy client builds")
+    })
+}
+
+fn response(status: StatusCode, content_type: &str, body: Vec<u8>) -> Response<Vec<u8>> {
+    Response::builder()
+        .status(status)
+        .header(header::CONTENT_TYPE, content_type)
+        .body(body)
+        .expect("valid web proxy response")
+}
+
+/// Minimal HTML attribute escaping for the injected `<base>` URL.
+fn escape_attr(value: &str) -> String {
+    value
+        .replace('&', "&amp;")
+        .replace('"', "&quot;")
+        .replace('<', "&lt;")
+}
+
+/// Byte offset just past the opening `<head …>` tag, if the document has one.
+///
+/// `<header …>` must not match: the character after `<head` has to be
+/// whitespace or the tag close.
+fn find_head_open(html: &str) -> Option<usize> {
+    let lower = html.to_ascii_lowercase();
+    let start = lower.find("<head")?;
+    let tag_end = start + lower[start..].find('>')?;
+    let between = &lower[start + 5..tag_end];
+    let next = between.chars().next();
+    match next {
+        None => Some(tag_end + 1),
+        Some(c) if c.is_ascii_whitespace() => Some(tag_end + 1),
+        _ => None,
+    }
+}
+
+/// Inject the `<base>` + bridge right after `<head>` opens.
+///
+/// The `<base>` must precede every URL-bearing node in `<head>` (stylesheets,
+/// preload links) to steer their resolution to the real origin — injecting at
+/// `</head>` the way the 广场 proxies do would leave early links resolving
+/// against the proxy scheme.
+fn inject_document(html: &str, base_url: &str) -> String {
+    let head = format!("<base href=\"{}\">{}", escape_attr(base_url), WEB_BRIDGE);
+    match find_head_open(html) {
+        Some(at) => format!("{}{}{}", &html[..at], head, &html[at..]),
+        None => format!("{head}{html}"),
+    }
+}
+
+/// The `<base>` for a page served from `final_url` (after redirects): the
+/// document URL minus its query, so relative links resolve as siblings.
+fn base_url_for(final_url: &str) -> String {
+    match final_url.split_once('?') {
+        Some((without_query, _)) => without_query.to_string(),
+        None => final_url.to_string(),
+    }
+}
+
+pub fn handle(request: tauri::http::Request<Vec<u8>>, responder: tauri::UriSchemeResponder) {
+    let Some(target) = target_from_uri(request.uri()) else {
+        responder.respond(response(
+            StatusCode::BAD_REQUEST,
+            "text/plain",
+            b"agentero-web: malformed request".to_vec(),
+        ));
+        return;
+    };
+    if !allowlist::is_allowed(&target.host) {
+        log::warn!(target: "agentero::web_proxy", "refused host not allowed: {}", target.host);
+        responder.respond(response(
+            StatusCode::FORBIDDEN,
+            "text/plain",
+            format!("agentero-web: {} is not allowed here", target.host).into_bytes(),
+        ));
+        return;
+    }
+    let url = format!("https://{}{}", target.host, target.path_query);
+    let (parts, body) = request.into_parts();
+
+    tauri::async_runtime::spawn(async move {
+        let result = async {
+            let client = proxy_client();
+            let method = reqwest::Method::from_bytes(parts.method.as_str().as_bytes())
+                .unwrap_or(reqwest::Method::GET);
+            let mut outgoing = client.request(method, url).header(
+                reqwest::header::USER_AGENT,
+                // Sites routinely refuse non-browser agents; the feeds fetcher
+                // impersonates a browser for the same reason.
+                crate::core::http::BROWSER_USER_AGENT,
+            );
+            for (name, value) in parts.headers.iter() {
+                if crate::features::paper::discovery::proxy::is_forwardable(name.as_str()) {
+                    outgoing = outgoing.header(name.as_str(), value.as_bytes());
+                }
+            }
+            if !body.is_empty() {
+                outgoing = outgoing.body(body);
+            }
+            let remote = outgoing.send().await.map_err(|e| e.to_string())?;
+            let status = StatusCode::from_u16(remote.status().as_u16())
+                .unwrap_or(StatusCode::BAD_GATEWAY);
+            let content_type = remote
+                .headers()
+                .get(reqwest::header::CONTENT_TYPE)
+                .and_then(|value| value.to_str().ok())
+                .unwrap_or("application/octet-stream")
+                .to_string();
+            // The final URL after any redirects is what the document should
+            // resolve its relative links against.
+            let final_url = remote.url().to_string();
+            let bytes = remote.bytes().await.map_err(|e| e.to_string())?;
+            let body = if content_type.starts_with("text/html") {
+                match String::from_utf8(bytes.to_vec()) {
+                    Ok(text) if looks_like_document(&text) => {
+                        inject_document(&text, &base_url_for(&final_url)).into_bytes()
+                    }
+                    // XHR fragments go through as-is.
+                    _ => bytes.to_vec(),
+                }
+            } else {
+                bytes.to_vec()
+            };
+            Ok::<_, String>((status, content_type, body))
+        }
+        .await;
+
+        match result {
+            Ok((status, content_type, body)) => {
+                responder.respond(response(status, &content_type, body))
+            }
+            Err(error) => {
+                log::warn!(target: "agentero::web_proxy", "request failed: {error}");
+                responder.respond(response(
+                    StatusCode::BAD_GATEWAY,
+                    "text/plain",
+                    b"agentero-web: upstream unavailable".to_vec(),
+                ));
+            }
+        }
+    });
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn uri(value: &str) -> tauri::http::Uri {
+        value.parse().expect("test uri parses")
+    }
+
+    #[test]
+    fn parses_host_in_path_shapes() {
+        // macOS/Linux custom scheme.
+        let t = target_from_uri(&uri("agentero-web://localhost/arxiv.org/abs/1234?fmt=html"))
+            .expect("target");
+        assert_eq!(t.host, "arxiv.org");
+        assert_eq!(t.path_query, "/abs/1234?fmt=html");
+        // Windows WebView2 form.
+        let t = target_from_uri(&uri("http://agentero-web.localhost/blog.nature.com/posts/x"))
+            .expect("target");
+        assert_eq!(t.host, "blog.nature.com");
+        assert_eq!(t.path_query, "/posts/x");
+    }
+
+    #[test]
+    fn parses_direct_host_shape() {
+        // Protocol-relative URLs resolved against the custom scheme.
+        let t = target_from_uri(&uri("agentero-web://cdn.example.com/a/b.js?v=2")).expect("target");
+        assert_eq!(t.host, "cdn.example.com");
+        assert_eq!(t.path_query, "/a/b.js?v=2");
+    }
+
+    #[test]
+    fn rejects_pathless_and_traversal_requests() {
+        // No host segment to route to.
+        assert!(target_from_uri(&uri("agentero-web://localhost/about")).is_none());
+        assert!(target_from_uri(&uri("agentero-web://localhost//x")).is_none());
+        // Traversal must never reach the upstream URL join.
+        assert!(target_from_uri(&uri("agentero-web://localhost/arxiv.org/../secret")).is_none());
+    }
+
+    #[test]
+    fn injects_base_and_bridge_after_head_open() {
+        let html = "<html><head><title>t</title><link rel=\"stylesheet\" href=\"/css/main.css\"></head><body></body></html>";
+        let out = inject_document(html, "https://arxiv.org/abs/1234");
+        let base = out.find("<base href=\"https://arxiv.org/abs/1234\">").expect("base");
+        let bridge = out.find("agentero-web").expect("bridge");
+        let title = out.find("<title>").expect("title after injections");
+        // Both land before any URL-bearing node (the stylesheet link).
+        let link = out.find("<link").expect("link");
+        assert!(base < link && bridge < link && title > base);
+        // The document is otherwise untouched.
+        assert!(out.contains("</head>"));
+        assert!(out.ends_with("</html>"));
+    }
+
+    #[test]
+    fn does_not_mistake_header_for_head() {
+        let html = "<html><body><header><h1>x</h1></header></body></html>";
+        let out = inject_document(html, "https://example.com/a");
+        // No <head> → prepended wholesale, body content preserved.
+        let base = out.find("<base href=\"https://example.com/a\">").expect("base");
+        assert_eq!(base, 0);
+        assert!(out.contains("<header>"));
+    }
+
+    #[test]
+    fn escapes_the_base_url() {
+        let out = inject_document("<html><head></head></html>", "https://x.com/a?b=1&c=<\"");
+        assert!(out.contains("<base href=\"https://x.com/a?b=1&amp;c=&lt;&quot;\">"));
+    }
+
+    #[test]
+    fn base_url_drops_the_query() {
+        assert_eq!(base_url_for("https://x.com/a/b?pg=2"), "https://x.com/a/b");
+        assert_eq!(base_url_for("https://x.com/a/b"), "https://x.com/a/b");
+    }
+
+    /// The bridge reports selections with a viewport rect the app positions
+    /// its toolbar against.
+    #[test]
+    fn bridge_reports_selection_with_rect() {
+        assert!(WEB_BRIDGE.contains("type: \"selection\""));
+        assert!(WEB_BRIDGE.contains("rect = { x: r.left, y: r.top"));
+        assert!(WEB_BRIDGE.contains("MAX_SELECTION_CHARS = 4000"));
+    }
+
+    /// Focus sits in the frame, so ⌘K / ⌘L must be forwarded to the app.
+    #[test]
+    fn bridge_forwards_shortcuts() {
+        assert!(WEB_BRIDGE.contains("\"quickChat\""));
+        assert!(WEB_BRIDGE.contains("\"addToChat\""));
+        // Editable targets keep their keystrokes (site search boxes, comment
+        // forms).
+        assert!(WEB_BRIDGE.contains("isEditable"));
+    }
+
+    /// Same-site navigations stay proxied; foreign ones are handed to the app.
+    #[test]
+    fn bridge_confines_navigation() {
+        assert!(WEB_BRIDGE.contains("location.assign(\"/\" + host"));
+        assert!(WEB_BRIDGE.contains("type: \"external\""));
+        // The private scheme must never escape to the system browser.
+        assert!(WEB_BRIDGE.contains("url.protocol !== \"http:\" && url.protocol !== \"https:\""));
+    }
+
+    /// The app can ask the frame to clear its selection (post add-to-chat).
+    #[test]
+    fn bridge_honors_host_messages() {
+        assert!(WEB_BRIDGE.contains("agentero-web-host"));
+        assert!(WEB_BRIDGE.contains("clearSelection"));
+        assert!(WEB_BRIDGE.contains("copySelection"));
+    }
+}

@@ -223,6 +223,7 @@ fn export_typescript_bindings() {
             crate::app::finder_service::commands::finder_service_install::<tauri::Wry>,
             crate::app::finder_service::commands::finder_service_uninstall::<tauri::Wry>,
             crate::features::pdf::export::commands::export_system_cjk_font,
+            crate::features::web::commands::web_proxy_allow_host,
         ])
         // Desktop event surface (see `app::events_contract`): emit sites keep
         // using `app.emit("<literal>", payload)`; the wrappers/mirrors there

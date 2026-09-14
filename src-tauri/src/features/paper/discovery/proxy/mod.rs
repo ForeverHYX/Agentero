@@ -29,7 +29,7 @@ pub struct SiteProxy {
 ///
 /// Deliberately excludes `Origin`, `Referer`, `Cookie` and everything else
 /// credential-bearing: no Plaza source carries login state.
-fn is_forwardable(name: &str) -> bool {
+pub(crate) fn is_forwardable(name: &str) -> bool {
     matches!(name, "content-type" | "accept" | "accept-language")
 }
 

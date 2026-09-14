@@ -218,6 +218,7 @@ pub fn attach_handlers(builder: tauri::Builder<tauri::Wry>) -> tauri::Builder<ta
             crate::app::finder_service::commands::finder_service_install,
             crate::app::finder_service::commands::finder_service_uninstall,
             crate::features::pdf::export::commands::export_system_cjk_font,
+            crate::features::web::commands::web_proxy_allow_host,
         ])
     }
     #[cfg(target_os = "ios")]

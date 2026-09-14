@@ -27,3 +27,5 @@ pub mod pdf;
 pub mod system;
 pub mod translate;
 pub mod vault;
+#[cfg(feature = "desktop")]
+pub mod web;

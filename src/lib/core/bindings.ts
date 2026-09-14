@@ -561,6 +561,16 @@ export const commands = {
 	 *  the main thread (Windows UI message pump).
 	 */
 	exportSystemCjkFont: () => __TAURI_INVOKE<ApiResult<ExportFontPayload>>("export_system_cjk_font"),
+	/**
+	 *  Ensure `host` may be served by the `agentero-web` proxy before its viewer
+	 *  frame loads.
+	 * 
+	 *  Idempotent. Non-public hosts (IP literals, intranet names) are refused, so
+	 *  the entry point itself cannot aim the proxy at link-local endpoints; the
+	 *  caller learns that through `false` and can surface it before the frame
+	 *  fails to load.
+	 */
+	webProxyAllowHost: (args: WebProxyAllowHostArgs) => typedError<ApiResult<boolean>, string>(__TAURI_INVOKE("web_proxy_allow_host", { args })),
 };
 
 /** Events */
@@ -4713,6 +4723,11 @@ export type WarmResult_Serialize = {
 	usageUsed?: number | null,
 	usageSize?: number | null,
 	error?: string | null,
+};
+
+export type WebProxyAllowHostArgs = {
+	/**  Public DNS host the viewer is about to load through the proxy. */
+	host: string,
 };
 
 export type WikiApplyExternalRenameArgs = {

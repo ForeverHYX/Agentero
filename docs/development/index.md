@@ -24,6 +24,7 @@
 | [crate-split-roadmap.md](crate-split-roadmap.md) | agentero-core crate 拆分路线：Phase 1/2 已落地（基座 + CLI 数据域迁入、`HostHooks` 事件抽象、CLI 脱离 `agentero_lib`）；留守域耦合清单与 Phase 3 建议 |
 | [agent-dx.md](agent-dx.md) | Agent DX：ops 自省 / MCP 对齐 / Skill 削薄。Phase 2 + 精简 3 + 4 已落地；dry-run 与更多 MCP tools 仍为后续 |
 | [rust-arch-refactor.md](rust-arch-refactor.md) | Rust 架构重构计划（2026-09-08 更新）：共享业务用例、提交与恢复、Vault 派生状态、论文准备/共享提取、任务生命周期、Agent 上下文六条主线；含前置正确性修复、依赖与验收、旧任务归并及历史裁决。实施未开始 |
+| [zhihu.md](zhihu.md) | 知乎开放平台集成：统一 CLI 后端（探测/一键安装/Keychain 凭证）+ 知乎虚拟 Agent（builtin ACP 适配 + 直答大脑）+ 广场知乎面板 + 论文找讨论 / 划词插引用。设计稿，实施未开始 |
 
 macOS 签名与公证（已实现流程说明）在 [`../bug_fix/macos-signing.md`](../bug_fix/macos-signing.md)。
 

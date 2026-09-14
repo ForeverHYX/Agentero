@@ -3977,7 +3977,7 @@ GitHub tree、<code>github:</code>、<code>skills.sh</code> 和 <code>npx skills
 <ul>
 <li><strong>命中标识符（<code>ok</code>）</strong> → 目录经 wiki rename 事务改名为规范 id（<code>papers/&lt;文件名slug&gt;</code> → <code>papers/1706.03762</code>，含 <code>{id}.pdf</code> 改名、catalog path/id 重写、<code>[[...]]</code> 链接重写、失败回滚），<code>meta_source=recognize</code>，emit <code>paper:renamed</code>。</li>
 <li><strong>规范 id 已在库中</strong> → 占位条目并入已有条目（PDF 成为对方主 PDF 或进 <code>attachments/</code>），删除占位目录/行，emit <code>paper:renamed</code>（<code>outcome=merged</code>）。</li>
-<li><strong>仅命中标题（<code>title</code>）</strong> → 只 upsert catalog 元数据，不改目录名。</li>
+<li><strong>仅命中标题（<code>title</code>）</strong> → 只 upsert catalog 元数据，不改目录名。标题开头的 UTF-8 BOM（包括被错误显示为 <code>ï»¿</code> 的形式）会在此边界移除。</li>
 <li><strong>未命中（<code>no-match</code>/<code>error</code>）</strong> → <code>meta_source=local-unresolved</code>，用户可在 Edit Metadata 手填 DOI/arXiv 并刷新（<code>paper_resolve_identifier</code>）。</li>
 <li><strong>arXiv 链整体限流（HTTP 429）</strong>：Zotero Recognizer 常只返回 arXiv id、不带 title；随后 arXiv 兜底链（Atom→S2→alphaXiv）<strong>整条</strong>被限流时（链内已自动 2s 冷却重试一趟）才保留文件名占位标题，并在 <code>recognizeMetadata</code> job 的 <code>params.warning=arxiv_rate_limited</code> 上让前端 Toast——链内单源 429 会被下一优先级源静默承接，不再触发警告。</li>
 <li><strong>用户抢先编辑</strong>：识别完成时若 <code>meta_source</code> 已非 <code>local</code>（如 <code>manual</code>），识别结果整体放弃。</li>

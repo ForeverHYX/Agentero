@@ -5,11 +5,14 @@
 
 import type { PdfAskThread } from "@/lib/pdf/ask/types";
 
-/** Build a single-turn prompt for a feed / plaza selection ask. */
+/**
+ * Build a single-turn prompt for a text-surface selection ask (plaza feed
+ * detail, proxied web papers, …).
+ */
 export function buildPlazaAskPrompt(
 	thread: PdfAskThread,
 	latestUserQuestion: string,
-	opts?: { title?: string; url?: string | null },
+	opts?: { title?: string; url?: string | null; surface?: "feed" | "web" },
 ): string {
 	const quote = thread.anchor.quote?.trim();
 	const history = thread.messages
@@ -19,7 +22,9 @@ export function buildPlazaAskPrompt(
 		.join("\n\n");
 
 	const parts = [
-		"You are helping the user read a research feed item in Agentero.",
+		opts?.surface === "web"
+			? "You are helping the user read a web page in Agentero."
+			: "You are helping the user read a research feed item in Agentero.",
 	];
 	const title = opts?.title?.trim();
 	if (title) parts.push(`Item title: ${title}`);

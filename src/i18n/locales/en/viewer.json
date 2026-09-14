@@ -255,7 +255,8 @@
 	},
 	"html": {
 		"empty": "No paper available.",
-		"sandboxTitle": "HTML paper sandbox"
+		"sandboxTitle": "HTML paper sandbox",
+		"denied": "This page's host cannot be loaded through the built-in proxy."
 	},
 	"image": {
 		"empty": "No image available.",

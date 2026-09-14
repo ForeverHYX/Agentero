@@ -26,8 +26,10 @@ type SelectionMenuProps = {
 	/** Pin the selection as an Agent composer context chip and open the chat. */
 	onAddToChat: () => void;
 	onTranslate: () => void;
-	/** Hide highlight / translate (need marks/); keep Quick chat / Add to chat. */
-	readOnly?: boolean;
+	/** Show the highlight color stack (needs marks/ to persist into). */
+	showHighlight?: boolean;
+	/** Show the translate action (ephemeral cards on surfaces without marks/). */
+	showTranslate?: boolean;
 };
 
 const BAR_H = 32;
@@ -39,8 +41,8 @@ const BAR_H = 32;
  * action buttons never shift.
  * Annotate lives on the right-rail selection comment chip instead.
  * Selected text is copied to the clipboard automatically.
- * Remote papers are read-only: they keep Quick chat / Add to chat but hide
- * persistent highlight / translate actions.
+ * `showHighlight` / `showTranslate` hide the persistent actions on surfaces
+ * without marks/ (remote papers, proxied web pages).
  */
 export function SelectionMenu({
 	screen,
@@ -48,7 +50,8 @@ export function SelectionMenu({
 	onAsk,
 	onAddToChat,
 	onTranslate,
-	readOnly = false,
+	showHighlight = true,
+	showTranslate = true,
 }: SelectionMenuProps) {
 	const { t } = useTranslation("viewer");
 	// ⌘K = in-page Quick chat (Ask); ⌘L = Add to chat (pin + open Agent).
@@ -59,8 +62,8 @@ export function SelectionMenu({
 	const vh = typeof window !== "undefined" ? window.innerHeight : 800;
 	// Approximate collapsed width for centering; flex content sizes the real bar.
 	// Pin with CSS `right` so stack width changes grow left without moving actions.
-	const barW = readOnly ? 200 : 280;
-	const expandPad = readOnly ? 0 : HIGHLIGHT_COLOR_STACK_WIDTH_DELTA;
+	const barW = showTranslate ? 280 : 200;
+	const expandPad = showHighlight ? HIGHLIGHT_COLOR_STACK_WIDTH_DELTA : 0;
 	let left = screen.x - barW / 2;
 	// Leave room on the left so the color stack can expand without clipping.
 	left = Math.min(Math.max(12 + expandPad, left), vw - barW - 12);
@@ -94,13 +97,13 @@ export function SelectionMenu({
 			onMouseDown={(e) => e.stopPropagation()}
 		>
 			<TooltipProvider delayDuration={200}>
-				{!readOnly ? (
+				{showHighlight ? (
 					<>
 						<HighlightColorStack onSelect={onHighlight} />
 						<div className="mx-0.5 h-4 w-px shrink-0 bg-border" />
 					</>
 				) : null}
-				{!readOnly ? (
+				{showTranslate ? (
 					<Tooltip>
 						<TooltipTrigger asChild>
 							<Button

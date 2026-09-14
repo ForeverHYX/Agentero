@@ -29,8 +29,9 @@ type PdfCardStackProps = {
 		onAsk: () => void;
 		onAddToChat: () => void;
 		onTranslate: () => void;
-		/** Hide highlight / translate; keep Ask. */
-		readOnly?: boolean;
+		/** Hide highlight / translate (no marks/ to persist into); keep Ask. */
+		showHighlight?: boolean;
+		showTranslate?: boolean;
 	};
 	/** Transient screen position for the auto-copy confirmation label. */
 	copiedLabelPos: { x: number; y: number } | null;
@@ -114,7 +115,8 @@ export function PdfCardStack({
 					onAsk={selectionMenu.onAsk}
 					onAddToChat={selectionMenu.onAddToChat}
 					onTranslate={selectionMenu.onTranslate}
-					readOnly={selectionMenu.readOnly}
+					showHighlight={selectionMenu.showHighlight}
+					showTranslate={selectionMenu.showTranslate}
 				/>
 			) : null}
 

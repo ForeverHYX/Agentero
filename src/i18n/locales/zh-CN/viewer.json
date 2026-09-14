@@ -255,7 +255,8 @@
 	},
 	"html": {
 		"empty": "暂无论文。",
-		"sandboxTitle": "HTML 论文沙箱"
+		"sandboxTitle": "HTML 论文沙箱",
+		"denied": "该网页的域名无法通过内置代理加载。"
 	},
 	"image": {
 		"empty": "暂无图片。",

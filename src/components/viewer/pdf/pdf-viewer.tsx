@@ -1638,7 +1638,8 @@ function PdfViewerInner({
 						onAsk: handleMenuAsk,
 						onAddToChat: handleMenuAddToChat,
 						onTranslate: handleMenuTranslate,
-						readOnly: isRemotePaper,
+						showHighlight: !isRemotePaper,
+						showTranslate: !isRemotePaper,
 					}}
 					copiedLabelPos={copiedLabelPos}
 					citationPreview={{

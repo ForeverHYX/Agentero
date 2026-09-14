@@ -379,7 +379,11 @@ export const DocView = memo(function DocView({
 	if (!active) return null;
 	return (
 		<div className="relative min-h-0 min-w-0 flex-1 overflow-hidden">
-			<HtmlViewer srcUrl={tab.htmlUrl} className="h-full w-full" />
+			<HtmlViewer
+				srcUrl={tab.htmlUrl}
+				title={tab.title}
+				className="h-full w-full"
+			/>
 		</div>
 	);
 }, docViewPropsEqual);

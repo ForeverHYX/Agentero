@@ -128,6 +128,7 @@ nav:
       - 期刊 / venue 取不全（#399）: bug_fix/publication-venue-api.md
       - 导入第三方 Skill 报「description is too long」（#355）: bug_fix/skill-import-description-length.md
       - Windows 启动与问题诊断弹出黑色控制台窗口: bug_fix/windows-console-window-flash.md
+      - "笔记正文 < 比较符截断后续内容（#533）": bug_fix/note-markdown-stray-less-than.md
 
 markdown_extensions:
   - admonition

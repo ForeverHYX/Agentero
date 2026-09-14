@@ -369,6 +369,11 @@ export default function App() {
 		visualAnnotation: () => {
 			resolveActivePdfHandle()?.toggleVisualAnnotation();
 		},
+		// ⌥A — toggle full-text (layout) translation for the paper being read.
+		// Same dual-pane-aware path as the toolbar Languages button.
+		layoutTranslate: () => {
+			resolveActivePdfHandle()?.toggleLayoutTranslate();
+		},
 		// F11 — Windows borderless fullscreen (no-op on other platforms).
 		toggleFullscreen: () => {
 			void toggleBorderlessFullscreen();

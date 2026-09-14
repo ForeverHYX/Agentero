@@ -235,6 +235,10 @@ export function PdfToolbar({
 							</TooltipTrigger>
 							<TooltipContent side="bottom">
 								{layoutTranslateLabel}
+								{/* Inverted tooltip: mute via text-background, not muted-foreground. */}
+								<span className="ml-2 text-background/70">
+									{formatShortcutById("layoutTranslate")}
+								</span>
 							</TooltipContent>
 						</Tooltip>
 					) : null}

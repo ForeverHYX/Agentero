@@ -1291,6 +1291,8 @@ function PdfViewerInner({
 		openCard,
 		deleteVisualTraceById,
 		toggleRegionSelect,
+		// Dual-pane aware — ⌥A and the toolbar Languages button share this path.
+		toggleLayoutTranslate: handleToggleLayoutTranslateWithDualPane,
 	});
 
 	const pageMarks = useMemo<PdfPageMarksSlice>(

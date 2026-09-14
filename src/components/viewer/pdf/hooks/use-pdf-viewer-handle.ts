@@ -79,6 +79,8 @@ export type UsePdfViewerHandleOptions = {
 	openCard: (card: ActiveSelectionCard) => void;
 	deleteVisualTraceById: (id: string) => void;
 	toggleRegionSelect: () => void;
+	/** Dual-pane-aware full-text translate toggle; parent callback — kept in a ref. */
+	toggleLayoutTranslate: () => void;
 };
 
 export function usePdfViewerHandle({
@@ -100,9 +102,14 @@ export function usePdfViewerHandle({
 	openCard,
 	deleteVisualTraceById,
 	toggleRegionSelect,
+	toggleLayoutTranslate,
 }: UsePdfViewerHandleOptions): void {
 	const onHandleRef = useRef(onHandle);
 	onHandleRef.current = onHandle;
+	// Dual-pane deps (translation-tab callback) churn per render; mirror the
+	// latest callback so the handle object never needs re-registering.
+	const toggleLayoutTranslateRef = useRef(toggleLayoutTranslate);
+	toggleLayoutTranslateRef.current = toggleLayoutTranslate;
 
 	// biome-ignore lint/correctness/useExhaustiveDependencies: the injected refs and setters are stable identities; depending on them would re-register the handle on every mark change.
 	useEffect(() => {
@@ -157,6 +164,7 @@ export function usePdfViewerHandle({
 				deleteVisualTraceById(id);
 			},
 			toggleVisualAnnotation: toggleRegionSelect,
+			toggleLayoutTranslate: () => toggleLayoutTranslateRef.current(),
 			analyzeLayout: () => {
 				// Prefer source/layout.json → merge → sidebar. Full ONNX (PDF→JSON)
 				// only when there is no sidecar (or force is set elsewhere).

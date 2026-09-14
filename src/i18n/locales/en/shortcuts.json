@@ -37,6 +37,7 @@
 		"nextTab": "Next tab",
 		"prevTab": "Previous tab",
 		"visualAnnotation": "Add visual annotation (PDF)",
+		"layoutTranslate": "Full-text translation (PDF)",
 		"toggleFullscreen": "Toggle borderless fullscreen"
 	}
 }

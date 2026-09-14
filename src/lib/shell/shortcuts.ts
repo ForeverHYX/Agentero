@@ -46,6 +46,8 @@ export type ShortcutId =
 	| "zoomReset"
 	/** ⌘. — start/cancel PDF visual-region annotation (active PDF tab). */
 	| "visualAnnotation"
+	/** ⌥A — toggle PDF full-text (layout) translation (active PDF tab). */
+	| "layoutTranslate"
 	/** F11 — borderless fullscreen (Windows only). */
 	| "toggleFullscreen";
 
@@ -335,6 +337,15 @@ export const SHORTCUTS: ShortcutDef[] = [
 		whenSettingsClosed: true,
 	},
 	{
+		id: "layoutTranslate",
+		group: "App",
+		// ⌥A — toggle PDF full-text (layout) translation (active PDF tab).
+		// Immersive Translate convention; guard text fields (⌥A types "å").
+		key: "a",
+		alt: true,
+		whenSettingsClosed: true,
+	},
+	{
 		id: "toggleFullscreen",
 		group: "App",
 		// F11 — exclusive (borderless) fullscreen; Windows only
@@ -435,7 +446,18 @@ export function formatShortcutById(id: ShortcutId): string {
 export function matchShortcut(event: KeyboardEvent, def: ShortcutDef): boolean {
 	const key = event.key.length === 1 ? event.key.toLowerCase() : event.key;
 	const defKey = def.key.length === 1 ? def.key.toLowerCase() : def.key;
-	if (key !== defKey && event.key !== def.key) return false;
+	// macOS composes ⌥+letter into a single character (⌥A → "å"), so event.key
+	// never equals the def letter. Alt-only letter shortcuts fall back to the
+	// physical key (event.code), which stays stable across layouts.
+	const physicalKey = /^Key[A-Z]$/.test(event.code)
+		? event.code.slice(3).toLowerCase()
+		: null;
+	if (
+		key !== defKey &&
+		event.key !== def.key &&
+		!(def.alt && !def.meta && physicalKey === defKey)
+	)
+		return false;
 
 	const wantMeta = Boolean(def.meta);
 	const wantAlt = Boolean(def.alt);

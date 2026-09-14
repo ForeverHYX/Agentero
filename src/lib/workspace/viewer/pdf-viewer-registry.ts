@@ -34,6 +34,8 @@ export type PdfViewerHandle = {
 	deleteVisualTrace: (id: string) => void;
 	/** Toggle visual-region annotation mode (⌘.). */
 	toggleVisualAnnotation: () => void;
+	/** Toggle full-text (layout) translation (⌥A), dual-pane aware. */
+	toggleLayoutTranslate: () => void;
 	/** Run EmbedPDF layout analysis for figures / tables / formulas. */
 	analyzeLayout: () => void;
 	/** Jump to a layout region (0-based page) and focus its overlay. */

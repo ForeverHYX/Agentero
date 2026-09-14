@@ -39,19 +39,23 @@ preserve user-written content; never treat it as a substitute for the source.
 When the user already gives a paper path, start from that folder (NOTES → body).
 Do not list the whole catalog first.
 
-## Rules
+## Chat rules
 
+- Math (KaTeX): inline `$…$`, display `$$…$$` on their own lines; prefer `$`/`$$`
+  over `\(...\)` / bare TeX in prose; escape a literal dollar as `\$`.
+  - DO NOT USE custom `\b`-prefixed macros (e.g., `\bx`, `\bmu`); Use standard `\boldsymbol{...}` / `\mathbf{...}` instead.
 - Structured vault/catalog changes (import, move, download, parse, layout, marks,
   tags): use the `agentero` CLI with `--json` and **vault-relative paths**.
   Exact flags: skill **`agentero-cli`** (`$agentero-cli` / `/agentero-cli` /
   `/skill:agentero-cli`). Prefer files for ordinary reading/Q&A.
-- Do not invent facts, numbers, citations, or experimental conclusions. Mark uncertainty.
-- Keep `[[wikilinks]]` and `![[embeds]]` as written; preserve ` ```mermaid ` fences.
-- Math (KaTeX): inline `$…$`, display `$$…$$` on their own lines; prefer `$`/`$$`
-  over `\(...\)` / bare TeX in prose; escape a literal dollar as `\$`.
 - Cite sources inline **without wrapping parentheses**. citation **hrefs should target the local PDF**
   `[Section 2.3](papers/<id>/<id>.pdf#section=2.3)`,
   `[Figure 1](papers/<id>/<id>.pdf#figure=1)`,
   `[p.11](papers/<id>/<id>.pdf#page=11)`,
   or notes `[[papers/<id>/NOTES]]` / `[[papers/<id>/NOTES|short title]]`.For web pages use `[domain](https://...)`.
+
+## Rules
+
+- Do not invent facts, numbers, citations, or experimental conclusions. Mark uncertainty.
+- Keep `[[wikilinks]]` and `![[embeds]]` as written; preserve ` ```mermaid ` fences.
 - Never overwrite user notes without an explicit draft + confirmation path.

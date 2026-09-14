@@ -16,9 +16,19 @@ Agentero supports several ways to import papers into your Vault.
 
 ### Zotero Connector
 
-1. Enable **Zotero Connector** in Settings → General.
-2. Close the local Zotero application.
-3. Use the official Zotero browser extension to save items to the current Vault.
+The [Zotero Connector](https://www.zotero.org/download/connectors) is Zotero's official browser extension for Chrome, Firefox, Edge, and Safari. Once installed, one click on the extension icon saves the paper or webpage you are reading as an item.
+
+1. Install the extension from [zotero.org/download/connectors](https://www.zotero.org/download/connectors)
+2. Enable **Zotero Connector** in Settings → General.
+3. Close the local Zotero application.
+4. Click the extension icon in your browser to save items to the current Vault.
+
+### Importing Webpages
+
+To save a webpage you are reading (blog, docs, news, …), pick either way:
+
+- **Magic Wand**: paste the page URL into the magic wand and Agentero fetches the content into a new paper folder.
+- **Zotero Connector**: click the extension icon while browsing to save the page to the current Vault.
 
 ### Local PDF
 

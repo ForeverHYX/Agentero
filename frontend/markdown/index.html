@@ -3488,6 +3488,34 @@
 
               
             
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../bug_fix/note-markdown-stray-less-than/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    笔记正文 < 比较符截断后续内容（#533）
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
           </ul>
         </nav>
       
@@ -3695,6 +3723,7 @@
 <li><strong>美元符号</strong>：<code>\$a\$</code> 是普通文本，<code>$a$</code> 是行内公式；行内公式两侧可直接接普通文字（如 <code>第一段$x_0$第三段</code>），编辑时继续输入不会吞掉公式；含 <code>cases</code> 等较高内容的行内公式 hover / 选中背景按公式盒子覆盖，不只覆盖文本行高；两者经编辑、粘贴和保存后保持不同语义。</li>
 <li><strong>独立公式</strong>：<code>$$...$$</code> 渲染为块级 KaTeX；多行 <code>cases</code> / <code>aligned</code> 等高度较大的公式由整宽块级容器承载，hover / 选中背景覆盖完整公式块，超宽内容横向滚动，不会压到前后正文。</li>
 <li><strong>公式错误恢复</strong>：未闭合的独立 <code>$$</code> 不会吞掉其后的 Markdown；围栏内的错误内容按普通文本保留，后续段落和标题继续正常解析。</li>
+<li><strong>正文小于号容错</strong>：正文里 <code>&lt;0.5B</code>、<code>p&lt;0.05</code> 这类 <code>&lt;</code> 后紧跟数字 / 符号的写法不会截断其后内容（#533）。解析前把这类裸 <code>&lt;</code> 改写为 <code>&amp;lt;</code> 实体（MDX 解析器会把它当非法 JSX 直接抛错），编辑器中仍显示为字面 <code>&lt;</code>；代码块、公式与真实 HTML 标签不受影响。详见 <a href="../../bug_fix/note-markdown-stray-less-than/">bug_fix/note-markdown-stray-less-than.md</a>。</li>
 <li><strong>Obsidian Callout</strong>：<code>&gt; [!important]</code> 等标准 marker 渲染为专用块，正文继续使用既有段落、列表、公式与双链节点。</li>
 <li><strong>内嵌 HTML</strong>：<code>&lt;div&gt;</code>、<code>&lt;center&gt;</code>、<code>&lt;p align="…"&gt;</code>、<code>&lt;iframe&gt;</code> 保留为 HTML 块并在编辑器内净化后真实渲染（居中、嵌入生效），单击块打开源码编辑气泡；保存逐字写回原文，不再被转义成 <code>\&lt;div&gt;</code>。裸 <code>&lt;p&gt;</code> 还原为普通段落，<code>&lt;br&gt;</code> 作为硬换行。其余标签（<code>&lt;u&gt;</code> <code>&lt;sub&gt;</code> <code>&lt;sup&gt;</code> <code>&lt;mark&gt;</code> <code>&lt;kbd&gt;</code>）沿用既有 mark 节点。详见下文「内嵌 HTML」。</li>
 <li><strong>代码块操作</strong>：编辑态悬停或聚焦代码块时，右上角依次显示语言选择与复制按钮；只读预览只显示复制按钮。选择 Mermaid 语言后，源码下方显示实时预览。</li>

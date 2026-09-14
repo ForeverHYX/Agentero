@@ -891,10 +891,11 @@ export const DockWorkspace = memo(
 					});
 				}
 				menu.push(
-					{
+					buildTabContextMenuItem({
 						label: t("tabs.contextClose"),
+						shortcut: formatShortcutById("closeTab"),
 						action: () => panel.api.close(),
-					},
+					}),
 					{
 						label: t("tabs.contextCloseOthers"),
 						disabled: !hasOthers,

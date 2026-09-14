@@ -11,21 +11,15 @@ import { errorText } from "@/lib/core/error";
 import { LAYOUT_SIDEBAR_MIN_SCORE } from "@/lib/pdf/layout/constants";
 import {
 	isAlgorithmLayoutKind,
-	isFigureLayoutKind,
-	isFormulaLayoutKind,
-	isFormulaNumberLayoutKind,
 	isLayoutTranslatableKind,
-	isTableLayoutKind,
 } from "@/lib/pdf/layout/labels";
 import {
 	isAlgorithmTitleText,
 	isAsideTextLayoutLabel,
 	isInsideAlgorithmRegion,
-	isInsideProtectedLayoutRegion,
 	isReferenceLayoutLabel,
 	isReferenceSectionTitle,
 	layoutRegionSourceText,
-	overlapsProtectedLayoutRegion,
 	runLayoutRegionTranslate as runLegacyLayoutRegionTranslate,
 } from "@/lib/pdf/layout/layout-translate";
 import { normalizeLayoutSourceText } from "@/lib/pdf/layout/layout-translate-source";
@@ -129,16 +123,6 @@ export function listTranslatableLayoutRegions(
 	const referenceBlocks = regions.filter(
 		(r) => isReferenceLayoutLabel(r.label) && r.score >= minScore,
 	);
-	const formulas = regions.filter(
-		(r) =>
-			(isFormulaLayoutKind(r.kind) || isFormulaNumberLayoutKind(r.kind)) &&
-			r.score >= minScore,
-	);
-	const visualBlocks = regions.filter(
-		(r) =>
-			(isFigureLayoutKind(r.kind) || isTableLayoutKind(r.kind)) &&
-			r.score >= minScore,
-	);
 	const out: LayoutTranslateRegion[] = [];
 	for (const r of regions) {
 		if (isAlgorithmLayoutKind(r.kind)) continue;
@@ -149,12 +133,6 @@ export function listTranslatableLayoutRegions(
 		if (!(r.bbox.w > 0 && r.bbox.h > 0)) continue;
 		if (isInsideAlgorithmRegion(r, algorithms)) continue;
 		if (isInsideAlgorithmRegion(r, referenceBlocks)) continue;
-		if (overlapsProtectedLayoutRegion(r, formulas)) continue;
-		if (
-			r.kind !== "figure_title" &&
-			isInsideProtectedLayoutRegion(r, visualBlocks)
-		)
-			continue;
 		const source = normalizeLayoutSourceText(layoutRegionSourceText(r), r.kind);
 		if (!source) continue;
 		if (isAlgorithmTitleText(source)) continue;

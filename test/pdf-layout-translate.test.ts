@@ -171,61 +171,6 @@ describe("listTranslatableLayoutRegions", () => {
 		expect(list[1]?.source).toContain("Table 2");
 	});
 
-	it("keeps display formulas and OCR inside visual blocks in the source PDF", () => {
-		const list = listTranslatableLayoutRegions([
-			region({
-				id: "equation",
-				kind: "formula",
-				pageIndex: 0,
-				bbox: { x: 0.2, y: 0.2, w: 0.5, h: 0.08 },
-			}),
-			region({
-				id: "equation-ocr",
-				kind: "text",
-				pageIndex: 0,
-				bbox: { x: 0.22, y: 0.21, w: 0.45, h: 0.05 },
-				text: "x = f(y)",
-			}),
-			region({
-				id: "mixed-equation-ocr",
-				kind: "text",
-				pageIndex: 0,
-				// The formula occupies only part of this broad OCR text box. It is
-				// still unsafe: an overlay would translate or cover the equation.
-				bbox: { x: 0.1, y: 0.18, w: 0.75, h: 0.13 },
-				text: "Prose before x = f(y) and prose after it.",
-			}),
-			region({
-				id: "figure",
-				kind: "image",
-				pageIndex: 0,
-				bbox: { x: 0.1, y: 0.4, w: 0.7, h: 0.3 },
-			}),
-			region({
-				id: "figure-ocr",
-				kind: "text",
-				pageIndex: 0,
-				bbox: { x: 0.2, y: 0.48, w: 0.35, h: 0.05 },
-				text: "Text drawn inside Figure 2",
-			}),
-			region({
-				id: "caption",
-				kind: "figure_title",
-				pageIndex: 0,
-				bbox: { x: 0.1, y: 0.72, w: 0.7, h: 0.04 },
-				text: "Figure 2: A translatable caption.",
-			}),
-			region({
-				id: "body",
-				kind: "text",
-				pageIndex: 0,
-				bbox: { x: 0.1, y: 0.8, w: 0.7, h: 0.08 },
-				text: "Ordinary body prose.",
-			}),
-		]);
-		expect(list.map((item) => item.id)).toEqual(["caption", "body"]);
-	});
-
 	it("skips reference entries and the References heading", () => {
 		const list = listTranslatableLayoutRegions([
 			region({

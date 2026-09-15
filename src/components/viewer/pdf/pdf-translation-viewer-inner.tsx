@@ -43,7 +43,6 @@ const EMPTY_MARKS: PdfPageMarksSlice = {
 	pinsByPage: EMPTY_PAGE_MAP,
 	commentsByPage: EMPTY_PAGE_MAP,
 	editingCommentId: null,
-	focusedVisualRegion: null,
 	commentWikiTarget: null,
 	citationLinks: EMPTY_PAGE_MAP,
 	textLinks: EMPTY_PAGE_MAP,

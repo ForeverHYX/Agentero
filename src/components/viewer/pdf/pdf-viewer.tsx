@@ -1091,13 +1091,6 @@ function PdfViewerInner({
 		return next;
 	}, [commentsByPageBase, railEdit]);
 
-	const focusedVisualRegion = useMemo(() => {
-		if (railEdit?.kind !== "visual") return null;
-		const tr = visualTraces.find((item) => item.id === railEdit.id);
-		if (!tr) return null;
-		return { page: tr.page, rects: tr.rects };
-	}, [railEdit, visualTraces]);
-
 	const {
 		handleOpenPin,
 		handleEditHighlightAnnotation,
@@ -1311,7 +1304,6 @@ function PdfViewerInner({
 			pinsByPage,
 			commentsByPage,
 			editingCommentId: railEdit?.id ?? null,
-			focusedVisualRegion,
 			commentWikiTarget,
 			citationLinks,
 			textLinks,
@@ -1330,7 +1322,6 @@ function PdfViewerInner({
 			pinsByPage,
 			commentsByPage,
 			railEdit?.id,
-			focusedVisualRegion,
 			commentWikiTarget,
 			citationLinks,
 			textLinks,

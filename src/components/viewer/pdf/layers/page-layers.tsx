@@ -168,14 +168,6 @@ export type PdfPageMarksSlice = {
 	commentsByPage: ReadonlyMap<number, PageAnnotationComment[]>;
 	/** Comment currently being edited in the rail; null when idle. */
 	editingCommentId: string | null;
-	/**
-	 * Visual-note crop to outline while its rail card is being edited
-	 * (Notion-style: related region lights up).
-	 */
-	focusedVisualRegion: {
-		page: number;
-		rects: readonly PdfAskNormalizedRect[];
-	} | null;
 	/** Resolvable wiki target for comment copy-link/copy-embed; null hides them. */
 	commentWikiTarget: string | null;
 	citationLinks: ReadonlyMap<number, PdfLinkAnnoObject[]>;
@@ -429,10 +421,6 @@ export const PdfPageLayers = memo(function PdfPageLayers({
 	const emphasizedComment = emphasizedCommentId
 		? (comments.find((c) => c.id === emphasizedCommentId) ?? null)
 		: null;
-	const isHoveredComment =
-		!!emphasizedComment && emphasizedComment.id === marks.hoveredCommentId;
-	const isEditingComment =
-		!!emphasizedComment && emphasizedComment.id === marks.editingCommentId;
 
 	const textCommentAtPoint = (clientX: number, clientY: number) => {
 		if (!comments.length) return null;
@@ -950,27 +938,6 @@ export const PdfPageLayers = memo(function PdfPageLayers({
 							/>
 						))
 					: null}
-				{/* Rail-edit focus: same crop outline when the visual note is
-				    being edited in place and no pin card is already open. */}
-				{!activeVisualOnPage && marks.focusedVisualRegion?.page === pageNumber
-					? marks.focusedVisualRegion.rects.map((rect) => (
-							<div
-								key={`comment-focus-${rect.x}-${rect.y}-${rect.w}-${rect.h}`}
-								className={cn(
-									PDF_VISUAL_REGION_FRAME_CLASS,
-									"z-[2]",
-									PDF_PRIVACY_HIDE_CLASS,
-								)}
-								style={{
-									left: `${rect.x * 100}%`,
-									top: `${rect.y * 100}%`,
-									width: `${rect.w * 100}%`,
-									height: `${rect.h * 100}%`,
-								}}
-								aria-hidden="true"
-							/>
-						))
-					: null}
 				<div className={PDF_PRIVACY_HIDE_CLASS}>
 					<SelectionGutter
 						items={pins}
@@ -980,24 +947,23 @@ export const PdfPageLayers = memo(function PdfPageLayers({
 						onLeave={handlers.onCardHoverLeave}
 					/>
 				</div>
-				{/* Emphasis overlay for the hovered or edited comment-rail card. */}
-				{emphasizedComment
+				{/*
+				 * Emphasis overlay for the hovered or edited comment-rail card.
+				 * Visual notes reuse the shared region frame so the rail card,
+				 * the marquee draft and the click-crop all read as one UI; skip
+				 * it while the open trace already frames the same rects below.
+				 */}
+				{emphasizedComment &&
+				!(emphasizedComment.kind === "visual" && activeVisualOnPage)
 					? emphasizedComment.rects.map((rect) => (
 							<div
 								key={`comment-hover-${emphasizedComment.id}-${rect.x}-${rect.y}-${rect.w}-${rect.h}`}
 								className={cn(
-									"pointer-events-none absolute z-[4] rounded-[1px]",
+									"pointer-events-none absolute z-[4]",
 									PDF_PRIVACY_HIDE_CLASS,
 									emphasizedComment.kind === "visual"
-										? cn(
-												"box-border",
-												isHoveredComment
-													? "border-4 border-primary/80"
-													: isEditingComment
-														? "border-2 border-primary/60"
-														: "border-2 border-primary/60",
-											)
-										: "mix-blend-multiply",
+										? PDF_VISUAL_REGION_FRAME_CLASS
+										: "rounded-[1px] mix-blend-multiply",
 								)}
 								style={{
 									left: `${rect.x * 100}%`,
@@ -1006,7 +972,7 @@ export const PdfPageLayers = memo(function PdfPageLayers({
 									height: `${rect.h * 100}%`,
 									backgroundColor:
 										emphasizedComment.kind === "visual"
-											? "transparent"
+											? undefined
 											: highlightHoverOverlayColor(emphasizedComment.color),
 								}}
 								aria-hidden="true"

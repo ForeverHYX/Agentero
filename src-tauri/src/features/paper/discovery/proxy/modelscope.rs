@@ -21,8 +21,9 @@ const USER_AGENT: &str = "agentero/0.6 (+https://github.com/poco-ai/agentero)";
 /// the paper feed, and adds an `[入库]` action to every paper.
 ///
 /// Selectors here are limited to stable hooks (`header.antd5-layout-header`,
-/// `a[href^="/papers/"]`, the arXiv landing link). The site's Emotion classes
-/// (`acss-*`) are content-hashed per release and must never be matched on.
+/// `a[href^="/papers/"]`, the arXiv landing link, the `ms-page-*` page roots,
+/// `.g_PageWidthAdapter`). The site's Emotion classes (`acss-*`) are
+/// content-hashed per release and must never be matched on.
 const NAV_BRIDGE: &str = r##"<style>
 /* The panel is a paper feed, not a browser: the global nav only offers ways out. */
 header.antd5-layout-header { display: none !important; }
@@ -33,6 +34,12 @@ header.antd5-layout-header { display: none !important; }
 .antd5-tour-target-placeholder { display: none !important; }
 /* The tour injects `html body { overflow-y: hidden }` via a runtime style tag. */
 html body { overflow-y: visible !important; }
+/* The site assumes a desktop browser: its paper pages pin their width at 1280px
+   (min-width on the ms-page-* layout, a fixed width on the page adapter), so a
+   narrower panel overflows and the page renders cut off at its left edge
+   (#550). Let the pages shrink to the panel instead. */
+[class*="ms-page-"] { min-width: 0 !important; max-width: 100% !important; }
+.g_PageWidthAdapter { max-width: 100% !important; }
 .agentero-import {
   cursor: pointer;
   user-select: none;
@@ -431,6 +438,17 @@ mod tests {
         assert!(NAV_BRIDGE.contains(".antd5-tour-mask"));
         assert!(NAV_BRIDGE.contains("display: none !important"));
         assert!(NAV_BRIDGE.contains("html body { overflow-y: visible !important; }"));
+    }
+
+    /// The site's paper pages pin their width at a 1280px desktop minimum, so a
+    /// narrower panel overflowed and the feed rendered cut off at its left
+    /// edge (#550). The pages must shrink to the panel instead.
+    #[test]
+    fn shrinks_the_feed_to_fit_the_panel() {
+        assert!(NAV_BRIDGE.contains(
+            "[class*=\"ms-page-\"] { min-width: 0 !important; max-width: 100% !important; }"
+        ));
+        assert!(NAV_BRIDGE.contains(".g_PageWidthAdapter { max-width: 100% !important; }"));
     }
 
     /// A card click is a pushState route, not a navigation: without these the

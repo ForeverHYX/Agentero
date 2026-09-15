@@ -5,6 +5,9 @@ import { normalizedRegionFromPoints } from "@/lib/pdf/region";
 
 type Point = { x: number; y: number };
 
+const PDF_REGION_SELECT_FRAME_CLASS =
+	"pointer-events-none absolute box-border rounded-none border-2 border-primary bg-primary/10 shadow-[0_0_0_1px_rgba(255,255,255,0.65)] ring-1 ring-primary/30 dark:shadow-[0_0_0_1px_rgba(0,0,0,0.55)]";
+
 function normalizedPoint(
 	element: HTMLElement,
 	clientX: number,
@@ -88,7 +91,7 @@ export function PdfRegionSelectLayer({
 		>
 			{draft ? (
 				<div
-					className="pointer-events-none absolute rounded border border-primary bg-primary/10 shadow-sm"
+					className={PDF_REGION_SELECT_FRAME_CLASS}
 					style={{
 						left: `${draft.x * 100}%`,
 						top: `${draft.y * 100}%`,

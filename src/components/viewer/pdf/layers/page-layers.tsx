@@ -134,6 +134,9 @@ const PASSIVE_HIGHLIGHT_RENDERERS: BoxedAnnotationRenderer[] = [
 	PASSIVE_HIGHLIGHT_RENDERER,
 ];
 
+const PDF_VISUAL_REGION_EDGE_CLASS =
+	"pointer-events-none absolute box-border rounded-none border-2 border-primary shadow-[0_0_0_1px_rgba(255,255,255,0.65)] ring-1 ring-primary/30 dark:shadow-[0_0_0_1px_rgba(0,0,0,0.55)]";
+
 /** A mark region pinned to a page (visual draft frame / formula legend frame). */
 type PageRegion = { page: number; region: PdfAskNormalizedRect } | null;
 
@@ -795,7 +798,10 @@ export const PdfPageLayers = memo(function PdfPageLayers({
 									 * page content.
 									 */}
 									<span
-										className="pointer-events-none absolute inset-0 border border-primary/45 opacity-0 transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100"
+										className={cn(
+											PDF_VISUAL_REGION_EDGE_CLASS,
+											"inset-0 opacity-0 transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100",
+										)}
 										aria-hidden="true"
 									/>
 									{showHint ? (
@@ -855,7 +861,8 @@ export const PdfPageLayers = memo(function PdfPageLayers({
 				{visualDraftRegionOnPage ? (
 					<div
 						className={cn(
-							"pointer-events-none absolute z-[2] rounded-none border border-primary/40 bg-primary/5 shadow-[0_0_0_1px_rgba(255,255,255,0.55)] dark:shadow-[0_0_0_1px_rgba(0,0,0,0.5)]",
+							PDF_VISUAL_REGION_EDGE_CLASS,
+							"z-[2] bg-primary/10",
 							PDF_PRIVACY_HIDE_CLASS,
 						)}
 						style={{
@@ -874,7 +881,8 @@ export const PdfPageLayers = memo(function PdfPageLayers({
 				{visualCropRegionOnPage ? (
 					<div
 						className={cn(
-							"pointer-events-none absolute z-[3] flex items-center justify-center rounded-none border border-primary/50 bg-primary/10 shadow-[0_0_0_1px_rgba(255,255,255,0.55)] dark:shadow-[0_0_0_1px_rgba(0,0,0,0.5)]",
+							PDF_VISUAL_REGION_EDGE_CLASS,
+							"z-[3] flex items-center justify-center bg-primary/10",
 							PDF_PRIVACY_HIDE_CLASS,
 						)}
 						style={{
@@ -930,7 +938,8 @@ export const PdfPageLayers = memo(function PdfPageLayers({
 							<div
 								key={`${activeVisualOnPage.id}-region-${rect.x}-${rect.y}-${rect.w}-${rect.h}`}
 								className={cn(
-									"pointer-events-none absolute z-[2] rounded-none border border-primary/40 bg-primary/5 shadow-[0_0_0_1px_rgba(255,255,255,0.55)] dark:shadow-[0_0_0_1px_rgba(0,0,0,0.5)]",
+									PDF_VISUAL_REGION_EDGE_CLASS,
+									"z-[2] bg-primary/10",
 									PDF_PRIVACY_HIDE_CLASS,
 								)}
 								style={{
@@ -950,7 +959,8 @@ export const PdfPageLayers = memo(function PdfPageLayers({
 							<div
 								key={`comment-focus-${rect.x}-${rect.y}-${rect.w}-${rect.h}`}
 								className={cn(
-									"pointer-events-none absolute z-[2] rounded-none border border-primary/40 bg-primary/5 shadow-[0_0_0_1px_rgba(255,255,255,0.55)] dark:shadow-[0_0_0_1px_rgba(0,0,0,0.5)]",
+									PDF_VISUAL_REGION_EDGE_CLASS,
+									"z-[2] bg-primary/10",
 									PDF_PRIVACY_HIDE_CLASS,
 								)}
 								style={{

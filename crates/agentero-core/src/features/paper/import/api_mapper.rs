@@ -6,10 +6,10 @@ use crate::error::AppError;
 use crate::features::catalog::papers::{hide_arxiv_category_tag, PaperKind, PaperRecord, PaperTag};
 use crate::features::scholar_api::identifiers::{doi_slug, strip_arxiv_version};
 use crate::features::scholar_api::sources::translator::map_zotero_item;
-use crate::features::scholar_api::urls::{
-    acl_anthology_pdf_url, arxiv_canonical_urls, doi_landing_url, usenix_presentation_pdf_url,
-};
+use crate::features::scholar_api::urls::{arxiv_canonical_urls, doi_landing_url};
 use crate::features::scholar_api::{ApiPaper, PaperIdentifiers, PaperUrls};
+
+use super::sources::venue_pdf_url;
 
 /// Convert a single API candidate into a `PaperRecord`, choosing an id and
 /// paper type from the available identifiers.
@@ -314,7 +314,8 @@ pub fn merge_api_paper_candidates(candidates: &[ApiPaper]) -> ApiPaper {
 ///
 /// - arXiv ids get standard `https://arxiv.org/{pdf,html,abs}` URLs.
 /// - DOI-only records get a `https://doi.org/{doi}` source URL.
-/// - ACL Anthology landing pages get their predictable PDF URL.
+/// - Venue landing pages the Translator returns without a PDF attachment get
+///   their deterministic PDF URL (see `sources::venue_pdf_url`).
 pub fn enrich_remote_urls(meta: &mut PaperRecord) {
     if let Some(ref aid) = meta.arxiv_id {
         let bare = strip_arxiv_version(aid.trim().trim_start_matches("arXiv:"));
@@ -334,13 +335,12 @@ pub fn enrich_remote_urls(meta: &mut PaperRecord) {
         }
     }
 
-    // ACL Anthology and USENIX presentation landing pages don't expose a PDF
-    // attachment in Translator, but the PDF URL follows a deterministic pattern.
+    // Venue landing pages (ACL Anthology, USENIX, NeurIPS, CVF, PMLR, …) don't
+    // expose a PDF attachment in Translator, but each has a deterministic PDF
+    // URL pattern — see `sources::{acl,usenix,…}`.
     if meta.pdf_url.is_none() {
         if let Some(url) = meta.source_url.as_deref().or(meta.html_url.as_deref()) {
-            if let Some(pdf) = acl_anthology_pdf_url(url) {
-                meta.pdf_url = Some(pdf);
-            } else if let Some(pdf) = usenix_presentation_pdf_url(url) {
+            if let Some(pdf) = venue_pdf_url(url) {
                 meta.pdf_url = Some(pdf);
             }
         }
@@ -698,6 +698,35 @@ mod tests {
         assert_eq!(
             meta.publication.as_deref(),
             Some("2024 USENIX Annual Technical Conference (USENIX ATC 24)")
+        );
+    }
+
+    #[test]
+    fn enrich_remote_urls_fills_other_venue_pdfs() {
+        // NeurIPS abstract page.
+        let item = serde_json::json!({
+            "itemType": "conferencePaper",
+            "title": "Some NeurIPS Paper",
+            "date": "2023",
+            "url": "https://proceedings.neurips.cc/paper_files/paper/2023/hash/0001ca33ba34ce0351e4612b744b3936-Abstract-Conference.html"
+        });
+        let meta = map_zotero_item_to_record(&item).expect("map");
+        assert_eq!(
+            meta.pdf_url.as_deref(),
+            Some("https://proceedings.neurips.cc/paper_files/paper/2023/file/0001ca33ba34ce0351e4612b744b3936-Paper-Conference.pdf")
+        );
+
+        // OpenReview forum page.
+        let item = serde_json::json!({
+            "itemType": "conferencePaper",
+            "title": "Some ICLR Paper",
+            "date": "2024",
+            "url": "https://openreview.net/forum?id=KS8mIvetg2"
+        });
+        let meta = map_zotero_item_to_record(&item).expect("map");
+        assert_eq!(
+            meta.pdf_url.as_deref(),
+            Some("https://openreview.net/pdf?id=KS8mIvetg2")
         );
     }
 }

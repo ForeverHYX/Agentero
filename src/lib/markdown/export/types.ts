@@ -44,7 +44,10 @@ export type MarkdownExportSurfaceComponent =
 	ComponentType<MarkdownExportSurfaceProps>;
 
 export type MarkdownExportRequest = {
-	/** Full Markdown including optional frontmatter (body is rendered; FM stripped). */
+	/**
+	 * Full Markdown including optional frontmatter. Frontmatter is vault-
+	 * internal metadata and stripped by every export path (render + `.md`).
+	 */
 	markdown: string;
 	/** Absolute path of the source note (asset / wiki resolve). */
 	filePath: string | null;

@@ -39,6 +39,20 @@ describe("frontmatter helpers", () => {
 		expect(next).toBe(original);
 	});
 
+	it("splits frontmatter so export can drop it (body only)", () => {
+		// The `.md` export path writes only the body.
+		expect(
+			splitFrontmatter(
+				"---\naliases:\n  - Attention Is All You Need\n  - AIAYN\ntags:\n  - transformers\n---\n# Body\n",
+			).body,
+		).toBe("# Body\n");
+		expect(splitFrontmatter("---\naliases: [AIAYN]\n---\nBody").body).toBe(
+			"Body",
+		);
+		// Documents without frontmatter pass through untouched.
+		expect(splitFrontmatter("# Just a note\n").body).toBe("# Just a note\n");
+	});
+
 	it("counts only top-level property keys", () => {
 		expect(
 			countFrontmatterProperties(

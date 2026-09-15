@@ -18,6 +18,7 @@ import type {
 	MarkdownExportResult,
 	MarkdownExportSurfaceComponent,
 } from "@/lib/markdown/export/types";
+import { splitFrontmatter } from "@/lib/markdown/frontmatter";
 import { writeVaultBytes, writeVaultFile } from "@/lib/vault/fs";
 import { WikiNavContext } from "@/lib/wiki/nav-context";
 
@@ -64,7 +65,9 @@ export async function runMarkdownExport(
 		});
 		if (!path) return { status: "cancelled" };
 
-		await writeVaultFile(path, request.markdown);
+		// Frontmatter is vault-internal metadata; standalone exports drop it.
+		const { body } = splitFrontmatter(request.markdown);
+		await writeVaultFile(path, body);
 		return { status: "saved", path, format: "md" };
 	}
 

@@ -35,12 +35,6 @@ import {
 	DEFAULT_HIGHLIGHT_COLOR,
 	swatchColorClass,
 } from "@/lib/pdf/highlight/palette";
-import {
-	PDF_COMMENT_CONNECTOR_HALO_CLASS,
-	PDF_COMMENT_CONNECTOR_STROKE_CLASS,
-	type PdfPaperTone,
-} from "@/lib/pdf/page-theme";
-
 /** Card width in CSS px — also the gutter width reserved on the viewport. */
 export const COMMENT_CARD_WIDTH_PX = 224;
 /** Collapsed selection-comment chip width (icon only). */
@@ -68,6 +62,12 @@ const VIEW_CONVERSATION_PREVIEW_LINES = 3;
 const EDIT_MIN_COMMENT_LINES = 3;
 /** In-place editor: layout estimate cap; textarea scrolls past this. */
 const EDIT_MAX_COMMENT_LINES = 12;
+const COMMENT_CARD_SURFACE_CLASS =
+	"group pointer-events-auto absolute select-none rounded-lg border border-white/55 bg-background/88 shadow-[0_10px_28px_rgba(15,23,42,0.16),0_2px_8px_rgba(15,23,42,0.1)] ring-1 ring-black/5 backdrop-blur-xl backdrop-saturate-150 transition-[box-shadow,background-color,transform] duration-150 ease-out hover:z-[7] hover:shadow-[0_16px_36px_rgba(15,23,42,0.2),0_4px_12px_rgba(15,23,42,0.12)] hover:!h-auto supports-backdrop-blur:bg-background/70 dark:border-white/10 dark:shadow-[0_12px_32px_rgba(0,0,0,0.45),0_2px_10px_rgba(0,0,0,0.35)] dark:ring-white/10";
+const COMMENT_DRAFT_SURFACE_CLASS =
+	"group/draft pointer-events-auto absolute z-[6] cursor-text overflow-hidden rounded-lg border border-white/55 bg-background/88 text-left shadow-[0_10px_28px_rgba(15,23,42,0.16),0_2px_8px_rgba(15,23,42,0.1)] ring-1 ring-black/5 backdrop-blur-xl backdrop-saturate-150 outline-none supports-backdrop-blur:bg-background/70 dark:border-white/10 dark:shadow-[0_12px_32px_rgba(0,0,0,0.45),0_2px_10px_rgba(0,0,0,0.35)] dark:ring-white/10";
+const COMMENT_ACTION_BAR_CLASS =
+	"absolute top-1.5 right-1.5 flex items-center gap-0.5 rounded-md border border-white/50 bg-background/82 p-0.5 shadow-[0_6px_18px_rgba(15,23,42,0.14)] ring-1 ring-black/5 backdrop-blur-xl backdrop-saturate-150 transition-opacity duration-150 dark:border-white/10 dark:shadow-[0_8px_20px_rgba(0,0,0,0.4)] dark:ring-white/10";
 
 type CommentCardsLayerProps = {
 	/** Comments for this page only. */
@@ -76,8 +76,6 @@ type CommentCardsLayerProps = {
 	pageWidthPx: number;
 	/** Rendered page height in px (zoom-aware). */
 	pageHeightPx: number;
-	/** PDF paper tone — connector ink follows paper, not app chrome. */
-	tone: PdfPaperTone;
 	/** Id of the card currently being edited in place; null when idle. */
 	editingId: string | null;
 	/** Resolvable wiki target; copy buttons only render when set. */
@@ -330,12 +328,12 @@ const CommentCard = memo(function CommentCard({
 		<div
 			data-pdf-chrome
 			className={cn(
-				"group pointer-events-auto absolute select-none rounded-lg border border-border/50 bg-background/90 shadow-sm ring-1 backdrop-blur-md backdrop-saturate-150 transition-[box-shadow,background-color] duration-150 ease-out hover:z-[7] hover:shadow-md hover:!h-auto supports-backdrop-blur:bg-background/75",
+				COMMENT_CARD_SURFACE_CLASS,
 				editing
-					? "z-[6] ring-2 ring-ring/50"
+					? "z-[6] bg-background/92 shadow-[0_18px_44px_rgba(15,23,42,0.22),0_4px_16px_rgba(15,23,42,0.12)] ring-2 ring-ring/50 dark:shadow-[0_18px_46px_rgba(0,0,0,0.55)]"
 					: hovered
-						? "z-[6] ring-2 ring-primary/40 shadow-md"
-						: "ring-black/5 dark:ring-white/10",
+						? "z-[6] bg-background/92 shadow-[0_18px_44px_rgba(15,23,42,0.22),0_4px_16px_rgba(15,23,42,0.12)] ring-2 ring-primary/45 dark:shadow-[0_18px_46px_rgba(0,0,0,0.55)]"
+						: "",
 			)}
 			style={{
 				left: `calc(100% + ${COMMENT_CARD_GAP_PX}px)`,
@@ -473,7 +471,7 @@ const CommentCard = memo(function CommentCard({
 				)}
 				<div
 					className={cn(
-						"absolute top-1.5 right-1.5 flex items-center gap-0.5 rounded-lg bg-background/80 p-0.5 shadow-sm ring-1 ring-border/60 backdrop-blur-sm transition-opacity duration-150",
+						COMMENT_ACTION_BAR_CLASS,
 						editing
 							? "opacity-0 group-hover:opacity-100"
 							: "opacity-0 group-hover:opacity-100 group-focus-within:opacity-100",
@@ -672,11 +670,11 @@ const SelectionCommentAffordance = memo(function SelectionCommentAffordance({
 			aria-label={t("selection.note")}
 			data-pdf-chrome
 			className={cn(
-				"group/draft pointer-events-auto absolute z-[6] cursor-text overflow-hidden rounded-lg border border-border/50 bg-background/90 text-left shadow-sm ring-1 ring-black/5 backdrop-blur-md backdrop-saturate-150 outline-none supports-backdrop-blur:bg-background/75 dark:ring-white/10",
-				"transition-[width,box-shadow] duration-200 ease-out motion-reduce:transition-none",
+				COMMENT_DRAFT_SURFACE_CLASS,
+				"transition-[width,box-shadow,background-color] duration-200 ease-out motion-reduce:transition-none",
 				editing
-					? "z-[7] w-56 shadow-md ring-primary/40"
-					: "w-9 select-none hover:shadow-md",
+					? "z-[7] w-56 bg-background/92 shadow-[0_18px_44px_rgba(15,23,42,0.22),0_4px_16px_rgba(15,23,42,0.12)] ring-2 ring-primary/45 dark:shadow-[0_18px_46px_rgba(0,0,0,0.55)]"
+					: "w-9 select-none hover:shadow-[0_14px_34px_rgba(15,23,42,0.2),0_3px_12px_rgba(15,23,42,0.12)] dark:hover:shadow-[0_14px_34px_rgba(0,0,0,0.5)]",
 				focused && "ring-2 ring-ring/50",
 			)}
 			style={{
@@ -787,7 +785,6 @@ export const CommentCardsLayer = memo(function CommentCardsLayer({
 	items,
 	pageWidthPx,
 	pageHeightPx,
-	tone,
 	editingId,
 	wikiTarget,
 	hoveredId,
@@ -840,8 +837,8 @@ export const CommentCardsLayer = memo(function CommentCardsLayer({
 					<path
 						d={connectorD}
 						fill="none"
-						className={PDF_COMMENT_CONNECTOR_HALO_CLASS[tone]}
-						strokeWidth={3.5}
+						className="stroke-background/95 dark:stroke-background/90"
+						strokeWidth={5}
 						strokeLinecap="round"
 						strokeLinejoin="round"
 						vectorEffect="non-scaling-stroke"
@@ -849,8 +846,8 @@ export const CommentCardsLayer = memo(function CommentCardsLayer({
 					<path
 						d={connectorD}
 						fill="none"
-						className={PDF_COMMENT_CONNECTOR_STROKE_CLASS[tone]}
-						strokeWidth={2}
+						className="stroke-primary/85"
+						strokeWidth={2.5}
 						strokeLinecap="round"
 						strokeLinejoin="round"
 						vectorEffect="non-scaling-stroke"

@@ -447,7 +447,7 @@ fn refresh_path_from_registry(environment: &mut HashMap<String, String>) {
         .get("PATH")
         .map(|value| std::env::split_paths(value).collect::<Vec<_>>())
         .unwrap_or_default();
-    for entry in std::env::split_paths(&merged) {
+    for entry in std::env::split_paths(merged.as_ref()) {
         if !entry.as_os_str().is_empty() && !paths.contains(&entry) {
             paths.push(entry);
         }

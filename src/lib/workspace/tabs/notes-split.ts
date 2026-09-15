@@ -209,6 +209,45 @@ export function reseedMarkdownTab(
 	});
 }
 
+/** Reseed an open Excalidraw tab after our own save (no remount). */
+export function reseedExcalidrawTab(
+	prev: DocTab[],
+	absPath: string,
+	content: string,
+): DocTab[] {
+	const key = normalizeTabPath(absPath);
+	return prev.map((t) => {
+		if (normalizeTabPath(t.path) === key && t.mode === "excalidraw") {
+			return {
+				...t,
+				excalidrawSeed: content,
+				excalidrawDirty: false,
+			};
+		}
+		return t;
+	});
+}
+
+/** Refresh an open Excalidraw tab from disk (bumps key to force remount). */
+export function refreshExcalidrawTab(
+	prev: DocTab[],
+	absPath: string,
+	content: string,
+): DocTab[] {
+	const key = normalizeTabPath(absPath);
+	return prev.map((t) => {
+		if (normalizeTabPath(t.path) === key && t.mode === "excalidraw") {
+			return {
+				...t,
+				excalidrawSeed: content,
+				excalidrawDirty: false,
+				excalidrawKey: t.excalidrawKey + 1,
+			};
+		}
+		return t;
+	});
+}
+
 /** Keep the seed of the tab(s) owning `path` in sync after a disk write. */
 export function syncTabSeedsForPath(
 	prev: DocTab[],

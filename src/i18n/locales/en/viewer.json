@@ -261,5 +261,8 @@
 	"image": {
 		"empty": "No image available.",
 		"altFallback": "Image preview"
+	},
+	"excalidraw": {
+		"empty": "No drawing available."
 	}
 }

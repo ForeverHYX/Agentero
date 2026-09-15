@@ -91,6 +91,7 @@ import {
 	getActiveTabId,
 	getTabs,
 	pushClosedTabs,
+	refreshTabExcalidraw,
 	refreshTabMarkdown,
 	refreshTabNotes,
 	setActiveTabId,
@@ -121,6 +122,7 @@ import {
 	readingPairCloseIds,
 	removeTab,
 	removeTabsUnderPath,
+	reseedExcalidrawTab,
 	revokeTabMediaSources,
 	splitPaneIdForPath,
 	syncTabSeedsForPath,
@@ -1195,6 +1197,8 @@ const reseedGuard = new Set<string>();
 /** Serialize Markdown saves per absolute path so overlapping editor lifecycles
  * cannot race their disk snapshot checks and writes. */
 const markdownPersistQueues = new Map<string, Promise<boolean>>();
+/** Serialize Excalidraw saves per absolute path. */
+const excalidrawPersistQueues = new Map<string, Promise<boolean>>();
 
 /**
  * Where disk-change reseeds land. The main window uses the workspace tab
@@ -1204,12 +1208,14 @@ export type DiskChangeSink = {
 	getTabs: () => DocTab[];
 	refreshNotes: (paperDir: string, content: string) => void;
 	refreshMarkdown: (absPath: string, content: string) => void;
+	refreshExcalidraw: (absPath: string, content: string) => void;
 };
 
 const defaultDiskChangeSink: DiskChangeSink = {
 	getTabs,
 	refreshNotes: refreshTabNotes,
 	refreshMarkdown: refreshTabMarkdown,
+	refreshExcalidraw: refreshTabExcalidraw,
 };
 
 /**
@@ -1231,7 +1237,11 @@ export async function applyDiskChange(
 	const mdOwners = openTabs.filter(
 		(t) => normalizeTabPath(t.path) === norm && isMarkdownPath(t.path),
 	);
-	if (!notesOwners.length && !mdOwners.length) return;
+	const excalidrawOwners = openTabs.filter(
+		(t) => normalizeTabPath(t.path) === norm && t.mode === "excalidraw",
+	);
+	if (!notesOwners.length && !mdOwners.length && !excalidrawOwners.length)
+		return;
 	let content: string;
 	try {
 		content = await readVaultFile(absPath);
@@ -1267,6 +1277,15 @@ export async function applyDiskChange(
 			sink.refreshMarkdown(absPath, content);
 		};
 		if (mdTab.markdownDirty) promptReload(reload);
+		else reload();
+	}
+	for (const excalidrawTab of excalidrawOwners) {
+		if (content === excalidrawTab.excalidrawSeed) continue;
+		const reload = () => {
+			guard();
+			sink.refreshExcalidraw(absPath, content);
+		};
+		if (excalidrawTab.excalidrawDirty) promptReload(reload);
 		else reload();
 	}
 }
@@ -1326,6 +1345,59 @@ export function persistFile(
 		() => {
 			if (markdownPersistQueues.get(normalizedPath) === attempt) {
 				markdownPersistQueues.delete(normalizedPath);
+			}
+		},
+	);
+	return attempt;
+}
+
+/**
+ * Persist a specific `.excalidraw` file to disk. The ExcalidrawViewer calls
+ * this with its own fixed path (debounced autosave and unmount flush).
+ */
+export function persistExcalidrawFile(
+	path: string,
+	json: string,
+	lastSaved: string,
+): Promise<boolean> {
+	if (!isTauri() || !getVaultPath() || !path) return Promise.resolve(false);
+	const normalizedPath = normalizeTabPath(path);
+	const previous =
+		excalidrawPersistQueues.get(normalizedPath) ?? Promise.resolve(false);
+	const attempt = previous
+		.catch(() => false)
+		.then(async () => {
+			if (reseedGuard.has(normalizedPath)) return false;
+			try {
+				const disk = await readVaultFile(path);
+				if (disk !== lastSaved) {
+					const name = path.split(/[\\/]/).pop() ?? path;
+					notifyWarning(i18n.t("app:diskConflict.saveBlocked", { name }));
+					return false;
+				}
+			} catch {
+				// Missing/unreadable file → no conflict to guard against.
+			}
+			try {
+				await writeVaultFile(path, json);
+				trackSelfWrittenPath(path);
+				setTabs((prev) => reseedExcalidrawTab(prev, path, json));
+				return true;
+			} catch (e) {
+				notifyError(errorText(e));
+				return false;
+			}
+		});
+	excalidrawPersistQueues.set(normalizedPath, attempt);
+	void attempt.then(
+		() => {
+			if (excalidrawPersistQueues.get(normalizedPath) === attempt) {
+				excalidrawPersistQueues.delete(normalizedPath);
+			}
+		},
+		() => {
+			if (excalidrawPersistQueues.get(normalizedPath) === attempt) {
+				excalidrawPersistQueues.delete(normalizedPath);
 			}
 		},
 	);

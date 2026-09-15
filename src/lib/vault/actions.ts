@@ -96,6 +96,7 @@ import {
 	setTabs,
 } from "@/lib/workspace/store";
 import { basenameOf } from "@/lib/workspace/tabs";
+import { isExcalidrawPath } from "@/lib/workspace/viewer";
 
 export async function activateVault(path: string): Promise<void> {
 	bumpTreeGeneration();
@@ -961,7 +962,16 @@ export async function confirmCreate(name: string): Promise<void> {
 			return;
 		}
 		if (kind === "file") {
-			await writeVaultFile(full, "");
+			const initialContent = isExcalidrawPath(trimmed)
+				? JSON.stringify({
+						type: "excalidraw",
+						version: 2,
+						source: "https://excalidraw.com",
+						elements: [],
+						appState: { collaborators: [] },
+					})
+				: "";
+			await writeVaultFile(full, initialContent);
 			await refreshTree(vaultPath);
 			openPath(full);
 		} else {

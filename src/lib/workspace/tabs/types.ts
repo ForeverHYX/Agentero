@@ -29,10 +29,15 @@ export type DocTab = {
 	notesSeed: string;
 	/** Seed content for a plain-file Markdown editor. */
 	markdownSeed: string;
+	/** Seed content for an Excalidraw whiteboard file. */
+	excalidrawSeed: string;
 	markdownDirty: boolean;
 	notesDirty: boolean;
+	excalidrawDirty: boolean;
 	/** Bump to reload the center Markdown editor's content in place from `markdownSeed`. */
 	seedKey: number;
+	/** Bump to reload the Excalidraw editor's content in place from `excalidrawSeed`. */
+	excalidrawKey: number;
 	/** Bump to reload the NOTES editor's content in place from `notesSeed`. */
 	notesKey: number;
 	/** One-shot, monotonic intent consumed by the mounted Markdown editor. */
@@ -70,6 +75,7 @@ export type TabResources = {
 	notesPath: string | null;
 	notesSeed: string;
 	markdownSeed: string;
+	excalidrawSeed?: string;
 	loaded: true;
 	/** Non-fatal message to surface (e.g. unpreviewable file). */
 	error?: string;

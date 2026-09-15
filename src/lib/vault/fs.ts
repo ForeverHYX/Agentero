@@ -19,7 +19,9 @@ export function isMarkdownPath(path: string): boolean {
 export function isTextOpenable(path: string): boolean {
 	return (
 		isMarkdownPath(path) ||
-		/\.(txt|json|bib|tex|html?|css|ts|tsx|js|jsx|rs|toml|yaml|yml)$/i.test(path)
+		/\.(txt|json|bib|tex|html?|css|ts|tsx|js|jsx|rs|toml|yaml|yml|excalidraw)$/i.test(
+			path,
+		)
 	);
 }
 

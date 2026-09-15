@@ -3,7 +3,8 @@ export type CenterViewMode =
 	| "pdf"
 	| "html"
 	| "image"
-	| "translation";
+	| "translation"
+	| "excalidraw";
 
 export function isPdfPath(path: string): boolean {
 	return /\.pdf$/i.test(path);
@@ -11,6 +12,11 @@ export function isPdfPath(path: string): boolean {
 
 export function isHtmlPath(path: string): boolean {
 	return /\.html?$/i.test(path);
+}
+
+/** Excalidraw whiteboard files. */
+export function isExcalidrawPath(path: string): boolean {
+	return /\.excalidraw$/i.test(path);
 }
 
 /** Common image extensions previewable in the center pane. */
@@ -59,6 +65,7 @@ export function preferredModeForPath(path: string | null): CenterViewMode {
 	if (isPdfPath(path)) return "pdf";
 	if (isHtmlPath(path)) return "html";
 	if (isImagePath(path)) return "image";
+	if (isExcalidrawPath(path)) return "excalidraw";
 	return "markdown";
 }
 

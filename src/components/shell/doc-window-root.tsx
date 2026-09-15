@@ -23,12 +23,17 @@ import { openSettingsWindow } from "@/lib/shell/settings-window";
 import { openRecentVault } from "@/lib/vault/actions";
 import { refreshTree, vaultStore } from "@/lib/vault/store";
 import { shouldIgnoreInternalRenameEvent } from "@/lib/wiki/store";
-import { applyDiskChange, persistFile } from "@/lib/workspace/actions";
+import {
+	applyDiskChange,
+	persistExcalidrawFile,
+	persistFile,
+} from "@/lib/workspace/actions";
 import {
 	createPlaceholderTab,
 	type DocTab,
 	loadTabResources,
 	patchFromTabResources,
+	refreshExcalidrawTab,
 	reseedMarkdownTab,
 	reseedNotesTab,
 	syncTabSeedsForPath,
@@ -189,8 +194,22 @@ export function DocWindowRoot() {
 					return reseedMarkdownTab([prev], absPath, content)[0] ?? prev;
 				});
 			},
+			refreshExcalidraw: (absPath: string, content: string) => {
+				setTab((prev) => {
+					if (!prev) return prev;
+					return refreshExcalidrawTab([prev], absPath, content)[0] ?? prev;
+				});
+			},
 		}),
 		[],
+	);
+
+	const excalidrawProps = useMemo(
+		() => ({
+			onPersistFile: persistExcalidrawFile,
+			onTabPatch: onTabPatch,
+		}),
+		[onTabPatch],
 	);
 
 	const onDiskChange = useCallback(
@@ -290,6 +309,7 @@ export function DocWindowRoot() {
 						library={LIBRARY_STUB}
 						editor={editorProps}
 						pdf={PDF_STUB}
+						excalidraw={excalidrawProps}
 						onTrashChanged={NOOP_TRASH_CHANGED}
 					/>
 				)}

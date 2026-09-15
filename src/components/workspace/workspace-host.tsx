@@ -48,6 +48,7 @@ import {
 	openTab,
 	openTabNotes,
 	openTranslationTab,
+	persistExcalidrawFile,
 	persistFile,
 } from "@/lib/workspace/actions";
 import { registerDockHandle } from "@/lib/workspace/dock-registry";
@@ -311,12 +312,20 @@ export function WorkspaceHost() {
 		}),
 		[handleOpenSettings],
 	);
+	const excalidrawProps = useMemo(
+		() => ({
+			onPersistFile: persistExcalidrawFile,
+			onTabPatch: updateTab,
+		}),
+		[],
+	);
 	const centerProps = useMemo(
 		() => ({
 			vaultPath,
 			library: libraryProps,
 			editor: editorProps,
 			pdf: pdfProps,
+			excalidraw: excalidrawProps,
 			onTrashChanged: handleTrashReload,
 			trashReloadSignal,
 		}),
@@ -325,6 +334,7 @@ export function WorkspaceHost() {
 			libraryProps,
 			editorProps,
 			pdfProps,
+			excalidrawProps,
 			handleTrashReload,
 			trashReloadSignal,
 		],

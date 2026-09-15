@@ -18,6 +18,8 @@ export {
 	isPaperContentTab,
 	paperReadingPlacements,
 	readingPairCloseIds,
+	refreshExcalidrawTab,
+	reseedExcalidrawTab,
 	reseedMarkdownTab,
 	reseedNotesTab,
 	syncTabSeedsForPath,

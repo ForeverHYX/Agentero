@@ -32,6 +32,11 @@ const PlazaView = lazy(() =>
 		default: m.PlazaView,
 	})),
 );
+const ExcalidrawViewer = lazy(() =>
+	import("@/components/viewer/excalidraw-viewer").then((m) => ({
+		default: m.ExcalidrawViewer,
+	})),
+);
 
 /** Library-tab-only props (ignored by PDF / editor / trash). */
 export type DocViewLibraryProps = {
@@ -89,6 +94,16 @@ export type DocViewPdfProps = {
 	) => void;
 };
 
+/** Excalidraw editor props. */
+export type DocViewExcalidrawProps = {
+	onPersistFile: (
+		path: string,
+		json: string,
+		lastSaved: string,
+	) => Promise<boolean>;
+	onTabPatch: (id: string, patch: Partial<DocTab>) => void;
+};
+
 export type DocViewProps = {
 	/** Primary tab or split pane (shared fields). */
 	tab: DocTab;
@@ -105,6 +120,7 @@ export type DocViewProps = {
 	library: DocViewLibraryProps;
 	editor: DocViewEditorProps;
 	pdf: DocViewPdfProps;
+	excalidraw: DocViewExcalidrawProps;
 	onTrashChanged: () => void;
 	/** Bump to reload recycle bin after Empty Recycle Bin from the sidebar. */
 	trashReloadSignal?: number;
@@ -159,6 +175,7 @@ function docViewPropsEqual(prev: DocViewProps, next: DocViewProps): boolean {
 	}
 	if (tab.kind === "plaza") return true;
 	if (tab.mode === "markdown") return prev.editor === next.editor;
+	if (tab.mode === "excalidraw") return prev.excalidraw === next.excalidraw;
 	if (tab.mode === "pdf" || tab.mode === "translation")
 		return prev.pdf === next.pdf;
 	return true;
@@ -173,6 +190,7 @@ export const DocView = memo(function DocView({
 	library,
 	editor,
 	pdf,
+	excalidraw,
 	onTrashChanged,
 	trashReloadSignal = 0,
 }: DocViewProps) {
@@ -371,6 +389,28 @@ export const DocView = memo(function DocView({
 					alt={tab.title}
 					className="h-full w-full"
 				/>
+			</div>
+		);
+	}
+	if (tab.mode === "excalidraw") {
+		if (!active && !keepMounted) return <TabLoadingSkeleton />;
+		return (
+			<div className="relative min-h-0 min-w-0 flex-1 overflow-hidden">
+				<Suspense fallback={<TabLoadingSkeleton />}>
+					<ExcalidrawViewer
+						// Stable per-tab key: external disk changes reload in place
+						// via `reloadKey` instead of remounting the whole viewer.
+						key={`excalidraw-${tab.id}`}
+						seed={tab.excalidrawSeed}
+						path={tab.path}
+						reloadKey={tab.excalidrawKey}
+						onPersist={excalidraw.onPersistFile}
+						onDirtyChange={(d) =>
+							excalidraw.onTabPatch(tab.id, { excalidrawDirty: d })
+						}
+						className="h-full w-full"
+					/>
+				</Suspense>
 			</div>
 		);
 	}

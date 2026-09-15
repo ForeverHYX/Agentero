@@ -43,6 +43,7 @@ import {
 } from "@/lib/workspace/tabs/types";
 import {
 	imageMimeFromPath,
+	isExcalidrawPath,
 	isHtmlPath,
 	isImagePath,
 	isPdfPath,
@@ -257,6 +258,7 @@ export async function loadTabResources(
 		isPdfPath(path) ||
 		isImagePath(path) ||
 		isHtmlPath(path) ||
+		isExcalidrawPath(path) ||
 		isTextOpenable(path);
 	if (
 		!paperDir &&
@@ -385,6 +387,7 @@ export async function loadTabResources(
 		let pdfBytes = paperBytes;
 		let imageUrl: string | null = null;
 		let markdownSeed = "";
+		let excalidrawSeed = "";
 
 		if (isPdfPath(path)) {
 			// Prefer the exact file the user clicked (may differ from canonical {id}.pdf).
@@ -421,6 +424,13 @@ export async function loadTabResources(
 				// Leave the editor empty when the file cannot be read.
 			}
 		}
+		if (isExcalidrawPath(path)) {
+			try {
+				excalidrawSeed = await readVaultFile(path);
+			} catch {
+				// Leave the canvas empty when the file cannot be read.
+			}
+		}
 
 		return {
 			kind: "file",
@@ -434,6 +444,7 @@ export async function loadTabResources(
 			notesPath,
 			notesSeed,
 			markdownSeed,
+			excalidrawSeed,
 			loaded: true,
 			didDownloadAssets: didDownload,
 		};
@@ -473,6 +484,15 @@ export async function loadTabResources(
 			return { ...base, mode: "image", error: "cannotPreview" };
 		}
 		return { ...base, mode: "image", imageUrl };
+	}
+
+	if (isExcalidrawPath(path)) {
+		try {
+			const excalidrawSeed = await readVaultFile(path);
+			return { ...base, mode: "excalidraw", excalidrawSeed };
+		} catch (e) {
+			return { ...base, mode: "excalidraw", error: errorText(e) };
+		}
 	}
 
 	if (isHtmlPath(path)) {

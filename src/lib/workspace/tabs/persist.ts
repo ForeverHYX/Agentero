@@ -21,6 +21,7 @@ const VALID_MODES = new Set<CenterViewMode>([
 	"html",
 	"image",
 	"translation",
+	"excalidraw",
 ]);
 
 function isCenterViewMode(v: unknown): v is CenterViewMode {

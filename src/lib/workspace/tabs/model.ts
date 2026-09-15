@@ -145,10 +145,13 @@ export function createPlaceholderTab(
 		notesPath: null,
 		notesSeed: "",
 		markdownSeed: "",
+		excalidrawSeed: "",
 		markdownDirty: false,
 		notesDirty: false,
+		excalidrawDirty: false,
 		seedKey: 0,
 		notesKey: 0,
+		excalidrawKey: 0,
 		loaded: false,
 	};
 }
@@ -201,6 +204,7 @@ export function patchFromTabResources(
 		notesPath: res.notesPath,
 		notesSeed: res.notesSeed,
 		markdownSeed: res.markdownSeed,
+		excalidrawSeed: res.excalidrawSeed ?? "",
 		seedKey: 1,
 		loaded: true,
 	};

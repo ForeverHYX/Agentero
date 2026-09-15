@@ -345,7 +345,10 @@ function resolveReferencePanel(
  * when not shown.
  */
 function rendererForMode(mode: CenterViewMode): DockviewPanelRenderer {
-	return mode === "pdf" || mode === "markdown" || mode === "translation"
+	return mode === "pdf" ||
+		mode === "markdown" ||
+		mode === "translation" ||
+		mode === "excalidraw"
 		? "always"
 		: "onlyWhenVisible";
 }

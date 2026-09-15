@@ -12,6 +12,7 @@ import {
 	type DocTab,
 	loadPersistedTabs,
 	patchTab,
+	refreshExcalidrawTab,
 	reseedMarkdownTab,
 	reseedNotesTab,
 } from "@/lib/workspace/tabs";
@@ -189,4 +190,9 @@ export function refreshTabNotes(paperDir: string, content: string): void {
 /** Reseed an open plain-Markdown tab after an external/Agent write. */
 export function refreshTabMarkdown(absPath: string, content: string): void {
 	setTabs((prev) => reseedMarkdownTab(prev, absPath, content));
+}
+
+/** Reseed an open Excalidraw tab after an external/Agent write. */
+export function refreshTabExcalidraw(absPath: string, content: string): void {
+	setTabs((prev) => refreshExcalidrawTab(prev, absPath, content));
 }

@@ -261,5 +261,8 @@
 	"image": {
 		"empty": "暂无图片。",
 		"altFallback": "图片预览"
+	},
+	"excalidraw": {
+		"empty": "暂无可用绘图。"
 	}
 }

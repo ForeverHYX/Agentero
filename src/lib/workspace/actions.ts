@@ -94,6 +94,7 @@ import {
 	refreshTabExcalidraw,
 	refreshTabMarkdown,
 	refreshTabNotes,
+	refreshTabText,
 	setActiveTabId,
 	setTabs,
 	takeClosedTab,
@@ -123,6 +124,7 @@ import {
 	removeTab,
 	removeTabsUnderPath,
 	reseedExcalidrawTab,
+	reseedTextTab,
 	revokeTabMediaSources,
 	splitPaneIdForPath,
 	syncTabSeedsForPath,
@@ -1200,6 +1202,9 @@ const markdownPersistQueues = new Map<string, Promise<boolean>>();
 /** Serialize Excalidraw saves per absolute path. */
 const excalidrawPersistQueues = new Map<string, Promise<boolean>>();
 
+/** Serialize plain-text editor saves per absolute path. */
+const textPersistQueues = new Map<string, Promise<boolean>>();
+
 /**
  * Where disk-change reseeds land. The main window uses the workspace tab
  * store; doc popout windows pass a single-tab sink over local React state.
@@ -1209,6 +1214,7 @@ export type DiskChangeSink = {
 	refreshNotes: (paperDir: string, content: string) => void;
 	refreshMarkdown: (absPath: string, content: string) => void;
 	refreshExcalidraw: (absPath: string, content: string) => void;
+	refreshText: (absPath: string, content: string) => void;
 };
 
 const defaultDiskChangeSink: DiskChangeSink = {
@@ -1216,6 +1222,7 @@ const defaultDiskChangeSink: DiskChangeSink = {
 	refreshNotes: refreshTabNotes,
 	refreshMarkdown: refreshTabMarkdown,
 	refreshExcalidraw: refreshTabExcalidraw,
+	refreshText: refreshTabText,
 };
 
 /**
@@ -1240,7 +1247,15 @@ export async function applyDiskChange(
 	const excalidrawOwners = openTabs.filter(
 		(t) => normalizeTabPath(t.path) === norm && t.mode === "excalidraw",
 	);
-	if (!notesOwners.length && !mdOwners.length && !excalidrawOwners.length)
+	const textOwners = openTabs.filter(
+		(t) => normalizeTabPath(t.path) === norm && t.mode === "text",
+	);
+	if (
+		!notesOwners.length &&
+		!mdOwners.length &&
+		!excalidrawOwners.length &&
+		!textOwners.length
+	)
 		return;
 	let content: string;
 	try {
@@ -1286,6 +1301,15 @@ export async function applyDiskChange(
 			sink.refreshExcalidraw(absPath, content);
 		};
 		if (excalidrawTab.excalidrawDirty) promptReload(reload);
+		else reload();
+	}
+	for (const textTab of textOwners) {
+		if (content === textTab.textSeed) continue;
+		const reload = () => {
+			guard();
+			sink.refreshText(absPath, content);
+		};
+		if (textTab.textDirty) promptReload(reload);
 		else reload();
 	}
 }
@@ -1398,6 +1422,59 @@ export function persistExcalidrawFile(
 		() => {
 			if (excalidrawPersistQueues.get(normalizedPath) === attempt) {
 				excalidrawPersistQueues.delete(normalizedPath);
+			}
+		},
+	);
+	return attempt;
+}
+
+/**
+ * Persist a plain-text editor file to disk. The CodeMirror TextEditor calls
+ * this with its own fixed path (debounced autosave and unmount flush).
+ */
+export function persistTextFile(
+	path: string,
+	content: string,
+	lastSaved: string,
+): Promise<boolean> {
+	if (!isTauri() || !getVaultPath() || !path) return Promise.resolve(false);
+	const normalizedPath = normalizeTabPath(path);
+	const previous =
+		textPersistQueues.get(normalizedPath) ?? Promise.resolve(false);
+	const attempt = previous
+		.catch(() => false)
+		.then(async () => {
+			if (reseedGuard.has(normalizedPath)) return false;
+			try {
+				const disk = await readVaultFile(path);
+				if (disk !== lastSaved) {
+					const name = path.split(/[\\/]/).pop() ?? path;
+					notifyWarning(i18n.t("app:diskConflict.saveBlocked", { name }));
+					return false;
+				}
+			} catch {
+				// Missing/unreadable file → no conflict to guard against.
+			}
+			try {
+				await writeVaultFile(path, content);
+				trackSelfWrittenPath(path);
+				setTabs((prev) => reseedTextTab(prev, path, content));
+				return true;
+			} catch (e) {
+				notifyError(errorText(e));
+				return false;
+			}
+		});
+	textPersistQueues.set(normalizedPath, attempt);
+	void attempt.then(
+		() => {
+			if (textPersistQueues.get(normalizedPath) === attempt) {
+				textPersistQueues.delete(normalizedPath);
+			}
+		},
+		() => {
+			if (textPersistQueues.get(normalizedPath) === attempt) {
+				textPersistQueues.delete(normalizedPath);
 			}
 		},
 	);

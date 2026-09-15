@@ -50,6 +50,7 @@ import {
 	openTranslationTab,
 	persistExcalidrawFile,
 	persistFile,
+	persistTextFile,
 } from "@/lib/workspace/actions";
 import { registerDockHandle } from "@/lib/workspace/dock-registry";
 import { evictPdfBuffers, nextPdfLru } from "@/lib/workspace/pdf-retention";
@@ -147,7 +148,11 @@ export function WorkspaceHost() {
 	const visibleEditorIds = useMemo(() => {
 		const visible = new Set(visiblePanelIds);
 		return tabs
-			.filter((tab) => tab.mode === "markdown" && visible.has(tab.id))
+			.filter(
+				(tab) =>
+					(tab.mode === "markdown" || tab.mode === "text") &&
+					visible.has(tab.id),
+			)
 			.map((tab) => tab.id);
 	}, [tabs, visiblePanelIds]);
 
@@ -167,13 +172,17 @@ export function WorkspaceHost() {
 		);
 	}, [activeTab?.mode, activeTab?.id, tabs, visiblePdfIds]);
 
-	// Same keep-alive for Markdown editors: evicted tabs drop back to a
-	// placeholder and re-deserialize only when their group exposes them again.
+	// Same keep-alive for Markdown editors (and the CodeMirror text editor):
+	// evicted tabs drop back to a placeholder and re-deserialize only when
+	// their group exposes them again.
 	useEffect(() => {
 		const ids = tabs
-			.filter((tab) => tab.mode === "markdown")
+			.filter((tab) => tab.mode === "markdown" || tab.mode === "text")
 			.map((tab) => tab.id);
-		const activeEditor = activeTab?.mode === "markdown" ? activeTab.id : null;
+		const activeEditor =
+			activeTab?.mode === "markdown" || activeTab?.mode === "text"
+				? activeTab.id
+				: null;
 		if (!ids.length) {
 			setEditorLru((previous) => (previous.length ? [] : previous));
 			return;
@@ -319,6 +328,13 @@ export function WorkspaceHost() {
 		}),
 		[],
 	);
+	const textProps = useMemo(
+		() => ({
+			onPersistFile: persistTextFile,
+			onTabPatch: updateTab,
+		}),
+		[],
+	);
 	const centerProps = useMemo(
 		() => ({
 			vaultPath,
@@ -326,6 +342,7 @@ export function WorkspaceHost() {
 			editor: editorProps,
 			pdf: pdfProps,
 			excalidraw: excalidrawProps,
+			text: textProps,
 			onTrashChanged: handleTrashReload,
 			trashReloadSignal,
 		}),
@@ -335,6 +352,7 @@ export function WorkspaceHost() {
 			editorProps,
 			pdfProps,
 			excalidrawProps,
+			textProps,
 			handleTrashReload,
 			trashReloadSignal,
 		],

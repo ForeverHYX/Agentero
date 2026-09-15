@@ -37,6 +37,11 @@ const ExcalidrawViewer = lazy(() =>
 		default: m.ExcalidrawViewer,
 	})),
 );
+const TextEditor = lazy(() =>
+	import("@/components/viewer/text-editor").then((m) => ({
+		default: m.TextEditor,
+	})),
+);
 
 /** Library-tab-only props (ignored by PDF / editor / trash). */
 export type DocViewLibraryProps = {
@@ -104,6 +109,16 @@ export type DocViewExcalidrawProps = {
 	onTabPatch: (id: string, patch: Partial<DocTab>) => void;
 };
 
+/** Plain-text (CodeMirror) editor props. */
+export type DocViewTextProps = {
+	onPersistFile: (
+		path: string,
+		content: string,
+		lastSaved: string,
+	) => Promise<boolean>;
+	onTabPatch: (id: string, patch: Partial<DocTab>) => void;
+};
+
 export type DocViewProps = {
 	/** Primary tab or split pane (shared fields). */
 	tab: DocTab;
@@ -121,6 +136,7 @@ export type DocViewProps = {
 	editor: DocViewEditorProps;
 	pdf: DocViewPdfProps;
 	excalidraw: DocViewExcalidrawProps;
+	text: DocViewTextProps;
 	onTrashChanged: () => void;
 	/** Bump to reload recycle bin after Empty Recycle Bin from the sidebar. */
 	trashReloadSignal?: number;
@@ -176,6 +192,7 @@ function docViewPropsEqual(prev: DocViewProps, next: DocViewProps): boolean {
 	if (tab.kind === "plaza") return true;
 	if (tab.mode === "markdown") return prev.editor === next.editor;
 	if (tab.mode === "excalidraw") return prev.excalidraw === next.excalidraw;
+	if (tab.mode === "text") return prev.text === next.text;
 	if (tab.mode === "pdf" || tab.mode === "translation")
 		return prev.pdf === next.pdf;
 	return true;
@@ -191,6 +208,7 @@ export const DocView = memo(function DocView({
 	editor,
 	pdf,
 	excalidraw,
+	text,
 	onTrashChanged,
 	trashReloadSignal = 0,
 }: DocViewProps) {
@@ -408,6 +426,28 @@ export const DocView = memo(function DocView({
 						onDirtyChange={(d) =>
 							excalidraw.onTabPatch(tab.id, { excalidrawDirty: d })
 						}
+						className="h-full w-full"
+					/>
+				</Suspense>
+			</div>
+		);
+	}
+	if (tab.mode === "text") {
+		// Same keep-alive gate as the Markdown editor: an evicted tab's
+		// unmount flushes its pending autosave; remount re-seeds from disk.
+		if (!active && !keepMounted) return <TabLoadingSkeleton />;
+		return (
+			<div className="relative min-h-0 min-w-0 flex-1 overflow-hidden">
+				<Suspense fallback={<TabLoadingSkeleton />}>
+					<TextEditor
+						// Stable per-tab key: external disk changes swap the document
+						// in place via `reloadKey` (view state and scroll survive).
+						key={`text-${tab.id}`}
+						seed={tab.textSeed}
+						path={tab.path}
+						reloadKey={tab.textKey}
+						onPersist={text.onPersistFile}
+						onDirtyChange={(d) => text.onTabPatch(tab.id, { textDirty: d })}
 						className="h-full w-full"
 					/>
 				</Suspense>

@@ -348,7 +348,8 @@ function rendererForMode(mode: CenterViewMode): DockviewPanelRenderer {
 	return mode === "pdf" ||
 		mode === "markdown" ||
 		mode === "translation" ||
-		mode === "excalidraw"
+		mode === "excalidraw" ||
+		mode === "text"
 		? "always"
 		: "onlyWhenVisible";
 }

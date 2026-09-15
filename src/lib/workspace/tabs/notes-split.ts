@@ -248,6 +248,44 @@ export function refreshExcalidrawTab(
 	});
 }
 
+/** Reseed an open plain-text tab after our own save (no reload needed). */
+export function reseedTextTab(
+	prev: DocTab[],
+	absPath: string,
+	content: string,
+): DocTab[] {
+	const key = normalizeTabPath(absPath);
+	return prev.map((t) => {
+		if (normalizeTabPath(t.path) === key && t.mode === "text") {
+			return { ...t, textSeed: content, textDirty: false };
+		}
+		return t;
+	});
+}
+
+/**
+ * Refresh an open plain-text tab from disk (bumps key; the editor swaps the
+ * document in place — no remount, scroll and view state survive).
+ */
+export function refreshTextTab(
+	prev: DocTab[],
+	absPath: string,
+	content: string,
+): DocTab[] {
+	const key = normalizeTabPath(absPath);
+	return prev.map((t) => {
+		if (normalizeTabPath(t.path) === key && t.mode === "text") {
+			return {
+				...t,
+				textSeed: content,
+				textDirty: false,
+				textKey: t.textKey + 1,
+			};
+		}
+		return t;
+	});
+}
+
 /** Keep the seed of the tab(s) owning `path` in sync after a disk write. */
 export function syncTabSeedsForPath(
 	prev: DocTab[],

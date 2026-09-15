@@ -12,6 +12,7 @@ import {
 	getRemoteArxivPaperByPath,
 	isPaperDirectory,
 	isRemoteArxivPath,
+	isUnderPapers,
 	loadPaperMetadata,
 	loadPaperOpenBundle,
 	localFileToArrayBuffer,
@@ -254,12 +255,15 @@ export async function loadTabResources(
 	// Non-paper directory (org folder under papers/, notes/, etc.) → scoped library.
 	// Tree may be empty during tab restore before refreshTree completes: fall back to
 	// "not an openable file" so folder paths still reopen as library scope tabs.
+	// Outside `papers/` any extension-bearing path is a plain-text fallback file;
+	// extension-less names stay directory-suspect for that restore race.
 	const looksLikeOpenableFile =
 		isPdfPath(path) ||
 		isImagePath(path) ||
 		isHtmlPath(path) ||
 		isExcalidrawPath(path) ||
-		isTextOpenable(path);
+		isTextOpenable(path) ||
+		(!isUnderPapers(path) && /\.[^\\/]+$/.test(path));
 	if (
 		!paperDir &&
 		(treeNode?.kind === "directory" ||
@@ -492,6 +496,18 @@ export async function loadTabResources(
 			return { ...base, mode: "excalidraw", excalidrawSeed };
 		} catch (e) {
 			return { ...base, mode: "excalidraw", error: errorText(e) };
+		}
+	}
+
+	// CodeMirror plain-text fallback (Papers 外未知/文本扩展名). Unlike the
+	// Markdown editor this accepts any extension — the text editor is the
+	// catch-all viewer, so no isTextOpenable gate here.
+	if (mode === "text") {
+		try {
+			const textSeed = await readVaultFile(path);
+			return { ...base, textSeed };
+		} catch (e) {
+			return { ...base, error: errorText(e) };
 		}
 	}
 

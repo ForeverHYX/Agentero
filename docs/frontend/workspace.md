@@ -25,11 +25,26 @@
 
 布局只存 dockview `toJSON()`；path/mode/title 在 panel params。同一路径可存在多个 split pane，panel id 保留 pane 实例后缀用于恢复布局。Tab 条上的论文标题经 `MathText` 渲染内联公式（`$\\pi$` 等）；`panel.api.setTitle` 仍存原始字符串。
 
-启动恢复只 hydrate 每个 Dockview group 当前可见的 panel；隐藏标签在首次切换到前台时再读取资源。恢复出的占位 tab 直接用 params 里的 title 显示（论文名），无需等资源加载；未携带 title 的旧布局回退为文件夹名，激活后由资源加载刷新。PDFium 保留当前可见与最近使用的至多两个 PDF viewer，本地 PDF `ArrayBuffer` 离开保留集合后释放，避免多标签工作区重启时并发加载全部 PDF 并长期占用 WebContent 内存；重新 hydrate 既有 PDF tab 时只刷新资源，不因一次 PDF 探测失败降级成 Markdown 空编辑器；同一保护（`patchFromTabResources`）覆盖 ⇧⌘T 重开与文档弹出窗。资源侧论文正文只产出 pdf / html（`paperBodyMode`）：探测全空且 catalog bundle / 元数据也落空时先延迟重试一次（启动时 Host catalog 或 fs scope 未就绪的竞态），仍无资源则停在 PDF「暂无论文」空态，绝不渲染空 Markdown 编辑器；paper 文件夹内的子目录按 scoped library 打开，同样不进编辑器。Markdown 编辑器（含 NOTES）同样保活：至多两个最近使用的编辑器保持挂载，切换标签不再重建 Plate；离开保留集合的编辑器卸载为占位，切回时重新反序列化，卸载时未落盘的编辑会照常 flush。
+启动恢复只 hydrate 每个 Dockview group 当前可见的 panel；隐藏标签在首次切换到前台时再读取资源。恢复出的占位 tab 直接用 params 里的 title 显示（论文名），无需等资源加载；未携带 title 的旧布局回退为文件夹名，激活后由资源加载刷新。PDFium 保留当前可见与最近使用的至多两个 PDF viewer，本地 PDF `ArrayBuffer` 离开保留集合后释放，避免多标签工作区重启时并发加载全部 PDF 并长期占用 WebContent 内存；重新 hydrate 既有 PDF tab 时只刷新资源，不因一次 PDF 探测失败降级成 Markdown 空编辑器；同一保护（`patchFromTabResources`）覆盖 ⇧⌘T 重开与文档弹出窗。资源侧论文正文只产出 pdf / html（`paperBodyMode`）：探测全空且 catalog bundle / 元数据也落空时先延迟重试一次（启动时 Host catalog 或 fs scope 未就绪的竞态），仍无资源则停在 PDF「暂无论文」空态，绝不渲染空 Markdown 编辑器；paper 文件夹内的子目录按 scoped library 打开，同样不进编辑器。Markdown 编辑器（含 NOTES）与纯文本编辑器同样保活：至多两个最近使用的编辑器保持挂载，切换标签不再重建 Plate / CodeMirror；离开保留集合的编辑器卸载为占位，切回时重新反序列化，卸载时未落盘的编辑会照常 flush。
+
+## 纯文本编辑器（CodeMirror 兜底）
+
+`papers/` 之外的文本文件在专用查看器（PDF / HTML / 图片 / Excalidraw / Markdown）都不命中时，落入 CodeMirror 6 纯文本编辑器（`text` 模式），承担「未知格式兜底查看器」的角色；`papers/` 内部保持原 Markdown 行为不变（paper 域文件不降级为原始文本缓冲）。
+
+| 项 | 方案 |
+|---|---|
+| 路由 | `preferredModeForPath`：专用扩展名优先，`.md` 显式回 Markdown，`isUnderPapers` 拦截，其余一律 `text`（不设 `isTextOpenable` 白名单门槛——兜底查看器不做过滤） |
+| 高亮 | `textLanguageIdForPath`：`json` / `yaml(yml)` / `python(py,pyw)` / `tex(sty,cls)` / `bib`；`.txt` 与未知扩展名为纯文本 |
+| 语言实现 | `@codemirror/lang-json`、`@codemirror/lang-python`；stex / yaml 走 `@codemirror/legacy-modes` StreamLanguage；`.bib` 用内置最小 BibTeX tokenizer（`%{}%` 注释、`@type`、字段、字符串） |
+| 代码提示 | TeX / BibTeX 自定义补全经 `language.data.of({ autocomplete })` 挂进语言数据（`\命令` 列表；`@` 后条目类型、条目内行首字段名）；JSON / Python 用语言包自带补全 |
+| 换行 | `EditorView.lineWrapping` 全局启用 |
+| 主题 | 基础 chrome 走 shadcn CSS 变量（`--foreground` / `--font-mono` / `--muted` …），语法色 light 用默认高亮、dark 用 oneDark，`Compartment` 随 `resolvedTheme` 热切换 |
+| 生命周期 | 与 ExcalidrawViewer 同契约：props 播种 + `reloadKey` 信号，内容 / dirty / 800ms 防抖自动保存由编辑器持有，`persistTextFile` 带磁盘冲突守卫与按路径写队列；外部改盘 `reloadKey` bump 后**原地换 doc**（视图、滚动、撤销历史保留，不重挂载） |
+| 接入 | 懒加载 chunk（`doc-view.tsx` 分支）；dockview `renderer: 'always'` + 编辑器 LRU 保活；弹出窗 watcher / 会话恢复 / `applyDiskChange` 均已覆盖 `text` 模式 |
 
 ## 面板类型
 
-Library · Trash · PDF · HTML · 图片 · Markdown · 论文 NOTES。
+Library · Trash · PDF · HTML · 图片 · Markdown · 论文 NOTES · 纯文本（CodeMirror）。
 
 ## 代码
 
@@ -39,6 +54,8 @@ Library · Trash · PDF · HTML · 图片 · Markdown · 论文 NOTES。
 | `src/lib/shell/leaf.ts` | leaf 打开 / `moveDocToWindow` |
 | `src/lib/shell/doc-window.ts` | `doc_window_open` 前端封装 |
 | `src/components/shell/doc-window-root.tsx` | 文档弹出窗根 |
+| `src/components/viewer/text-editor.tsx` | CodeMirror 纯文本编辑器（`text` 兜底模式） |
+| `src/components/viewer/text-editor-language.ts` | 扩展名 → 语言 / 自定义补全映射 |
 | `src/lib/workspace/store.ts` | tabs / active / dockLayout |
 | `src/lib/workspace/tabs/` | DocTab 模型、NOTES 分屏、持久化 |
 | `src/lib/workspace/dock-registry.ts` | 命令式 dockview 句柄 |

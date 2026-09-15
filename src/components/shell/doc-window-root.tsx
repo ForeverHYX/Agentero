@@ -27,6 +27,7 @@ import {
 	applyDiskChange,
 	persistExcalidrawFile,
 	persistFile,
+	persistTextFile,
 } from "@/lib/workspace/actions";
 import {
 	createPlaceholderTab,
@@ -34,6 +35,7 @@ import {
 	loadTabResources,
 	patchFromTabResources,
 	refreshExcalidrawTab,
+	refreshTextTab,
 	reseedMarkdownTab,
 	reseedNotesTab,
 	syncTabSeedsForPath,
@@ -200,6 +202,12 @@ export function DocWindowRoot() {
 					return refreshExcalidrawTab([prev], absPath, content)[0] ?? prev;
 				});
 			},
+			refreshText: (absPath: string, content: string) => {
+				setTab((prev) => {
+					if (!prev) return prev;
+					return refreshTextTab([prev], absPath, content)[0] ?? prev;
+				});
+			},
 		}),
 		[],
 	);
@@ -207,6 +215,14 @@ export function DocWindowRoot() {
 	const excalidrawProps = useMemo(
 		() => ({
 			onPersistFile: persistExcalidrawFile,
+			onTabPatch: onTabPatch,
+		}),
+		[onTabPatch],
+	);
+
+	const textProps = useMemo(
+		() => ({
+			onPersistFile: persistTextFile,
 			onTabPatch: onTabPatch,
 		}),
 		[onTabPatch],
@@ -310,6 +326,7 @@ export function DocWindowRoot() {
 						editor={editorProps}
 						pdf={PDF_STUB}
 						excalidraw={excalidrawProps}
+						text={textProps}
 						onTrashChanged={NOOP_TRASH_CHANGED}
 					/>
 				)}

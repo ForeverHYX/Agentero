@@ -7,6 +7,7 @@ import {
 	isImageViewerSource,
 	isPdfPath,
 	preferredModeForPath,
+	textLanguageIdForPath,
 } from "@/lib/workspace/viewer";
 
 describe("viewer path helpers", () => {
@@ -33,6 +34,33 @@ describe("viewer path helpers", () => {
 		expect(preferredModeForPath("/a/b.excalidraw")).toBe("excalidraw");
 		expect(preferredModeForPath("/a/b.md")).toBe("markdown");
 		expect(preferredModeForPath(null)).toBe("markdown");
+	});
+
+	it("falls back to the text editor only outside papers/", () => {
+		expect(preferredModeForPath("/vault/notes/config.toml")).toBe("text");
+		expect(preferredModeForPath("/vault/README")).toBe("text");
+		expect(preferredModeForPath("/vault/notes/data.json")).toBe("text");
+		// Inside papers/ the legacy behavior stands: markdown, never text.
+		expect(preferredModeForPath("/vault/papers/2401.0001/notes/org.md")).toBe(
+			"markdown",
+		);
+		expect(preferredModeForPath("/vault/papers/2401.0001/data/misc.dat")).toBe(
+			"markdown",
+		);
+		// Dedicated viewers still win under papers/.
+		expect(preferredModeForPath("/vault/papers/2401.0001/main.pdf")).toBe(
+			"pdf",
+		);
+	});
+
+	it("maps text editor languages from extensions", () => {
+		expect(textLanguageIdForPath("/a/config.json")).toBe("json");
+		expect(textLanguageIdForPath("/a/ci.YML")).toBe("yaml");
+		expect(textLanguageIdForPath("/a/main.py")).toBe("python");
+		expect(textLanguageIdForPath("/a/main.tex")).toBe("tex");
+		expect(textLanguageIdForPath("/a/ref.bib")).toBe("bib");
+		expect(textLanguageIdForPath("/a/notes.txt")).toBe(null);
+		expect(textLanguageIdForPath("/a/README")).toBe(null);
 	});
 
 	it("detects excalidraw extensions", () => {

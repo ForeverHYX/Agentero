@@ -87,9 +87,9 @@ function saveOpts(o: SavedOpts) {
 	writeJsonStorage(OPTS_KEY, o);
 }
 
-/** "View import tutorial" target. Replace with your hosted tutorial/docs URL. */
+/** "View import tutorial" target: the "Migrate from Zotero" section of the docs site. */
 const IMPORT_TUTORIAL_URL =
-	"https://github.com/poco-ai/motif/blob/main/docs/backend/identifier-lookup.md";
+	"https://agentero-docs.poco-ai.com/usage/import-papers/#zotero";
 function openTutorial() {
 	void openUrl(IMPORT_TUTORIAL_URL).catch(() => {
 		window.open(IMPORT_TUTORIAL_URL, "_blank");

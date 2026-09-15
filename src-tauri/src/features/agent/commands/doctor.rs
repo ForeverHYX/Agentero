@@ -1,4 +1,4 @@
-use crate::app::terminal::open_terminal_confirm_command;
+use crate::app::terminal::open_terminal_confirm_login;
 use crate::core::error::{map_err, ApiResult};
 use crate::features::agent::doctor::{
     diagnose_host, install_node, HostDoctorReport, NodeInstallResult,
@@ -68,7 +68,7 @@ pub fn doctor_open_agent_login_terminal(template_id: String) -> ApiResult<()> {
             "agent template does not define a login command",
         ));
     };
-    match open_terminal_confirm_command(command) {
+    match open_terminal_confirm_login(command) {
         Ok(()) => ApiResult::ok(()),
         Err(error) => map_err(error),
     }

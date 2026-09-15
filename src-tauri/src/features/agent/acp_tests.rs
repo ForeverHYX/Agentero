@@ -78,7 +78,7 @@ mod acp_live {
             .find(|entry| entry.id == "codex-acp")
             .expect("Codex template");
 
-        assert_eq!(claude.login_command.as_deref(), Some("claude login"));
+        assert_eq!(claude.login_command.as_deref(), Some("claude auth login"));
         assert_eq!(codex.login_command.as_deref(), Some("codex login"));
     }
 

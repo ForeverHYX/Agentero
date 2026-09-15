@@ -35,29 +35,76 @@ pub fn open_in_terminal(path: &Path) -> Result<PathBuf, AppError> {
     Ok(cwd)
 }
 
+/// Copy shown inside a confirm-to-run terminal (banner title, post-run hint and
+/// temp script name prefix), so install and login flows read correctly.
+struct ConfirmCopy {
+    /// Temp script file prefix ("install" / "login").
+    stem: &'static str,
+    /// Banner title printed above the command.
+    title: &'static str,
+    /// Hint printed after the command finishes successfully.
+    done_hint: &'static str,
+}
+
+#[cfg(windows)]
+const CONFIRM_INSTALL: ConfirmCopy = ConfirmCopy {
+    stem: "install",
+    title: "Agentero - install helper",
+    done_hint: "Done. Return to Agentero Settings - Agent and click Refresh.",
+};
+
+#[cfg(windows)]
+const CONFIRM_LOGIN: ConfirmCopy = ConfirmCopy {
+    stem: "login",
+    title: "Agentero - agent login",
+    done_hint: "Done. Agentero will re-check the login status automatically.",
+};
+
+#[cfg(not(windows))]
+const CONFIRM_INSTALL: ConfirmCopy = ConfirmCopy {
+    stem: "install",
+    title: "Agentero — install helper",
+    done_hint: "Done. Return to Agentero → Settings → Agent and click Refresh.",
+};
+
+#[cfg(not(windows))]
+const CONFIRM_LOGIN: ConfirmCopy = ConfirmCopy {
+    stem: "login",
+    title: "Agentero — agent login",
+    done_hint: "Done. Agentero will re-check the login status automatically.",
+};
+
 /// Open a system terminal that prints `command`, waits for Enter (or Ctrl+C), then runs it.
 ///
 /// Used for guided installs (e.g. Claude ACP adapter). The shell never auto-runs without
 /// confirmation. Only trusted Host-side callers should pass commands.
 pub fn open_terminal_confirm_command(command: &str) -> Result<(), AppError> {
+    confirm_script(command, &CONFIRM_INSTALL)
+}
+
+/// Same confirm-to-run terminal as [`open_terminal_confirm_command`], worded for
+/// agent CLI OAuth login flows (e.g. `codex login`, `claude auth login`).
+pub fn open_terminal_confirm_login(command: &str) -> Result<(), AppError> {
+    confirm_script(command, &CONFIRM_LOGIN)
+}
+
+fn confirm_script(command: &str, copy: &ConfirmCopy) -> Result<(), AppError> {
     let command = command.trim();
     if command.is_empty() {
-        return Err(AppError::message("install command is required"));
+        return Err(AppError::message("command is required"));
     }
     // Reject multi-line / shell metacharacter abuse from unexpected callers.
     if command.contains('\n') || command.contains('\r') || command.contains(';') {
-        return Err(AppError::message(
-            "install command contains disallowed characters",
-        ));
+        return Err(AppError::message("command contains disallowed characters"));
     }
 
     #[cfg(windows)]
     {
-        open_terminal_confirm_command_windows(command)
+        open_terminal_confirm_command_windows(command, copy)
     }
     #[cfg(not(windows))]
     {
-        open_terminal_confirm_command_unix(command)
+        open_terminal_confirm_command_unix(command, copy)
     }
 }
 
@@ -100,7 +147,7 @@ pub fn open_terminal_confirm_remote_install(
     {
         // Single remote command string so the whole npm line is the -c payload.
         let command = format!("ssh -t {destination} -- \"bash -lc {install_command:?}\"");
-        open_terminal_confirm_command_windows(&command)
+        open_terminal_confirm_command_windows(&command, &CONFIRM_INSTALL)
     }
     #[cfg(not(windows))]
     {
@@ -219,8 +266,8 @@ echo "You can close this window."
 }
 
 #[cfg(not(windows))]
-fn open_terminal_confirm_command_unix(command: &str) -> Result<(), AppError> {
-    let script_path = write_confirm_script_unix(command)?;
+fn open_terminal_confirm_command_unix(command: &str, copy: &ConfirmCopy) -> Result<(), AppError> {
+    let script_path = write_confirm_script_unix(command, copy)?;
     let script = script_path.to_string_lossy().replace('\'', "'\\''");
 
     #[cfg(target_os = "macos")]
@@ -312,18 +359,20 @@ fn open_terminal_confirm_command_unix(command: &str) -> Result<(), AppError> {
 }
 
 #[cfg(not(windows))]
-fn write_confirm_script_unix(command: &str) -> Result<PathBuf, AppError> {
+fn write_confirm_script_unix(command: &str, copy: &ConfirmCopy) -> Result<PathBuf, AppError> {
     let dir = std::env::temp_dir().join("agentero-install");
     fs::create_dir_all(&dir)
         .map_err(|e| AppError::message(format!("failed to create temp dir: {e}")))?;
-    let path = dir.join(format!("install-{}.sh", std::process::id()));
+    let path = dir.join(format!("{}-{}.sh", copy.stem, std::process::id()));
     // Single-quoted shell literal for the command display/run.
     let quoted = command.replace('\'', "'\\''");
+    let title = copy.title;
+    let done_hint = copy.done_hint;
     let body = format!(
         r#"#!/usr/bin/env bash
 set +e
 echo ""
-echo "Agentero — install helper"
+echo "{title}"
 echo "Command:"
 echo "  {command}"
 echo ""
@@ -335,7 +384,7 @@ bash -lc '{quoted}'
 status=$?
 echo ""
 if [ "$status" -eq 0 ]; then
-  echo "Done. Return to Agentero → Settings → Agent and click Refresh."
+  echo "{done_hint}"
 else
   echo "Command exited with status $status."
 fi
@@ -358,16 +407,21 @@ echo "You can close this window."
 }
 
 #[cfg(windows)]
-fn open_terminal_confirm_command_windows(command: &str) -> Result<(), AppError> {
+fn open_terminal_confirm_command_windows(
+    command: &str,
+    copy: &ConfirmCopy,
+) -> Result<(), AppError> {
     let dir = std::env::temp_dir().join("agentero-install");
     fs::create_dir_all(&dir)
         .map_err(|e| AppError::message(format!("failed to create temp dir: {e}")))?;
-    let path = dir.join(format!("install-{}.cmd", std::process::id()));
+    let path = dir.join(format!("{}-{}.cmd", copy.stem, std::process::id()));
+    let title = copy.title;
+    let done_hint = copy.done_hint;
     // Escape ^ and & for cmd.exe display; the install command itself is simple npm.
     let body = format!(
         "@echo off\r\n\
 echo.\r\n\
-echo Agentero - install helper\r\n\
+echo {title}\r\n\
 echo Command:\r\n\
 echo   {command}\r\n\
 echo.\r\n\
@@ -379,7 +433,7 @@ echo Running...\r\n\
 set STATUS=%ERRORLEVEL%\r\n\
 echo.\r\n\
 if %STATUS%==0 (\r\n\
-  echo Done. Return to Agentero Settings - Agent and click Refresh.\r\n\
+  echo {done_hint}\r\n\
 ) else (\r\n\
   echo Command exited with status %STATUS%.\r\n\
 )\r\n\

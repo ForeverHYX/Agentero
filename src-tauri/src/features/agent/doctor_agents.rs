@@ -7,7 +7,7 @@ use crate::features::agent::acp::client::{
 };
 use crate::features::agent::acp::probe_agent;
 use crate::features::agent::doctor::{
-    diagnose_codex_auth, diagnose_tool, CodexAuthStatus, HostToolStatus,
+    diagnose_claude_auth, diagnose_codex_auth, diagnose_tool, CodexAuthStatus, HostToolStatus,
 };
 use crate::features::agent::models::{AgentDescriptor, AgentTemplate, ProbeResult};
 use crate::features::agent::registry::store::chrono_like_now;
@@ -251,18 +251,26 @@ async fn diagnostic(desc: &AgentDescriptor, result: &ProbeResult) -> AgentAcpDia
             }
         });
 
-    let auth_status = if desc.template == AgentTemplate::CodexAcp {
-        // Probe already fails Codex when `login status` is unauthenticated; reuse that
-        // signal and only re-query when the failure reason is ambiguous.
-        match failure_category {
-            Some(AcpFailureCategory::NotLoggedIn) => AgentAuthStatus::Unauthenticated,
-            Some(AcpFailureCategory::CommandMissing) => AgentAuthStatus::NotApplicable,
-            _ if result.available => AgentAuthStatus::Authenticated,
-            _ => auth_from_codex(diagnose_codex_auth(desc).await.status),
-        }
-    } else {
-        auth_status_from_probe(result, failure_category)
-    };
+    let auth_status =
+        if desc.template == AgentTemplate::CodexAcp || desc.template == AgentTemplate::ClaudeAcp {
+            // Probe already fails OAuth-gated agents when login status is unauthenticated;
+            // reuse that signal and only re-query when the failure reason is ambiguous.
+            match failure_category {
+                Some(AcpFailureCategory::NotLoggedIn) => AgentAuthStatus::Unauthenticated,
+                Some(AcpFailureCategory::CommandMissing) => AgentAuthStatus::NotApplicable,
+                _ if result.available => AgentAuthStatus::Authenticated,
+                _ => {
+                    let diagnosed = if desc.template == AgentTemplate::ClaudeAcp {
+                        diagnose_claude_auth(desc).await.status
+                    } else {
+                        diagnose_codex_auth(desc).await.status
+                    };
+                    auth_from_codex(diagnosed)
+                }
+            }
+        } else {
+            auth_status_from_probe(result, failure_category)
+        };
 
     AgentAcpDiagnostic {
         agent_id: desc.id.clone(),

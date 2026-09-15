@@ -335,6 +335,54 @@ pub(crate) async fn diagnose_codex_auth(desc: &AgentDescriptor) -> CodexAuthDiag
     diagnose_codex_auth_in_env(desc, &environment).await
 }
 
+/// Claude Code auth state via `claude auth status` (JSON with a `loggedIn` flag).
+pub(crate) async fn diagnose_claude_auth(desc: &AgentDescriptor) -> CodexAuthDiagnostic {
+    let environment = effective_local_agent_env(desc);
+    let Some(claude) = resolve_command_in_agent_env("claude", &environment) else {
+        return CodexAuthDiagnostic {
+            status: CodexAuthStatus::NotApplicable,
+            method: None,
+            detail: Some("claude is not installed".to_string()),
+        };
+    };
+    match run_command(claude.as_path(), &["auth", "status"], &environment).await {
+        Ok(output) => parse_claude_auth_output(&output),
+        Err(detail) => CodexAuthDiagnostic {
+            status: CodexAuthStatus::Unknown,
+            method: None,
+            detail: Some(detail),
+        },
+    }
+}
+
+/// `claude auth status` prints JSON like `{"loggedIn": true, "authMethod": "oauth_token"}`
+/// regardless of the exit code; fall back to the text heuristics when the shape differs.
+fn parse_claude_auth_output(output: &CommandOutput) -> CodexAuthDiagnostic {
+    if let Ok(value) = serde_json::from_str::<serde_json::Value>(&output.stdout) {
+        match value.get("loggedIn").and_then(serde_json::Value::as_bool) {
+            Some(true) => {
+                return CodexAuthDiagnostic {
+                    status: CodexAuthStatus::Authenticated,
+                    method: value
+                        .get("authMethod")
+                        .and_then(serde_json::Value::as_str)
+                        .map(str::to_string),
+                    detail: None,
+                };
+            }
+            Some(false) => {
+                return CodexAuthDiagnostic {
+                    status: CodexAuthStatus::Unauthenticated,
+                    method: None,
+                    detail: None,
+                };
+            }
+            None => {}
+        }
+    }
+    parse_auth_output(output)
+}
+
 async fn npm_prefix(
     npm: &HostToolDiagnostic,
     environment: &HashMap<String, String>,
@@ -573,5 +621,37 @@ mod tests {
             result.detail.as_deref(),
             Some("status command exited with 7")
         );
+    }
+
+    #[test]
+    fn parses_claude_logged_in_json() {
+        let result = parse_claude_auth_output(&output(
+            true,
+            0,
+            "{\"loggedIn\": true, \"authMethod\": \"oauth_token\"}\n",
+            "",
+        ));
+        assert_eq!(result.status, CodexAuthStatus::Authenticated);
+        assert_eq!(result.method.as_deref(), Some("oauth_token"));
+        assert!(result.detail.is_none());
+    }
+
+    #[test]
+    fn parses_claude_logged_out_json_even_on_failure_exit() {
+        let result = parse_claude_auth_output(&output(false, 1, "{\"loggedIn\": false}\n", ""));
+        assert_eq!(result.status, CodexAuthStatus::Unauthenticated);
+        assert!(result.method.is_none());
+        assert!(result.detail.is_none());
+    }
+
+    #[test]
+    fn falls_back_to_text_auth_parsing_for_unexpected_claude_output() {
+        let result = parse_claude_auth_output(&output(
+            false,
+            1,
+            "",
+            "Not logged in: private@example.com\n",
+        ));
+        assert_eq!(result.status, CodexAuthStatus::Unauthenticated);
     }
 }

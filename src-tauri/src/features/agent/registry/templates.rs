@@ -162,7 +162,7 @@ pub fn builtin_templates() -> Vec<AgentTemplateInfo> {
                 "{CLAUDE_ACP_INSTALL_COMMAND}  (needs Claude Code auth)"
             ),
             install_command: Some(CLAUDE_ACP_INSTALL_COMMAND.to_string()),
-            login_command: Some("claude login".to_string()),
+            login_command: Some("claude auth login".to_string()),
         },
         AgentTemplateInfo {
             id: AgentTemplate::CodexAcp.as_str().to_string(),

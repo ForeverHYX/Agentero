@@ -1,5 +1,6 @@
-import { CheckCircle2, Loader2, TriangleAlert } from "lucide-react";
+import { CheckCircle2, Loader2, Terminal, TriangleAlert } from "lucide-react";
 import { useTranslation } from "react-i18next";
+import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/core/utils";
 import type { AgentAcpDiagnostic } from "@/lib/doctor/api";
@@ -75,10 +76,20 @@ function MetaRow({
 	);
 }
 
-function AgentCard({ agent }: { agent: AgentAcpDiagnostic }) {
+function AgentCard({
+	agent,
+	onLogin,
+}: {
+	agent: AgentAcpDiagnostic;
+	onLogin?: (templateId: string) => void;
+}) {
 	const { t } = useTranslation("settings");
 	const category = agent.failureCategory ?? "unknown";
 	const authStatus = agent.authStatus ?? "unknown";
+	const canLogin =
+		authStatus === "unauthenticated" &&
+		Boolean(agent.loginCommand?.trim()) &&
+		Boolean(onLogin);
 	return (
 		<div className="rounded-xl border bg-card px-3.5 py-2.5">
 			<div className="flex items-start gap-2.5">
@@ -138,15 +149,35 @@ function AgentCard({ agent }: { agent: AgentAcpDiagnostic }) {
 						</span>
 					</div>
 					{!agent.ok ? (
-						<div className="mt-2 space-y-0.5 border-border/50 border-t pt-2">
-							{agent.error ? (
-								<p className="whitespace-pre-wrap break-words text-xs">
-									{agent.error}
+						<div className="mt-2 flex items-start justify-between gap-2 border-border/50 border-t pt-2">
+							<div className="min-w-0 space-y-0.5">
+								{agent.error ? (
+									<p className="whitespace-pre-wrap break-words text-xs">
+										{agent.error}
+									</p>
+								) : null}
+								<p className="text-muted-foreground text-xs">
+									{t(`doctor.agent.hints.${category}`)}
 								</p>
+							</div>
+							{canLogin ? (
+								<Button
+									type="button"
+									variant="outline"
+									size="sm"
+									className="h-7 shrink-0 gap-1 px-2 text-xs"
+									aria-label={t("doctor.agent.loginAria", {
+										name: agent.name,
+									})}
+									title={t("doctor.agent.loginTitle", {
+										command: agent.loginCommand,
+									})}
+									onClick={() => onLogin?.(agent.template)}
+								>
+									<Terminal className="size-3" />
+									{t("doctor.agent.login")}
+								</Button>
 							) : null}
-							<p className="text-muted-foreground text-xs">
-								{t(`doctor.agent.hints.${category}`)}
-							</p>
 						</div>
 					) : null}
 				</div>
@@ -159,10 +190,12 @@ export function DoctorAgentSection({
 	report,
 	loading,
 	error,
+	onLogin,
 }: {
 	report: AgentAcpDiagnostic[] | null;
 	loading: boolean;
 	error?: string | null;
+	onLogin?: (templateId: string) => void;
 }) {
 	const { t } = useTranslation("settings");
 	const failed = error ? 1 : (report?.filter((agent) => !agent.ok).length ?? 0);
@@ -210,7 +243,7 @@ export function DoctorAgentSection({
 			) : hasAgents ? (
 				<div className="flex flex-col gap-2">
 					{report?.map((agent) => (
-						<AgentCard key={agent.agentId} agent={agent} />
+						<AgentCard key={agent.agentId} agent={agent} onLogin={onLogin} />
 					))}
 				</div>
 			) : (

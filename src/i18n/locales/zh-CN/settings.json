@@ -289,6 +289,9 @@
 		"installAdapterAria": "安装 {{name}} 的 ACP 适配器",
 		"installAdapterTitle": "安装 ACP 适配器",
 		"installSuccess": "已安装 {{name}}",
+		"loginAgent": "登录",
+		"loginAgentAria": "登录 {{name}}",
+		"loginAgentTitle": "打开终端执行 {{command}}",
 		"updateAgent": "升级",
 		"updateAgentAria": "升级 {{name}} Agent CLI",
 		"updateAgentTitle": "升级 Agent CLI",
@@ -626,7 +629,10 @@
 				"spawn-failed": "进程无法启动，检查可执行权限与命令路径。",
 				"protocol-failed": "进程已启动但 ACP 握手失败，请更新 ACP adapter。",
 				"unknown": "查看上方原始错误信息。"
-			}
+			},
+			"login": "登录",
+			"loginAria": "登录 {{name}}",
+			"loginTitle": "打开终端执行 {{command}}"
 		},
 		"visualMarks": {
 			"select": "选择 {{path}}",

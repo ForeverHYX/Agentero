@@ -53,6 +53,9 @@ pub struct AgentAcpDiagnostic {
     /// Agent host CLI (`detect_command`), when distinct from the ACP entrypoint.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub agent_command: Option<String>,
+    /// Host CLI OAuth/login command from the built-in template.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub login_command: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub agent_path: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -267,6 +270,7 @@ async fn diagnostic(desc: &AgentDescriptor, result: &ProbeResult) -> AgentAcpDia
         template: desc.template.clone(),
         command: desc.command.clone(),
         agent_command,
+        login_command: template_info(desc.template.as_str()).and_then(|info| info.login_command),
         agent_path,
         agent_version,
         resolved_path,

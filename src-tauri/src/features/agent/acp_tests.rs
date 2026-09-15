@@ -63,6 +63,23 @@ mod acp_live {
         assert_eq!(codex.command, "codex-acp");
         assert_eq!(codex.args, Vec::<String>::new());
         assert_eq!(codex.detect_command.as_deref(), Some("codex"));
+        assert_eq!(codex.login_command.as_deref(), Some("codex login"));
+    }
+
+    #[test]
+    fn oauth_templates_define_login_commands() {
+        let cats = catalog_templates();
+        let claude = cats
+            .iter()
+            .find(|entry| entry.id == "claude-acp")
+            .expect("Claude template");
+        let codex = cats
+            .iter()
+            .find(|entry| entry.id == "codex-acp")
+            .expect("Codex template");
+
+        assert_eq!(claude.login_command.as_deref(), Some("claude login"));
+        assert_eq!(codex.login_command.as_deref(), Some("codex login"));
     }
 
     #[test]

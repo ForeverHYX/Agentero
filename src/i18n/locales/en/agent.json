@@ -7,6 +7,9 @@
 		"notInstalled": "Not installed"
 	},
 	"defaultName": "Agent",
+	"login": {
+		"action": "Sign in"
+	},
 	"permission": {
 		"title": "Agent permission",
 		"deny": "Deny",

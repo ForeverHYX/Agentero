@@ -5,7 +5,7 @@
  * cross-window session handoff, agent switch, and new conversation.
  * UI lives in sibling components under `src/components/agent/`.
  */
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useAgentComposer } from "@/components/agent/hooks/use-agent-composer";
 import { useAgentConfig } from "@/components/agent/hooks/use-agent-config";
@@ -20,6 +20,7 @@ import { useSessionComposerState } from "@/hooks/use-session-composer-state";
 import {
 	cancelAgentRun,
 	ensureCatalogAgent,
+	openAgentLoginTerminal,
 	setDefaultAgent,
 } from "@/lib/agent";
 import { agentChromeStore } from "@/lib/agent/agent-chrome-store";
@@ -36,6 +37,7 @@ import {
 	resolveSelected,
 } from "@/lib/agent/chat-state";
 import { removeVisualDraft } from "@/lib/agent/visual-context-store";
+import { notifyError } from "@/lib/core/notify";
 import { isTauri } from "@/lib/core/tauri";
 import { listenAgentSessionHandoff } from "@/lib/shell/workspace-broadcast";
 
@@ -204,6 +206,30 @@ export function useAgentPanel({
 
 	const options = buildOptions(registry, catalog);
 	const selected = resolveSelected(options, selectedAgentId, registry);
+	const selectedLogin = useMemo(() => {
+		const templateId = selected?.templateId ?? selected?.template ?? null;
+		if (!templateId || templateId === "custom") return null;
+		const entry = catalog?.entries.find(
+			(candidate) => candidate.templateId === templateId,
+		);
+		const command = entry?.loginCommand?.trim();
+		if (!command) return null;
+		return { templateId, command };
+	}, [catalog, selected]);
+
+	const openSelectedAgentLogin = useCallback(async () => {
+		if (!selectedLogin) return;
+		try {
+			await openAgentLoginTerminal(selectedLogin.templateId);
+			for (const delay of [2_000, 5_000, 10_000, 20_000]) {
+				window.setTimeout(() => {
+					void refresh();
+				}, delay);
+			}
+		} catch (error) {
+			notifyError(errorText(error));
+		}
+	}, [selectedLogin, refresh]);
 
 	// Keep app chrome (title bar, mobile nav, …) in sync with the active agent.
 	useEffect(() => {
@@ -562,6 +588,8 @@ export function useAgentPanel({
 		cancelEditingMessage,
 		resendEditedMessage,
 		startEditingMessage,
+		openSelectedAgentLogin,
+		selectedLogin,
 		send,
 		submitComposer,
 		messageQueue,

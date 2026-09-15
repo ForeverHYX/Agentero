@@ -33,6 +33,7 @@ macro_rules! common_commands {
             crate::features::agent::commands::doctor_check_host,
             crate::features::agent::commands::doctor_install_node,
             crate::features::agent::commands::doctor_check_agents,
+            crate::features::agent::commands::doctor_open_agent_login_terminal,
             crate::features::system::network::commands::doctor_check_network,
             crate::features::agent::commands::agent_cancel_run,
             crate::features::jobs::commands::job_parse_refs_enqueue,

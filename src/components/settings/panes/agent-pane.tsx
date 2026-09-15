@@ -54,6 +54,7 @@ export function AgentPane({
 		probeInstalled,
 		refreshVersions,
 		rescanAndProbe,
+		openLoginTerminal,
 		patchUserAgent,
 	} = useAgentCatalog({ transport: "local" });
 
@@ -175,6 +176,7 @@ export function AgentPane({
 					probingKeys={probingKeys}
 					lifecycle={lifecycle}
 					openUninstallDialog={openUninstallDialog}
+					onLogin={openLoginTerminal}
 					onEditCustom={handleAddCustom}
 				/>
 				<AgentCustomForm busy={loading} onSubmit={handleAddCustom} />

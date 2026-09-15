@@ -11,6 +11,7 @@ import { useProbingKeys } from "@/components/settings/use-probing-keys";
 import {
 	type CatalogScanResponse,
 	checkCatalogUpdates,
+	openAgentLoginTerminal,
 	probeAgent,
 	probeCatalogAgent,
 	scanCatalog,
@@ -215,6 +216,34 @@ export function useAgentCatalog({
 		],
 	);
 
+	const refreshAfterLogin = useCallback(() => {
+		const attempts = [2_000, 5_000, 10_000, 20_000];
+		for (const delay of attempts) {
+			window.setTimeout(() => {
+				void rescanAndProbe(true);
+			}, delay);
+		}
+	}, [rescanAndProbe]);
+
+	const openLoginTerminal = useCallback(
+		async (templateId: string): Promise<boolean> => {
+			if (!isTauri()) {
+				notifyError(t("agent.desktopOnly"));
+				return false;
+			}
+			if (sessionId) return false;
+			try {
+				await openAgentLoginTerminal(templateId);
+				void refreshAfterLogin();
+				return true;
+			} catch (e) {
+				notifyError(errorText(e));
+				return false;
+			}
+		},
+		[t, sessionId, refreshAfterLogin],
+	);
+
 	// Open once: soft probe (skip ready). Refresh / proxy use force=true.
 	// Remote has no once-guard: soft probe when the session or callback changes.
 	useEffect(() => {
@@ -251,6 +280,7 @@ export function useAgentCatalog({
 		probeInstalled,
 		refreshVersions,
 		rescanAndProbe,
+		openLoginTerminal,
 		patchUserAgent,
 	};
 }

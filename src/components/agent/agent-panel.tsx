@@ -196,6 +196,8 @@ export const AgentPanel = memo(function AgentPanel({
 		cancelEditingMessage,
 		resendEditedMessage,
 		startEditingMessage,
+		openSelectedAgentLogin,
+		selectedLogin,
 		submitComposer,
 		messageQueue,
 		removeQueuedMessage,
@@ -369,6 +371,7 @@ export const AgentPanel = memo(function AgentPanel({
 						onResendEdited={(lineId) => void resendEditedMessage(lineId)}
 						onStartEditing={startEditingMessage}
 						onSendSuggestion={sendSuggestion}
+						onAgentLogin={selectedLogin ? openSelectedAgentLogin : undefined}
 						onOpenSource={onOpenSource}
 					/>
 

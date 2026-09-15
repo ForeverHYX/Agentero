@@ -119,6 +119,7 @@ pub fn builtin_templates() -> Vec<AgentTemplateInfo> {
                 "{PI_HOST_INSTALL_COMMAND} + {PI_ACP_INSTALL_COMMAND}  ·  needs Node 22+  ·  https://pi.dev"
             ),
             install_command: Some(PI_ACP_INSTALL_COMMAND.to_string()),
+            login_command: None,
         },
         AgentTemplateInfo {
             id: AgentTemplate::Opencode.as_str().to_string(),
@@ -135,6 +136,7 @@ pub fn builtin_templates() -> Vec<AgentTemplateInfo> {
             })
             .to_string(),
             install_command: None,
+            login_command: None,
         },
         AgentTemplateInfo {
             id: AgentTemplate::OpenClaw.as_str().to_string(),
@@ -146,6 +148,7 @@ pub fn builtin_templates() -> Vec<AgentTemplateInfo> {
             install_hint: "npm i -g openclaw@latest  ·  https://docs.openclaw.ai/cli/acp"
                 .to_string(),
             install_command: None,
+            login_command: None,
         },
         AgentTemplateInfo {
             id: AgentTemplate::ClaudeAcp.as_str().to_string(),
@@ -159,6 +162,7 @@ pub fn builtin_templates() -> Vec<AgentTemplateInfo> {
                 "{CLAUDE_ACP_INSTALL_COMMAND}  (needs Claude Code auth)"
             ),
             install_command: Some(CLAUDE_ACP_INSTALL_COMMAND.to_string()),
+            login_command: Some("claude login".to_string()),
         },
         AgentTemplateInfo {
             id: AgentTemplate::CodexAcp.as_str().to_string(),
@@ -170,6 +174,7 @@ pub fn builtin_templates() -> Vec<AgentTemplateInfo> {
             install_hint: "npm i -g @agentclientprotocol/codex-acp  ·  needs Codex CLI auth"
                 .to_string(),
             install_command: Some("npm i -g @agentclientprotocol/codex-acp".to_string()),
+            login_command: Some("codex login".to_string()),
         },
         AgentTemplateInfo {
             id: AgentTemplate::Hermes.as_str().to_string(),
@@ -182,6 +187,7 @@ pub fn builtin_templates() -> Vec<AgentTemplateInfo> {
                 "Install Hermes Agent, then run `hermes acp`  ·  https://github.com/NousResearch/hermes-agent"
                     .to_string(),
             install_command: None,
+            login_command: None,
         },
         AgentTemplateInfo {
             id: AgentTemplate::QoderCli.as_str().to_string(),
@@ -194,6 +200,7 @@ pub fn builtin_templates() -> Vec<AgentTemplateInfo> {
                 "Install Qoder CLI, then `qodercli login`  ·  https://docs.qoder.com/en/cli/acp"
                     .to_string(),
             install_command: None,
+            login_command: None,
         },
         AgentTemplateInfo {
             id: AgentTemplate::GrokBuild.as_str().to_string(),
@@ -210,6 +217,7 @@ pub fn builtin_templates() -> Vec<AgentTemplateInfo> {
                  `npm i -g @xai-official/grok`  ·  https://zed.dev/acp/agent/grok-build"
                     .to_string(),
             install_command: None,
+            login_command: None,
         },
         AgentTemplateInfo {
             id: AgentTemplate::Dsh.as_str().to_string(),
@@ -243,6 +251,7 @@ pub fn builtin_templates() -> Vec<AgentTemplateInfo> {
                 dsh_launcher_dir().display()
             ),
             install_command: None,
+            login_command: None,
         },
         AgentTemplateInfo {
             id: AgentTemplate::KimiCode.as_str().to_string(),
@@ -259,6 +268,7 @@ pub fn builtin_templates() -> Vec<AgentTemplateInfo> {
                  https://moonshotai.github.io/kimi-code/en/"
                     .to_string(),
             install_command: None,
+            login_command: None,
         },
         AgentTemplateInfo {
             id: AgentTemplate::Custom.as_str().to_string(),
@@ -269,6 +279,7 @@ pub fn builtin_templates() -> Vec<AgentTemplateInfo> {
             detect_command: None,
             install_hint: "Provide command and args for your local ACP agent.".to_string(),
             install_command: None,
+            login_command: None,
         },
     ]
 }

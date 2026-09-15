@@ -69,6 +69,7 @@ pub async fn scan_remote_agents(
             args: tmpl.args,
             install_hint: tmpl.install_hint,
             install_command: tmpl.install_command,
+            login_command: tmpl.login_command,
             offer_install,
             can_install,
             adapter_distinct,

@@ -526,6 +526,7 @@ impl AgentRegistry {
                     args: info.args,
                     install_hint: info.install_hint,
                     install_command: info.install_command,
+                    login_command: info.login_command,
                     offer_install,
                     can_install,
                     adapter_distinct,

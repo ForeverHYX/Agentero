@@ -1,4 +1,10 @@
-import { Check, ChevronDownIcon, CopyIcon, Pencil } from "lucide-react";
+import {
+	Check,
+	ChevronDownIcon,
+	CopyIcon,
+	Pencil,
+	Terminal,
+} from "lucide-react";
 import type { RefObject } from "react";
 import {
 	Fragment,
@@ -71,7 +77,7 @@ import {
 	CollapsibleTrigger,
 } from "@/components/ui/collapsible";
 import { Skeleton } from "@/components/ui/skeleton";
-import type { AgentPhaseState } from "@/lib/agent/api";
+import { type AgentPhaseState, isAgentAuthFailure } from "@/lib/agent/api";
 import {
 	type AgentPart,
 	agentTextFromParts,
@@ -249,6 +255,7 @@ type RowHandlers = {
 	onResendEdited: (lineId: string) => void;
 	onStartEditing: (lineId: string, text: string) => void;
 	onSendSuggestion: (label: string, workflow?: string) => void;
+	onAgentLogin?: () => void;
 	onOpenSource?: (source: string) => void;
 	editCompositionProps: {
 		onCompositionStart?: () => void;
@@ -656,10 +663,24 @@ const ChatTranscriptRow = memo(function ChatTranscriptRow({
 		);
 	}
 	if (line.kind === "error") {
+		const canLogin =
+			Boolean(handlers.onAgentLogin) && isAgentAuthFailure(line.text);
 		return (
 			<Message from="assistant">
 				<MessageContent className="text-destructive">
 					<MessageResponse>{line.text}</MessageResponse>
+					{canLogin ? (
+						<Button
+							type="button"
+							variant="outline"
+							size="sm"
+							className="mt-2 h-7 gap-1 px-2 text-xs"
+							onClick={() => handlers.onAgentLogin?.()}
+						>
+							<Terminal className="size-3" />
+							{t("login.action")}
+						</Button>
+					) : null}
 				</MessageContent>
 			</Message>
 		);
@@ -813,6 +834,7 @@ export function ChatTranscript({
 	onResendEdited,
 	onStartEditing,
 	onSendSuggestion,
+	onAgentLogin,
 	onOpenSource,
 	phase = null,
 }: {
@@ -838,6 +860,7 @@ export function ChatTranscript({
 	onResendEdited: (lineId: string) => void;
 	onStartEditing: (lineId: string, text: string) => void;
 	onSendSuggestion: (label: string, workflow?: string) => void;
+	onAgentLogin?: () => void;
 	/** Open a vault path / paper (or external URL) from Sources / inline citation. */
 	onOpenSource?: (source: string) => void;
 	/** Loading phase of the in-flight turn (starting / waiting-model / reconnecting). */
@@ -872,6 +895,7 @@ export function ChatTranscript({
 		onResendEdited,
 		onStartEditing,
 		onSendSuggestion,
+		onAgentLogin,
 		onOpenSource,
 		editCompositionProps,
 	});
@@ -882,6 +906,7 @@ export function ChatTranscript({
 		onResendEdited,
 		onStartEditing,
 		onSendSuggestion,
+		onAgentLogin,
 		onOpenSource,
 		editCompositionProps,
 	};
@@ -899,6 +924,9 @@ export function ChatTranscript({
 				latestHandlersRef.current.onStartEditing(lineId, text),
 			onSendSuggestion: (label, workflow) =>
 				latestHandlersRef.current.onSendSuggestion(label, workflow),
+			onAgentLogin: onAgentLogin
+				? () => latestHandlersRef.current.onAgentLogin?.()
+				: undefined,
 			// Keep undefined when absent so rows preserve "no open handler" UI.
 			onOpenSource: hasOpenSource
 				? (source) => latestHandlersRef.current.onOpenSource?.(source)
@@ -910,7 +938,7 @@ export function ChatTranscript({
 					latestHandlersRef.current.editCompositionProps.onCompositionEnd?.(),
 			},
 		}),
-		[hasOpenSource],
+		[hasOpenSource, onAgentLogin],
 	);
 
 	return (

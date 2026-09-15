@@ -7,6 +7,9 @@
 		"notInstalled": "未安装"
 	},
 	"defaultName": "Agent",
+	"login": {
+		"action": "登录"
+	},
 	"permission": {
 		"title": "Agent 权限请求",
 		"deny": "拒绝",

@@ -17,6 +17,8 @@ export type CatalogEntry = {
 	installHint: string;
 	/** Shell command for guided install (e.g. Claude ACP adapter via npm). */
 	installCommand?: string | null;
+	/** Host CLI OAuth/login command opened by Agentero's terminal helper. */
+	loginCommand?: string | null;
 	/** Host CLI present but ACP entrypoint missing — offer ACP install. */
 	offerInstall?: boolean;
 	/** Local silent install via `runToolLifecycle` is supported. */

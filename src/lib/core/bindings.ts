@@ -73,6 +73,8 @@ export const commands = {
 	 *  Can take up to ~30s per slow agent (probes run with limited concurrency).
 	 */
 	doctorCheckAgents: () => typedError<ApiResult<AgentAcpDiagnostic_Serialize[]>, string>(__TAURI_INVOKE("doctor_check_agents")),
+	/**  Open the template-owned CLI login command in a confirm-to-run terminal. */
+	doctorOpenAgentLoginTerminal: (templateId: string) => __TAURI_INVOKE<ApiResult<null>>("doctor_open_agent_login_terminal", { templateId }),
 	doctorCheckNetwork: () => typedError<ApiResult<NetworkDoctorReport_Serialize>, string>(__TAURI_INVOKE("doctor_check_network")),
 	/**  Request cooperative cancellation for a currently streaming ACP session. */
 	agentCancelRun: (sessionId: string) => __TAURI_INVOKE<ApiResult<boolean>>("agent_cancel_run", { sessionId }),
@@ -765,6 +767,8 @@ export type AgentAcpDiagnostic_Deserialize = {
 	command: string,
 	/**  Agent host CLI (`detect_command`), when distinct from the ACP entrypoint. */
 	agentCommand: string | null,
+	/**  Host CLI OAuth/login command from the built-in template. */
+	loginCommand: string | null,
 	agentPath: string | null,
 	agentVersion: string | null,
 	/**  ACP entrypoint resolved path (`command`). */
@@ -787,6 +791,8 @@ export type AgentAcpDiagnostic_Serialize = {
 	command: string,
 	/**  Agent host CLI (`detect_command`), when distinct from the ACP entrypoint. */
 	agentCommand?: string | null,
+	/**  Host CLI OAuth/login command from the built-in template. */
+	loginCommand?: string | null,
 	agentPath?: string | null,
 	agentVersion?: string | null,
 	/**  ACP entrypoint resolved path (`command`). */
@@ -1752,6 +1758,8 @@ export type CatalogEntry_Deserialize = {
 	installHint: string,
 	/**  Shell install command for a missing ACP adapter (from the template). */
 	installCommand?: string | null,
+	/**  Host CLI OAuth/login command from the template. */
+	loginCommand?: string | null,
 	/**  Host CLI present but ACP entrypoint missing — Settings may offer ACP install. */
 	offerInstall?: boolean,
 	/**  Silent install/update via `agent_run_tool_lifecycle` is available (local). */
@@ -1789,6 +1797,8 @@ export type CatalogEntry_Serialize = {
 	installHint: string,
 	/**  Shell install command for a missing ACP adapter (from the template). */
 	installCommand?: string | null,
+	/**  Host CLI OAuth/login command from the template. */
+	loginCommand?: string | null,
 	/**  Host CLI present but ACP entrypoint missing — Settings may offer ACP install. */
 	offerInstall: boolean,
 	/**  Silent install/update via `agent_run_tool_lifecycle` is available (local). */

@@ -289,6 +289,9 @@
 		"installAdapterAria": "Install ACP adapter for {{name}}",
 		"installAdapterTitle": "Install ACP adapter",
 		"installSuccess": "Installed {{name}}",
+		"loginAgent": "Sign in",
+		"loginAgentAria": "Sign in to {{name}}",
+		"loginAgentTitle": "Open terminal for {{command}}",
 		"updateAgent": "Update",
 		"updateAgentAria": "Update {{name}} agent CLI",
 		"updateAgentTitle": "Update agent CLI",
@@ -626,7 +629,10 @@
 				"spawn-failed": "The process could not start; check the executable permission and path.",
 				"protocol-failed": "The process started but the ACP handshake failed; update the ACP adapter.",
 				"unknown": "See the raw error above."
-			}
+			},
+			"login": "Sign in",
+			"loginAria": "Sign in to {{name}}",
+			"loginTitle": "Open terminal for {{command}}"
 		},
 		"visualMarks": {
 			"select": "Select {{path}}",

@@ -193,6 +193,10 @@ pub struct AgentTemplateInfo {
     /// silent `agent_run_tool_lifecycle` instead).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub install_command: Option<String>,
+    /// Optional host CLI OAuth/login command opened through the terminal
+    /// confirm helper.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub login_command: Option<String>,
 }
 
 /// Status for a common agent row in Settings.
@@ -221,6 +225,9 @@ pub struct CatalogEntry {
     /// Shell install command for a missing ACP adapter (from the template).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub install_command: Option<String>,
+    /// Host CLI OAuth/login command from the template.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub login_command: Option<String>,
     /// Host CLI present but ACP entrypoint missing — Settings may offer ACP install.
     #[serde(default)]
     pub offer_install: bool,

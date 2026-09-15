@@ -47,6 +47,7 @@ export function AgentCatalogRows({
 	probingKeys,
 	lifecycle,
 	openUninstallDialog,
+	onLogin,
 	onEditCustom,
 }: {
 	catalog: CatalogScanResponse | null;
@@ -55,6 +56,7 @@ export function AgentCatalogRows({
 	probingKeys: ReadonlySet<string>;
 	lifecycle: AgentToolLifecycle;
 	openUninstallDialog: (target: UninstallTarget) => void;
+	onLogin: (templateId: string) => Promise<boolean>;
 	onEditCustom: (draft: CustomAgentFormDraft) => Promise<boolean>;
 }) {
 	const { t } = useTranslation(["settings", "agent", "common"]);
@@ -79,6 +81,7 @@ export function AgentCatalogRows({
 					batchActive={batchActive}
 					lifecycle={lifecycle}
 					openUninstallDialog={openUninstallDialog}
+					onLogin={onLogin}
 				/>
 			))}
 			{customAgents.map((agent) => (
@@ -102,12 +105,14 @@ function AgentCatalogEntryRow({
 	batchActive,
 	lifecycle,
 	openUninstallDialog,
+	onLogin,
 }: {
 	entry: CatalogEntry;
 	probing: boolean;
 	batchActive: boolean;
 	lifecycle: AgentToolLifecycle;
 	openUninstallDialog: (target: UninstallTarget) => void;
+	onLogin: (templateId: string) => Promise<boolean>;
 }) {
 	const { t } = useTranslation(["settings", "agent", "common"]);
 	const {
@@ -120,9 +125,14 @@ function AgentCatalogEntryRow({
 	const installAcp = showInstallAcp(entry);
 	const updateAgent = showUpdateAgent(entry);
 	const uninstallAgent = showUninstallAgent(entry);
+	const loginAgent =
+		entry.acpStatus === "failed" &&
+		isAgentAuthFailure(entry.lastProbeError) &&
+		Boolean(entry.loginCommand?.trim());
 	// Install/ACP-only gaps gate “Use default”; Update/Uninstall can sit beside it.
 	const needsInstall = installAgent || installAcp;
-	const hasLifecycleAction = needsInstall || updateAgent || uninstallAgent;
+	const hasLifecycleAction =
+		needsInstall || updateAgent || uninstallAgent || loginAgent;
 	const notInstalled = !entry.binaryAvailable;
 	const rowInstalling = lifecycleBusyIds.has(entry.templateId);
 	const rowBusyAction = lifecycleBusyIds.get(entry.templateId);
@@ -232,6 +242,25 @@ function AgentCatalogEntryRow({
 								<Terminal className="size-3" />
 							)}
 							{t("agent.installAdapter")}
+						</Button>
+					) : null}
+					{loginAgent ? (
+						<Button
+							type="button"
+							variant="outline"
+							size="sm"
+							className="h-7 gap-1 px-2 text-xs"
+							aria-label={t("agent.loginAgentAria", {
+								name: entry.name,
+							})}
+							title={t("agent.loginAgentTitle", {
+								command: entry.loginCommand,
+							})}
+							disabled={rowInstalling || !isTauri()}
+							onClick={() => void onLogin(entry.templateId)}
+						>
+							<Terminal className="size-3" />
+							{t("agent.loginAgent")}
 						</Button>
 					) : null}
 					{updateAgent ? (

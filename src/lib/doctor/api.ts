@@ -92,6 +92,15 @@ export function doctorCheckAgents(): Promise<AgentAcpDiagnostic[]> {
 	return callApiResult(() => commands.doctorCheckAgents());
 }
 
+/** Open a trusted template-owned CLI login command in a confirm-to-run terminal. */
+export async function doctorOpenAgentLoginTerminal(
+	templateId: string,
+): Promise<void> {
+	// Envelope 1 (plain ApiResult): the command bypasses specta typedError,
+	// so callApiResult would misread the bare envelope as an IPC error.
+	await callApi(() => commands.doctorOpenAgentLoginTerminal(templateId));
+}
+
 /** Probe network connectivity to paper sources and common hosts. */
 export function doctorCheckNetwork(): Promise<NetworkDoctorReport> {
 	return callApiResult(() => commands.doctorCheckNetwork());

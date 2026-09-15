@@ -470,6 +470,16 @@ export async function probeCatalogAgent(
 	)) as ProbeResult;
 }
 
+/** Open a trusted template-owned CLI login command in a confirm-to-run terminal. */
+export async function openAgentLoginTerminal(
+	templateId: string,
+): Promise<void> {
+	await callApi(
+		() => commands.doctorOpenAgentLoginTerminal(templateId),
+		AGENT_CALL_OPTS,
+	);
+}
+
 export type ToolLifecycleAction = "install" | "update" | "uninstall";
 
 /**

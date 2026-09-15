@@ -163,7 +163,11 @@ export function DoctorPane({
 				}
 			/>
 
-			<DoctorHostRuntimeSection report={hostReport} error={hostError} />
+			<DoctorHostRuntimeSection
+				report={hostReport}
+				error={hostError}
+				onRefresh={refresh}
+			/>
 
 			<DoctorNetworkSection
 				report={networkReport}

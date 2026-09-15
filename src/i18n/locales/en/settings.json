@@ -567,6 +567,13 @@
 				"available": "Available",
 				"missing": "Not found",
 				"unusable": "Cannot run"
+			},
+			"install": {
+				"button": "Install Node.js",
+				"installing": "Installing…",
+				"tooltip": "Install the Node.js LTS through your system package manager (winget or Homebrew)",
+				"hint": "Some ACP Agents need Node.js and npm on PATH. Install the LTS via your system package manager, then re-detect.",
+				"noPackageManager": "No supported package manager found. Install Node.js manually from nodejs.org, then re-detect."
 			}
 		},
 		"network": {

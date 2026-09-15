@@ -567,6 +567,13 @@
 				"available": "可用",
 				"missing": "未找到",
 				"unusable": "无法运行"
+			},
+			"install": {
+				"button": "一键安装 Node.js",
+				"installing": "正在安装…",
+				"tooltip": "通过系统包管理器（winget 或 Homebrew）安装 Node.js LTS",
+				"hint": "部分 ACP Agent 需要 PATH 中的 Node.js 与 npm。可通过系统包管理器安装 LTS 版本，安装完成后重新检测。",
+				"noPackageManager": "未找到受支持的系统包管理器，请前往 nodejs.org 手动安装 Node.js，然后重新检测。"
 			}
 		},
 		"network": {

@@ -1,7 +1,19 @@
-import { CheckCircle2, TriangleAlert } from "lucide-react";
+import { CheckCircle2, Download, TriangleAlert } from "lucide-react";
+import { useState } from "react";
 import { useTranslation } from "react-i18next";
+import { Button } from "@/components/ui/button";
+import {
+	Tooltip,
+	TooltipContent,
+	TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { cn } from "@/lib/core/utils";
-import type { HostDoctorReport, HostToolDiagnostic } from "@/lib/doctor/api";
+import {
+	doctorInstallNode,
+	type HostDoctorReport,
+	type HostToolDiagnostic,
+	type NodeInstallResult,
+} from "@/lib/doctor/api";
 import { DoctorSection } from "./doctor-sections";
 
 function StatusIcon({ ok }: { ok: boolean }) {
@@ -52,23 +64,78 @@ function ToolRow({ label, tool }: { label: string; tool: HostToolDiagnostic }) {
 export function DoctorHostRuntimeSection({
 	report,
 	error,
+	onRefresh,
 }: {
 	report: HostDoctorReport | null;
 	error?: string | null;
+	onRefresh: () => Promise<void>;
 }) {
 	const { t } = useTranslation("settings");
+	const [installing, setInstalling] = useState(false);
+	const [installNotice, setInstallNotice] = useState<string | null>(null);
+
+	const nodeMissing = report ? report.node.status !== "available" : false;
+	const showInstall = nodeMissing || installNotice !== null;
+
+	const handleInstall = async () => {
+		setInstalling(true);
+		try {
+			const result: NodeInstallResult = await doctorInstallNode();
+			if (result.outcome === "no-package-manager") {
+				setInstallNotice(t("doctor.host.install.noPackageManager"));
+			} else if (result.error) {
+				setInstallNotice(result.error);
+			} else {
+				setInstallNotice(null);
+				await onRefresh();
+			}
+		} catch (installErr) {
+			setInstallNotice(
+				installErr instanceof Error
+					? installErr.message
+					: String(installErr ?? "unknown error"),
+			);
+		} finally {
+			setInstalling(false);
+		}
+	};
+
 	const issues = error
 		? 1
 		: report
 			? Number(report.node.status !== "available") +
 				Number(report.npm.status !== "available")
 			: 0;
+
 	return (
 		<DoctorSection
 			title={t("doctor.sections.host")}
 			description={t("doctor.sectionHints.host")}
 			ok={issues === 0}
 			issueCount={issues}
+			action={
+				showInstall ? (
+					<Tooltip>
+						<TooltipTrigger asChild>
+							<Button
+								type="button"
+								size="sm"
+								variant="outline"
+								disabled={installing}
+								onClick={() => void handleInstall()}
+							>
+								<Download
+									className={cn("size-3.5", installing && "animate-pulse")}
+								/>
+								{installing
+									? t("doctor.host.install.installing")
+									: t("doctor.host.install.button")}
+							</Button>
+						</TooltipTrigger>
+						<TooltipContent>{t("doctor.host.install.tooltip")}</TooltipContent>
+					</Tooltip>
+				) : null
+			}
 		>
 			{error ? (
 				<div className="flex items-start gap-2.5 px-3.5 py-2.5">
@@ -84,6 +151,19 @@ export function DoctorHostRuntimeSection({
 				<>
 					<ToolRow label="Node.js" tool={report.node} />
 					<ToolRow label="npm" tool={report.npm} />
+					{showInstall ? (
+						<div className="px-3.5 py-2.5">
+							{installNotice ? (
+								<p className="whitespace-pre-wrap break-words text-amber-700 text-xs">
+									{installNotice}
+								</p>
+							) : (
+								<p className="text-muted-foreground text-xs">
+									{t("doctor.host.install.hint")}
+								</p>
+							)}
+						</div>
+					) : null}
 				</>
 			) : null}
 		</DoctorSection>

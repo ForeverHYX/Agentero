@@ -1,5 +1,7 @@
 use crate::core::error::{map_err, ApiResult};
-use crate::features::agent::doctor::{diagnose_host, HostDoctorReport};
+use crate::features::agent::doctor::{
+    diagnose_host, install_node, HostDoctorReport, NodeInstallResult,
+};
 use crate::features::agent::doctor_agents::{diagnose_agents, AgentAcpDiagnostic};
 use crate::features::agent::{AgentRegistry, AgentWarmGate};
 use tauri::{AppHandle, State};
@@ -11,6 +13,19 @@ pub async fn doctor_check_host(
 ) -> Result<ApiResult<HostDoctorReport>, String> {
     Ok(match diagnose_host(registry.inner()).await {
         Ok(report) => ApiResult::ok(report),
+        Err(error) => map_err(error),
+    })
+}
+
+/// One-click install of Node.js via the host package manager (winget / brew),
+/// then re-probe. Can take several minutes while the installer downloads.
+#[tauri::command]
+#[specta::specta]
+pub async fn doctor_install_node(
+    registry: State<'_, AgentRegistry>,
+) -> Result<ApiResult<NodeInstallResult>, String> {
+    Ok(match install_node(registry.inner()).await {
+        Ok(result) => ApiResult::ok(result),
         Err(error) => map_err(error),
     })
 }

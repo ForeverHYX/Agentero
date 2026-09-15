@@ -64,6 +64,11 @@ export const commands = {
 	agentProbeCatalog: (templateId: string) => typedError<ApiResult<ProbeResult_Serialize>, string>(__TAURI_INVOKE("agent_probe_catalog", { templateId })),
 	doctorCheckHost: () => typedError<ApiResult<HostDoctorReport_Serialize>, string>(__TAURI_INVOKE("doctor_check_host")),
 	/**
+	 *  One-click install of Node.js via the host package manager (winget / brew),
+	 *  then re-probe. Can take several minutes while the installer downloads.
+	 */
+	doctorInstallNode: () => typedError<ApiResult<NodeInstallResult_Serialize>, string>(__TAURI_INVOKE("doctor_install_node")),
+	/**
 	 *  Re-probe every registered Agent over ACP and return classified failures.
 	 *  Can take up to ~30s per slow agent (probes run with limited concurrency).
 	 */
@@ -3262,6 +3267,30 @@ export type NetworkEndpointDiagnostic_Serialize = {
 };
 
 export type NetworkStatus = "reachable" | "timeout" | "unreachable";
+
+export type NodeInstallOutcome = "installed" | "failed" | "no-package-manager";
+
+export type NodeInstallResult = NodeInstallResult_Serialize | NodeInstallResult_Deserialize;
+
+export type NodeInstallResult_Deserialize = {
+	outcome: NodeInstallOutcome,
+	/**  Package manager used (winget / brew), when one was available. */
+	installer: string | null,
+	/**  Failure detail when the outcome is `failed`. */
+	error: string | null,
+	/**  Host probe re-run after the install attempt. */
+	report: HostDoctorReport_Deserialize,
+};
+
+export type NodeInstallResult_Serialize = {
+	outcome: NodeInstallOutcome,
+	/**  Package manager used (winget / brew), when one was available. */
+	installer?: string | null,
+	/**  Failure detail when the outcome is `failed`. */
+	error?: string | null,
+	/**  Host probe re-run after the install attempt. */
+	report: HostDoctorReport_Serialize,
+};
 
 export type NotesTemplateSeedResult = {
 	created: boolean,

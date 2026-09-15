@@ -28,6 +28,13 @@ export type HostDoctorReport = {
 	npm: HostToolDiagnostic;
 	npmPrefix?: string | null;
 };
+export type NodeInstallOutcome = "installed" | "failed" | "no-package-manager";
+export type NodeInstallResult = {
+	outcome: NodeInstallOutcome;
+	installer?: string | null;
+	error?: string | null;
+	report: HostDoctorReport;
+};
 
 /** Read models come straight from the generated wire contract. */
 export type DoctorIssue = DoctorIssue_Serialize;
@@ -73,6 +80,11 @@ export function doctorCheckHost(): Promise<HostDoctorReport> {
 	// `invoke` returns bare `ApiResult`, which `callApiResult` misreads as a
 	// failed TypedResult and surfaces the "Host command failed" fallback.
 	return callApiResult(() => commands.doctorCheckHost());
+}
+
+/** One-click install of Node.js via the host package manager, then re-probe. */
+export function doctorInstallNode(): Promise<NodeInstallResult> {
+	return callApiResult(() => commands.doctorInstallNode());
 }
 
 /** Re-probe every registered Agent over ACP; may take up to ~30s per agent. */

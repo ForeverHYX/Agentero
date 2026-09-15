@@ -255,6 +255,11 @@ export type {
 	PdfTranslateRect,
 } from "@/lib/pdf/translate/types";
 export {
+	createPdfViewportScrollScheduler,
+	type PdfViewportScrollRequest,
+	type PdfViewportScrollScheduler,
+} from "@/lib/pdf/viewport-scroll";
+export {
 	bindWheelZoomGesture,
 	createWheelZoomCoalescer,
 } from "@/lib/pdf/wheel-zoom";

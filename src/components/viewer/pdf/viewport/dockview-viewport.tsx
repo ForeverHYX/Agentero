@@ -15,6 +15,7 @@ import {
 } from "react";
 import { createPdfViewportResizeGate } from "@/lib/pdf/dockview-resize";
 import { registerScrollSyncElement } from "@/lib/pdf/scroll-sync";
+import { createPdfViewportScrollScheduler } from "@/lib/pdf/viewport-scroll";
 import { isDockviewSashTarget } from "@/lib/workspace/dockview-sash";
 
 type DockviewViewportProps = HTMLAttributes<HTMLDivElement> & {
@@ -84,6 +85,17 @@ export function DockviewViewport({
 			if (ownerWindow) ownerWindow.cancelAnimationFrame(handle);
 			else cancelAnimationFrame(handle);
 		};
+		const scrollScheduler = createPdfViewportScrollScheduler({
+			requestFrame,
+			cancelFrame,
+			apply: (request) => {
+				viewport.scrollTo({
+					left: request.x,
+					top: request.y,
+					behavior: request.behavior,
+				});
+			},
+		});
 		const commitResize = () => {
 			// Report a reduced width so EmbedPDF's fitWidth zoom leaves room for the
 			// comment rail that overflows into the reserved right gutter.
@@ -142,6 +154,10 @@ export function DockviewViewport({
 
 		let scrollFrame: number | null = null;
 		const handleScroll = () => {
+			// Scroll events are not sufficient to identify user input: virtual page
+			// reordering, zoom/layout changes, and dual-pane synchronization all
+			// write the viewport programmatically. Only the explicit wheel precursor
+			// below cancels a deferred request.
 			if (scrollFrame != null) return;
 			scrollFrame = requestFrame(() => {
 				scrollFrame = null;
@@ -152,6 +168,14 @@ export function DockviewViewport({
 			});
 		};
 		viewport.addEventListener("scroll", handleScroll, { passive: true });
+		// Wheel is an unambiguous user-originated precursor to the native scroll
+		// event. Cancel here, before the native scroll event, so the deferred
+		// request cannot overwrite the user's new position.
+		const handleWheel = () => scrollScheduler.cancelPending();
+		viewport.addEventListener("wheel", handleWheel, {
+			capture: true,
+			passive: true,
+		});
 
 		const ResizeObserverCtor = ownerWindow?.ResizeObserver ?? ResizeObserver;
 		const resizeObserver = new ResizeObserverCtor(() => {
@@ -161,11 +185,8 @@ export function DockviewViewport({
 
 		const unsubscribeScrollRequest = viewportPlugin.onScrollRequest(
 			documentId,
-			({ x, y, behavior = "auto" }) => {
-				requestFrame(() => {
-					viewport.scrollTo({ left: x, top: y, behavior });
-				});
-			},
+			({ x, y, behavior = "auto" }) =>
+				scrollScheduler.schedule({ x, y, behavior }),
 		);
 
 		ownerDocument.addEventListener("pointerdown", handlePointerDown, true);
@@ -176,7 +197,9 @@ export function DockviewViewport({
 			resizeGate.dispose();
 			resizeObserver.disconnect();
 			if (scrollFrame != null) cancelFrame(scrollFrame);
+			scrollScheduler.dispose();
 			viewport.removeEventListener("scroll", handleScroll);
+			viewport.removeEventListener("wheel", handleWheel, true);
 			unsubscribeScrollRequest();
 			unregisterScrollSyncElement();
 			viewportPlugin.unregisterViewport(documentId);
@@ -197,6 +220,10 @@ export function DockviewViewport({
 					height: "100%",
 					overflow: "auto",
 					...style,
+					// Scroller swaps virtualized page nodes while scrolling. Letting
+					// Chromium's scroll anchoring adjust this custom virtual viewport can
+					// move it to an endpoint when the rendered range changes.
+					overflowAnchor: "none",
 					padding: `${viewportGap}px`,
 					// The shorthand above would clobber a caller's paddingRight; merge
 					// the reserved rail gutter explicitly.

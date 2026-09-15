@@ -533,11 +533,16 @@ async fn probe_ready(binary: &Path, url_file: &Path, pid: u32) -> (bool, Option<
     if !url_file.is_file() {
         return (false, None);
     }
-    let cmd = Command::new(binary)
-        .args(health_args(url_file, pid))
-        .stdin(Stdio::null())
-        .output();
-    let out = match tokio::time::timeout(PROBE_TIMEOUT, cmd).await {
+    let mut cmd = Command::new(binary);
+    cmd.args(health_args(url_file, pid)).stdin(Stdio::null());
+    // `tunnel-client` is a console binary on Windows; without this flag every
+    // keepalive probe flashes a console window on the GUI host.
+    #[cfg(windows)]
+    {
+        const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+        cmd.creation_flags(CREATE_NO_WINDOW);
+    }
+    let out = match tokio::time::timeout(PROBE_TIMEOUT, cmd.output()).await {
         Ok(Ok(out)) => out,
         Ok(Err(e)) => return (false, Some(format!("health probe failed: {e}"))),
         Err(_) => return (false, Some("health probe timed out".to_string())),

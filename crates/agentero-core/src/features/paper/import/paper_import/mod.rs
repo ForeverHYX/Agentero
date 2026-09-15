@@ -119,6 +119,7 @@ pub async fn paper_commit(
     match opts.dedupe {
         DedupePolicy::ByCatalogId => {
             if let Ok(Some(existing)) = papers::get_by_id(vault, &meta.id) {
+                let existing = repair_existing_import_shell(vault, existing, &meta, &opts).await?;
                 let dir = vault.join(&existing.path);
                 return Ok(existing_result(
                     CommitStatus::Deduped,
@@ -137,6 +138,7 @@ pub async fn paper_commit(
                     )
                     .await;
                 }
+                let existing = repair_existing_import_shell(vault, existing, &meta, &opts).await?;
                 let dir = vault.join(&existing.path);
                 return Ok(existing_result(
                     CommitStatus::Deduped,
@@ -319,6 +321,126 @@ fn existing_result(
         asset_messages: Vec::new(),
         assets_pending: false,
     }
+}
+
+async fn repair_existing_import_shell(
+    vault: &Path,
+    mut existing: papers::PaperRecord,
+    incoming: &papers::PaperRecord,
+    opts: &PaperCommitOptions<'_>,
+) -> Result<papers::PaperRecord, AppError> {
+    let dir = vault.join(&existing.path);
+    fs::create_dir_all(&dir)?;
+
+    let mut changed = backfill_existing_metadata(&mut existing, incoming);
+    let notes = dir.join("NOTES.md");
+    if !notes.is_file() {
+        write_paper_shell_opts(
+            &dir,
+            vault,
+            &existing,
+            opts.note_mode,
+            opts.translate_abstract,
+        )
+        .await?;
+        changed = true;
+    }
+
+    if changed {
+        existing.updated_at = crate::time::now_rfc3339_millis();
+        existing = papers::upsert_paper(vault, &existing)?;
+        if let Some(c) = opts.cache {
+            c.invalidate(vault, &existing.path);
+        }
+    }
+
+    Ok(existing)
+}
+
+fn backfill_existing_metadata(
+    existing: &mut papers::PaperRecord,
+    incoming: &papers::PaperRecord,
+) -> bool {
+    let mut changed = false;
+
+    if existing.title.trim().is_empty() && !incoming.title.trim().is_empty() {
+        existing.title = incoming.title.clone();
+        changed = true;
+    }
+    if existing.authors.is_empty() && !incoming.authors.is_empty() {
+        existing.authors = incoming.authors.clone();
+        changed = true;
+    }
+    if existing.tags.is_empty() && !incoming.tags.is_empty() {
+        existing.tags = incoming.tags.clone();
+        changed = true;
+    }
+
+    macro_rules! fill {
+        ($field:ident) => {
+            if existing.$field.is_none() {
+                if let Some(value) = incoming
+                    .$field
+                    .as_deref()
+                    .map(str::trim)
+                    .filter(|value| !value.is_empty())
+                {
+                    existing.$field = Some(value.to_string());
+                    changed = true;
+                }
+            }
+        };
+    }
+
+    if existing.year.is_none() && incoming.year.is_some() {
+        existing.year = incoming.year;
+        changed = true;
+    }
+    fill!(abstract_text);
+    fill!(arxiv_id);
+    fill!(doi);
+    fill!(pdf_url);
+    fill!(html_url);
+    fill!(source_url);
+    fill!(body_source);
+    fill!(body_quality);
+    fill!(bibtex_key);
+    if existing.citation_count.is_none() && incoming.citation_count.is_some() {
+        existing.citation_count = incoming.citation_count;
+        changed = true;
+    }
+    if existing.status.trim().is_empty() && !incoming.status.trim().is_empty() {
+        existing.status = incoming.status.clone();
+        changed = true;
+    }
+    fill!(summary);
+    fill!(date);
+    fill!(isbn);
+    fill!(issn);
+    fill!(pmid);
+    fill!(publication);
+    fill!(volume);
+    fill!(issue);
+    fill!(pages);
+    fill!(publisher);
+    fill!(place);
+    fill!(series);
+    fill!(language);
+    fill!(zotero_item_type);
+    fill!(meta_source);
+    fill!(extra);
+
+    if existing.creators.is_none() && incoming.creators.is_some() {
+        existing.creators = incoming.creators.clone();
+        changed = true;
+    }
+    if existing.zotero_item_id.is_none() && incoming.zotero_item_id.is_some() {
+        existing.zotero_item_id = incoming.zotero_item_id;
+        changed = true;
+    }
+    fill!(zotero_last_synced);
+
+    changed
 }
 
 /// First catalog row matching `id` or any shared identifier of `meta`
@@ -593,6 +715,61 @@ mod tests {
         assert_eq!(res.status, CommitStatus::Created);
         assert_eq!(res.path, "papers/unrelated");
         assert!(vault.join("papers/unrelated/unrelated.pdf").is_file());
+
+        let _ = fs::remove_dir_all(&vault);
+    }
+
+    #[tokio::test]
+    async fn by_identifiers_repairs_incomplete_existing_entry() {
+        let vault = tmp_vault("repair-existing");
+
+        let existing = papers::PaperRecord::local_pdf("1706.03762".into(), "".into())
+            .at_path("papers/1706.03762");
+        papers::upsert_paper(&vault, &existing).unwrap();
+
+        let mut incoming =
+            papers::PaperRecord::local_pdf("1706.03762".into(), "Attention Is All You Need".into());
+        incoming.authors = vec!["Ashish Vaswani".into()];
+        incoming.year = Some(2017);
+        incoming.abstract_text = Some("The dominant sequence transduction models.".into());
+        incoming.arxiv_id = Some("1706.03762".into());
+        incoming.html_url = Some("https://arxiv.org/abs/1706.03762".into());
+
+        let res = paper_commit(
+            incoming,
+            PaperCommitOptions {
+                vault: &vault,
+                parent_dir: "papers",
+                dedupe: DedupePolicy::ByIdentifiers,
+                assets: AssetsPolicy::Deferred,
+                translate_abstract: false,
+                note_mode: NoteShellMode::Standard,
+                fresh_timestamps: false,
+                cache: None,
+                app: None,
+                defer_parse_jobs: false,
+            },
+        )
+        .await
+        .unwrap();
+
+        assert_eq!(res.status, CommitStatus::Deduped);
+        assert_eq!(res.path, "papers/1706.03762");
+        let notes = fs::read_to_string(vault.join("papers/1706.03762/NOTES.md")).unwrap();
+        assert!(notes.contains("# Attention Is All You Need"));
+        assert!(notes.contains("> The dominant sequence transduction models."));
+
+        let row = papers::get_by_path(&vault, "papers/1706.03762")
+            .unwrap()
+            .unwrap();
+        assert_eq!(row.title, "Attention Is All You Need");
+        assert_eq!(row.authors, vec!["Ashish Vaswani"]);
+        assert_eq!(row.year, Some(2017));
+        assert_eq!(
+            row.abstract_text.as_deref(),
+            Some("The dominant sequence transduction models.")
+        );
+        assert_eq!(row.arxiv_id.as_deref(), Some("1706.03762"));
 
         let _ = fs::remove_dir_all(&vault);
     }

@@ -50,13 +50,6 @@ pub struct SkillDiscovery {
     pub candidates: Vec<SkillCandidate>,
 }
 
-#[derive(Debug, Clone)]
-struct ParsedSkillCandidate {
-    dir: PathBuf,
-    name: String,
-    description: String,
-}
-
 #[derive(Debug, Clone, Serialize, Deserialize)]
 struct SparseSkillCandidate {
     path: String,
@@ -769,66 +762,6 @@ pub fn discard_skill_discovery(discovery_id: &str) -> Result<(), AppError> {
     Ok(())
 }
 
-fn install_from_staged_dir(
-    temp: &Path,
-    vault: &Path,
-    source: &SkillSource,
-    reference: &str,
-    selected_names: &[String],
-) -> Result<Vec<SkillImportResult>, AppError> {
-    let candidates: Vec<_> = discover_candidates_from_dir(temp, source)?;
-    let candidates: Vec<_> = candidates
-        .into_iter()
-        .filter(|candidate| {
-            selected_names.is_empty()
-                || selected_names
-                    .iter()
-                    .any(|name| name == "*" || name == &candidate.name)
-        })
-        .collect();
-    if candidates.is_empty() {
-        return Err(AppError::message("no selected Skill remains to install"));
-    }
-
-    let skills_root = vault.join(".agents/skills");
-    fs::create_dir_all(&skills_root)?;
-    let mut results = Vec::with_capacity(candidates.len());
-    for candidate in candidates {
-        let target = skills_root.join(&candidate.name);
-        let relative_path = format!(".agents/skills/{}", candidate.name);
-        if target.exists() {
-            results.push(SkillImportResult {
-                name: candidate.name,
-                description: candidate.description,
-                path: relative_path,
-                source: source.source.clone(),
-                skipped: true,
-            });
-            continue;
-        }
-        copy_dir(&candidate.dir, &target)?;
-        let provenance = serde_json::json!({
-            "source": source.source,
-            "owner": source.owner,
-            "repo": source.repo,
-            "reference": reference,
-            "installedAt": crate::time::now_rfc3339_millis(),
-        });
-        fs::write(
-            target.join("agentero-skill.json"),
-            serde_json::to_vec_pretty(&provenance)?,
-        )?;
-        results.push(SkillImportResult {
-            name: candidate.name,
-            description: candidate.description,
-            path: relative_path,
-            source: source.source.clone(),
-            skipped: false,
-        });
-    }
-    Ok(results)
-}
-
 async fn install_from_sparse_discovery(
     temp: &Path,
     vault: &Path,
@@ -896,67 +829,6 @@ async fn install_from_sparse_discovery(
         });
     }
     Ok(results)
-}
-
-fn discover_candidates_from_dir(
-    temp: &Path,
-    source: &SkillSource,
-) -> Result<Vec<ParsedSkillCandidate>, AppError> {
-    let mut candidates = Vec::new();
-    let entries = WalkDir::new(temp)
-        .into_iter()
-        .filter_map(Result::ok)
-        .filter(|entry| {
-            entry.file_type().is_file()
-                && entry.file_name() == "SKILL.md"
-                && !is_discovery_metadata(entry.path(), temp)
-        })
-        .take(MAX_EXTRACTED_FILES + 1);
-    for entry in entries {
-        let dir = entry.path().parent().unwrap_or(temp).to_path_buf();
-        let Ok(content) = fs::read_to_string(entry.path()) else {
-            continue;
-        };
-        let Ok((name, description)) = parse_skill_metadata(&content) else {
-            continue;
-        };
-        candidates.push(ParsedSkillCandidate {
-            dir,
-            name,
-            description,
-        });
-    }
-    if candidates.len() > MAX_EXTRACTED_FILES {
-        return Err(AppError::message(
-            "skill source contains too many candidates",
-        ));
-    }
-
-    Ok(candidates
-        .into_iter()
-        .filter(|candidate| {
-            let relative = candidate
-                .dir
-                .strip_prefix(temp)
-                .map(|path| path.to_string_lossy().replace('\\', "/"))
-                .unwrap_or_default();
-            let path_matches = source.subpath.as_deref().is_none_or(|subpath| {
-                relative == subpath || relative.ends_with(&format!("/{subpath}"))
-            });
-            let name_matches = source.skill_names.is_empty()
-                || source
-                    .skill_names
-                    .iter()
-                    .any(|name| name == "*" || name == &candidate.name);
-            path_matches && name_matches
-        })
-        .collect())
-}
-
-fn is_discovery_metadata(path: &Path, temp: &Path) -> bool {
-    path == temp.join("source.json")
-        || path == temp.join(SPARSE_DISCOVERY_MARKER)
-        || path == temp.join(SPARSE_CANDIDATES_FILE)
 }
 
 fn discovery_dir(discovery_id: &str) -> Result<PathBuf, AppError> {
@@ -1070,62 +942,6 @@ mod tests {
         assert_eq!(name, "deep-research");
         assert_eq!(description.chars().count(), MAX_DESCRIPTION_LEN + 1);
         assert!(description.ends_with('…'));
-    }
-
-    #[test]
-    fn installs_from_staged_dir_skipping_unusable_skills() {
-        let tag = format!("agentero-skill-install-{}", std::process::id());
-        let vault = std::env::temp_dir().join(&tag);
-        let staged = std::env::temp_dir().join(format!("{tag}-staged"));
-        let _ = fs::remove_dir_all(&vault);
-        let _ = fs::remove_dir_all(&staged);
-        fs::create_dir_all(&vault).unwrap();
-
-        let long_description = format!("深度研究代理团队。Triggers: {}", "深度研究，".repeat(200));
-        let files = [
-            (
-                "repo-main/deep-research/SKILL.md",
-                format!("---\nname: deep-research\ndescription: \"{long_description}\"\n---\n# Body"),
-            ),
-            (
-                "repo-main/paper-reader/SKILL.md",
-                "---\nname: paper-reader\ndescription: >-\n  Read and explain a\n  research paper.\n---\n# Body".to_string(),
-            ),
-            (
-                "repo-main/templates/SKILL.md",
-                "# Template without frontmatter".to_string(),
-            ),
-        ];
-        for (path, content) in &files {
-            let target = staged.join(path);
-            fs::create_dir_all(target.parent().unwrap()).unwrap();
-            fs::write(target, content).unwrap();
-        }
-
-        let source = SkillSource {
-            owner: "acme".into(),
-            repo: "repo".into(),
-            reference: None,
-            subpath: None,
-            skill_names: Vec::new(),
-            source: "https://github.com/acme/repo".into(),
-        };
-
-        let results =
-            install_from_staged_dir(&staged, &vault, &source, "main", &["*".to_string()]).unwrap();
-        let mut names: Vec<&str> = results.iter().map(|r| r.name.as_str()).collect();
-        names.sort_unstable();
-        assert_eq!(names, ["deep-research", "paper-reader"]);
-        assert!(vault
-            .join(".agents/skills/deep-research/SKILL.md")
-            .is_file());
-        assert!(vault
-            .join(".agents/skills/deep-research/agentero-skill.json")
-            .is_file());
-        assert!(!vault.join(".agents/skills/templates").exists());
-
-        let _ = fs::remove_dir_all(&vault);
-        let _ = fs::remove_dir_all(&staged);
     }
 
     #[test]

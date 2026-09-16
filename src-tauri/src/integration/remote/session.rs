@@ -922,6 +922,10 @@ mod tests {
                 || msg.contains("could not connect")
                 || msg.contains("dns error")
                 || msg.contains("rate limited")
+                || msg.contains("bad gateway")
+                || msg.contains("service unavailable")
+                || msg.contains("gateway timeout")
+                || msg.contains("http 5")
         }
 
         // 2) Magic wand arXiv (network)

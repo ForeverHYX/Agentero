@@ -18,6 +18,9 @@ Vault/
 ├── AGENTS.md
 ├── papers/
 ├── notes/
+├── data/             # 远端服务器数据/产物的落位目录（非论文）
+├── thesis/
+│   └── main.tex      # LaTeX 起手稿（仅新建 Vault 时写入）
 ├── .agents/skills/
 └── .agentero/
     ├── catalog.sqlite

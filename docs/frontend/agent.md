@@ -75,7 +75,7 @@ Tool 提升的作答：`formatAskUserAnswers` 后作为下一用户轮。若当�
 
 成功写 `NOTES.md`，`is_read = true`；进度在后台任务条。批量导入不连跑。  
 Skill 语法由 Host 按 provider 分流（Claude `/id`，其它注入 `SKILL.md`）。  
-用户提示会按当前 App 语言（设置里的 `en` / `zh-CN` / 跟随系统解析后）注入一句输出语言说明：正文跟 App 语言，skill 固定的英文 `##` 结构标题保持不变。
+用户提示会按当前 App 语言（设置里的 `en` / `zh-CN` / 跟随系统解析后）注入一句输出语言说明：正文跟 App 语言，skill 固定的中文 `##` 结构标题保持不变。
 
 `NOTES.md` 须带 YAML frontmatter：
 
@@ -83,6 +83,7 @@ Skill 语法由 Host 按 provider 分流（Claude `/id`，其它注入 `SKILL.md
 - `created: YYYY-MM-DD`（语言中性键；ISO 日期，Properties 按值识别为日期；已有创建日期则不覆盖）
 
 保留用户已有 frontmatter 键与自定义 alias，不重命名 `NOTES.md` 文件名。约定见 vault 内 `paper-reader` skill。
+作者联系方式、外链、OpenReview 与详细人物档案等联网检索规则拆到 `paper-reader/author-lookup.md`，主 `SKILL.md` 只负责精读入口与路由。
 
 ## 个人偏好
 

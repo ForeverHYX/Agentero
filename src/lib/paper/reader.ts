@@ -41,16 +41,17 @@ const inflightReads = new Set<string>();
 /**
  * Language line for paper-reader NOTES.md body, based on the resolved App
  * locale (`i18n.language` after settings load: `en` | `zh-CN`).
- * Fixed skill section headings stay English; only the body language changes.
+ * Fixed skill section headings come from the Chinese paper-reader skill; only
+ * the body language changes.
  */
 export function paperReaderLanguageInstruction(
 	language: string = i18n.language,
 ): string {
 	const lang = (language || "en").toLowerCase();
 	if (lang.startsWith("zh")) {
-		return "Write the NOTES.md body in Chinese (Simplified). Keep the fixed English section headings from the skill (e.g. ## Method).";
+		return "Write the NOTES.md body in Chinese (Simplified). Keep the fixed Chinese section headings from the skill (e.g. ## 方法).";
 	}
-	return "Write the NOTES.md body in English.";
+	return "Write the NOTES.md body in English. Keep the fixed Chinese section headings from the skill (e.g. ## 方法).";
 }
 
 /**
@@ -68,7 +69,7 @@ export function buildPaperReaderUserPrompt(
 		"Prefer TeX under source/, else PAPER.md, else local PDF.",
 		`Write structured lecture notes into \`${paperRel}/NOTES.md\`.`,
 		paperReaderLanguageInstruction(language),
-		"Keep [[wikilinks]]. End with ## Sources listing Vault-relative paths you read.",
+		"Keep valid [[wikilinks]]. Use inline PDF fragment links or notes wikilinks for citations; do not add a trailing ## Sources block.",
 	].join("\n");
 }
 

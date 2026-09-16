@@ -1,14 +1,3 @@
----
-name: author-lookup
-version: 1
-description: >-
-  查找论文一作 / 通讯作者的公开信息（email、个人主页、GitHub）与论文的 OpenReview
-  链接，逐项标注来源后写入 {paper}/NOTES.md（frontmatter + 「联系方式与链接」小节），
-  并为作者生成信息搜集报告写入 {paper}/attachments/。
-  Use for finding a paper's author email / homepage / github and its OpenReview
-  page in a Agentero vault.
----
-
 # 作者信息与外链检索
 
 为论文补齐**可联系入口与外部链接**：一作与通讯作者的 email / 个人主页 / GitHub，以及该

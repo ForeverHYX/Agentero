@@ -61,28 +61,48 @@ fn resolve_engine(command: &str) -> Option<PathBuf> {
     None
 }
 
+/// LaTeX engines offered in the picker. Every entry compiles through latexmk,
+/// which orchestrates the engine runs plus bibtex/biber and reruns until the
+/// document settles (engine → bibtex → engine → engine).
+const LATEX_ENGINES: &[(&str, &str)] = &[
+    ("pdflatex", "PDFLaTeX"),
+    ("xelatex", "XeLaTeX"),
+    ("lualatex", "LuaLaTeX"),
+];
+
+/// Map a picker engine id to its latexmk engine flag.
+fn latexmk_engine_flag(engine: &str) -> Option<&'static str> {
+    match engine {
+        "pdflatex" => Some("-pdf"),
+        "xelatex" => Some("-xelatex"),
+        "lualatex" => Some("-lualatex"),
+        _ => None,
+    }
+}
+
 /// Detect available LaTeX engines on the system.
-/// Returns engines whose binaries actually exist on disk, ordered by common
-/// preference. Engines not present on the host are omitted (not greyed out).
+/// Returns the engines that can actually compile — latexmk (the orchestrator)
+/// and the engine binary must both exist. Engines not present on the host are
+/// omitted (not greyed out); without latexmk the list is empty and the compile
+/// button stays hidden.
 #[tauri::command]
 #[specta::specta]
 pub async fn detect_latex_engines() -> ApiResult<Vec<LatexEngine>> {
-    let candidates = [
-        ("pdflatex", "PDFLaTeX"),
-        ("xelatex", "XeLaTeX"),
-        ("lualatex", "LuaLaTeX"),
-        ("latexmk", "latexmk"),
-        ("tectonic", "Tectonic"),
-    ];
+    // Everything compiles through latexmk, so it gates the whole feature.
+    let Some(latexmk) = resolve_engine("latexmk") else {
+        log::debug!("latexmk not found; tex compile unavailable");
+        return ApiResult::ok(Vec::new());
+    };
 
     let mut engines = Vec::new();
 
-    for (id, label) in candidates {
-        if let Some(path) = resolve_engine(id) {
+    for (id, label) in LATEX_ENGINES {
+        if resolve_engine(id).is_some() {
             engines.push(LatexEngine {
                 id: id.to_string(),
                 label: label.to_string(),
-                path: Some(path.to_string_lossy().to_string()),
+                // The executable actually spawned for every entry is latexmk.
+                path: Some(latexmk.to_string_lossy().to_string()),
             });
         }
     }
@@ -140,35 +160,44 @@ pub async fn compile_tex(
         cwd.display()
     );
 
+    let Some(engine_flag) = latexmk_engine_flag(&engine) else {
+        return ApiResult::err(crate::core::error::AppError::message(format!(
+            "unknown latex engine: {}",
+            engine
+        )));
+    };
+
     // GUI apps inherit launchd's minimal PATH (no /Library/TeX/texbin), so a
-    // bare engine name fails to spawn even though detection found it. Resolve
+    // bare latexmk would fail to spawn even though detection found it. Resolve
     // the same way detect_latex_engines does and spawn the absolute path.
-    let engine_path = match resolve_engine(&engine) {
+    // latexmk runs the selected engine, bibtex/biber, and reruns automatically
+    // until cross-references and citations settle.
+    let latexmk = match resolve_engine("latexmk") {
         Some(p) => p,
         None => {
-            return ApiResult::err(crate::core::error::AppError::message(format!(
-                "engine not found on this system: {}",
-                engine
-            )))
+            return ApiResult::err(crate::core::error::AppError::message(
+                "latexmk not found on this system",
+            ))
         }
     };
 
-    let mut cmd = tokio::process::Command::new(&engine_path);
-    cmd.current_dir(cwd);
+    let mut cmd = tokio::process::Command::new(&latexmk);
+    cmd.current_dir(cwd)
+        .arg(engine_flag)
+        .arg("-interaction=nonstopmode")
+        .arg("-halt-on-error")
+        .arg(format!("-outdir={}", cwd.to_string_lossy()))
+        .arg(basename);
 
-    match engine.as_str() {
-        "tectonic" => {
-            cmd.arg(basename);
-            cmd.arg("--outdir");
-            cmd.arg(cwd.to_string_lossy().as_ref());
-            cmd.arg("--keep-intermediates");
-        }
-        _ => {
-            cmd.arg("-interaction=nonstopmode");
-            cmd.arg("-halt-on-error");
-            cmd.arg(format!("-output-directory={}", cwd.to_string_lossy()));
-            cmd.arg(basename);
-        }
+    // latexmk locates the engine and bibtex via the child $PATH, which under a
+    // GUI app is launchd's minimal one. Put latexmk's own bin dir (TeX Live
+    // keeps every engine there) in front of the inherited PATH.
+    if let Some(bin_dir) = latexmk.parent() {
+        let inherited = std::env::var_os("PATH").unwrap_or_default();
+        let mut path_env = std::ffi::OsString::from(bin_dir);
+        path_env.push(":");
+        path_env.push(inherited);
+        cmd.env("PATH", path_env);
     }
 
     let output = match cmd.output().await {

@@ -15,6 +15,78 @@ function isMarkdownPasteBlocked(editor: SlateEditor) {
 	});
 }
 
+type InsertFragmentNodes = Parameters<SlateEditor["tf"]["insertFragment"]>[0];
+
+function decodeSlateFragment(
+	dataTransfer: DataTransfer,
+): InsertFragmentNodes | null {
+	const raw =
+		dataTransfer.getData("application/x-slate-fragment") ||
+		dataTransfer
+			.getData("text/html")
+			.match(/data-slate-fragment="(.+?)"/m)?.[1];
+	if (!raw) return null;
+	try {
+		const decoded = decodeURIComponent(
+			typeof atob === "function"
+				? atob(raw)
+				: Buffer.from(raw, "base64").toString("binary"),
+		);
+		const parsed = JSON.parse(decoded);
+		return Array.isArray(parsed) && parsed.length > 0
+			? (parsed as InsertFragmentNodes)
+			: null;
+	} catch {
+		return null;
+	}
+}
+
+function insertFragmentPreservingBlock(
+	editor: SlateEditor,
+	fragment: InsertFragmentNodes,
+) {
+	if (!fragment.length) return;
+
+	const currentBlockEntry = editor.api.above({
+		match: (n) => editor.api.isBlock(n),
+	});
+	const currentBlock = currentBlockEntry?.[0];
+	const isCurrentBlockEmpty =
+		Boolean(currentBlock) && editor.api.isEmpty(currentBlock);
+
+	const first = fragment[0];
+	// Single paragraph without block syntax: insert inline children to preserve
+	// the current container block type (headings, lists, blockquotes) instead of
+	// letting Slate replace an empty block with a paragraph.
+	if (
+		fragment.length === 1 &&
+		typeof first === "object" &&
+		first !== null &&
+		"type" in first &&
+		first.type === editor.getType(KEYS.p) &&
+		"children" in first &&
+		Array.isArray(first.children)
+	) {
+		editor.tf.insertFragment(first.children as InsertFragmentNodes);
+		return;
+	}
+
+	if (
+		isCurrentBlockEmpty &&
+		typeof currentBlock?.type === "string" &&
+		currentBlock.type !== editor.getType(KEYS.p) &&
+		fragment.length > 1 &&
+		typeof first === "object" &&
+		first !== null &&
+		"type" in first &&
+		first.type === editor.getType(KEYS.p)
+	) {
+		first.type = currentBlock.type;
+	}
+
+	editor.tf.insertFragment(fragment);
+}
+
 /**
  * Parse clipboard text as Markdown before Plate's HTML parser can claim a
  * payload that contains both text/plain and text/html.
@@ -45,12 +117,23 @@ export const MarkdownPastePlugin = createSlatePlugin({
 				return;
 			}
 
+			// Intra-editor paste: when the clipboard carries a rich Slate fragment
+			// (via application/x-slate-fragment or data-slate-fragment in HTML),
+			// insert the exact AST nodes directly. This preserves block types (e.g.
+			// headings, lists), prevents wikilink text duplication, and avoids
+			// spurious empty paragraphs from DOM text extraction.
+			const slateFragment = decodeSlateFragment(dataTransfer);
+			if (slateFragment) {
+				insertFragmentPreservingBlock(editor, slateFragment);
+				return;
+			}
+
 			const fragment = editor
 				.getApi(MarkdownPlugin)
 				.markdown.deserialize(prepareMarkdownForDeserialize(markdown));
 			if (fragment.length === 0) return insertData(dataTransfer);
 
-			editor.tf.insertFragment(fragment);
+			insertFragmentPreservingBlock(editor, fragment);
 
 			const inlineEquationEntry = editor.api.above({
 				match: { type: editor.getType(KEYS.inlineEquation) },

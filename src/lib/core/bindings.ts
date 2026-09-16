@@ -579,12 +579,14 @@ export const commands = {
 	 */
 	webProxyAllowHost: (args: WebProxyAllowHostArgs) => typedError<ApiResult<boolean>, string>(__TAURI_INVOKE("web_proxy_allow_host", { args })),
 	/**
-	 *  Detect available LaTeX engines on the system (pdflatex, xelatex, lualatex, etc.).
+	 *  Detect available LaTeX engines on the system.
+	 *  Returns the engines that can actually compile — latexmk (the orchestrator)
+	 *  and the engine binary must both exist. Engines not present on the host are
+	 *  omitted (not greyed out); without latexmk the list is empty and the compile
+	 *  button stays hidden.
 	 */
 	detectLatexEngines: () => __TAURI_INVOKE<ApiResult<LatexEngine[]>>("detect_latex_engines"),
-	/**
-	 *  Compile a .tex file to PDF using the specified engine.
-	 */
+	/**  Compile a .tex file to PDF using the specified engine. */
 	compileTex: (texPath: string, engine: string) => __TAURI_INVOKE<ApiResult<CompileResult>>("compile_tex", { texPath, engine }),
 };
 
@@ -610,6 +612,7 @@ export const events = {
 	agentUsage: makeEvent<AgentUsageEvt>("agent:usage"),
 	bridgeHostStatus: makeEvent<BridgeHostStatusEvent>("bridge:host-status"),
 	bridgePairRequest: makeEvent<BridgePairRequestEvent>("bridge:pair-request"),
+	compileLog: makeEvent<CompileLogEvent>("compile:log"),
 	connectorError: makeEvent<ConnectorErrorEvent>("connector:error"),
 	connectorItemSaved: makeEvent<ConnectorItemSavedEvent>("connector:item-saved"),
 	connectorProgress: makeEvent<ConnectorProgressEvent>("connector:progress"),
@@ -633,7 +636,6 @@ export const events = {
 	vaultOpenError: makeEvent<VaultOpenErrorEvent>("vault:open-error"),
 	vaultOpenRequest: makeEvent<VaultOpenRequestEvent>("vault:open-request"),
 	windowClosed: makeEvent<WindowClosedEvent_Deserialize>("window:closed"),
-	compileLog: makeEvent<CompileLogEvent>("compile:log"),
 };
 
 /* Types */
@@ -1727,31 +1729,6 @@ export type BuiltinProviderStatus = {
 	ocrModel: string,
 };
 
-/**  A detected LaTeX rendering engine. */
-export type LatexEngine = {
-	id: string,
-	label: string,
-	path: string | null,
-};
-
-/**  Result of a TeX compilation. */
-export type CompileResult = {
-	ok: boolean,
-	pdf_path: string | null,
-	log: string,
-};
-
-/**  Arguments for `compile_tex`. */
-export type CompileTexArgs = {
-	tex_path: string,
-	engine: string,
-};
-
-/**  A single line emitted during TeX compilation. */
-export type CompileLogEvent = {
-	line: string,
-};
-
 /**  Status for a common agent row in Settings. */
 export type CatalogAcpStatus = 
 /**  Detect binary missing. */
@@ -2126,6 +2103,18 @@ export type CommitStatus =
 "deduped" | 
 /**  `{parent}/{id}` already holds a paper (dir + NOTES or catalog row). */
 "skipped";
+
+/**  Mirror of the inline `json!({ "line" })` in `features::compile::compile_tex`. */
+export type CompileLogEvent = {
+	line: string,
+};
+
+/**  Result of a TeX compilation. */
+export type CompileResult = {
+	ok: boolean,
+	pdfPath: string | null,
+	log: string,
+};
 
 /**
  *  Mirror of the inline `json!({ "message", "sessionId" })` in
@@ -2942,6 +2931,13 @@ string |
 Json[] | 
 /**  JSON object. */
 { [key in string]: Json };
+
+/**  A detected LaTeX rendering engine. */
+export type LatexEngine = {
+	id: string,
+	label: string,
+	path: string | null,
+};
 
 export type LayoutModelStatus = {
 	ready: boolean,

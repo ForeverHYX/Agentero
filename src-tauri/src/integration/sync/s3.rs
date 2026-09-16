@@ -10,6 +10,7 @@
 use crate::core::error::AppError;
 use crate::core::http;
 use crate::integration::sync::config::SyncBackendConfig;
+use crate::integration::sync::store::{PutCondition, PutOutcome};
 use chrono::Utc;
 use sha2::{Digest, Sha256};
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -29,20 +30,6 @@ pub struct S3Client {
     /// Seeded from the persisted probe result; flipped off at runtime when a
     /// conditional PUT comes back 400 NotImplemented.
     conditional_writes: AtomicBool,
-}
-
-pub enum PutCondition {
-    /// Create-only (`If-None-Match: *`).
-    IfNoneMatch,
-    /// Replace-only when unchanged (`If-Match: <etag>`).
-    IfMatch(String),
-}
-
-#[derive(Debug, PartialEq, Eq)]
-pub enum PutOutcome {
-    Ok,
-    /// The conditional write lost a race (412) — caller decides how to retry.
-    PreconditionFailed,
 }
 
 impl S3Client {

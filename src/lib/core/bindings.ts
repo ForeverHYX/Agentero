@@ -4371,19 +4371,26 @@ export type StageImportFileResult = {
 };
 
 export type SyncBackendConfig = {
+	/**  Backend discriminator; S3 fields or WebDAV fields apply accordingly. */
+	backend?: SyncBackendKind,
 	/**  S3-compatible endpoint, e.g. `https://<account>.r2.cloudflarestorage.com`. */
-	endpoint: string,
+	endpoint?: string,
 	region?: string,
-	bucket: string,
+	bucket?: string,
 	/**  Optional key prefix inside the bucket (multiple vaults per bucket). */
 	prefix?: string,
-	accessKey: string,
-	secretKey: string,
+	accessKey?: string,
+	secretKey?: string,
 	/**
 	 *  `{endpoint}/{bucket}/key` instead of `{bucket}.{endpoint}/key`.
 	 *  Path style works with R2 / MinIO / AWS alike, so it is the default.
 	 */
 	forcePathStyle?: boolean,
+	/**  WebDAV server directory, e.g. `https://dav.jianguoyun.com/dav/agentero/`. */
+	webdavUrl?: string,
+	webdavUsername?: string,
+	/**  Masked (`*`) on the way to the WebView, like the S3 secret key. */
+	webdavPassword?: string,
 	/**
 	 *  Automatic background sync: once on scheduler start (vault open), after
 	 *  30s of vault quiet, and every `interval_minutes`.
@@ -4391,9 +4398,9 @@ export type SyncBackendConfig = {
 	autoSync?: boolean,
 	intervalMinutes?: number,
 	/**
-	 *  Connection-test probe result: `false` for backends whose PutObject
-	 *  rejects conditional headers (e.g. Aliyun OSS, 400 NotImplemented).
-	 *  Sync then degrades to plain PUTs; the runtime fallback re-detects.
+	 *  Connection-test probe result: `false` for backends whose PUT rejects
+	 *  or ignores conditional headers (e.g. Aliyun OSS 400 NotImplemented,
+	 *  most WebDAV servers). Sync then degrades to plain PUTs.
 	 */
 	conditionalWrites?: boolean,
 	/**
@@ -4402,6 +4409,12 @@ export type SyncBackendConfig = {
 	 */
 	scope?: SyncScope,
 };
+
+/**
+ *  Which remote storage backend a vault syncs through. Legacy `sync.json`
+ *  entries without the field deserialize as [`SyncBackendKind::S3`].
+ */
+export type SyncBackendKind = "s3" | "webdav";
 
 export type SyncConfigureArgs = {
 	vaultPath: string,

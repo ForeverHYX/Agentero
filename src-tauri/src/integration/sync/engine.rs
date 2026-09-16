@@ -17,8 +17,8 @@
 use crate::core::error::AppError;
 use crate::integration::sync::config::SyncBackendConfig;
 use crate::integration::sync::local::{self, SyncMeta};
-use crate::integration::sync::s3::{PutCondition, PutOutcome, S3Client};
 use crate::integration::sync::snapshot::{self, FileEntry, Manifest};
+use crate::integration::sync::store::{PutCondition, PutOutcome, SyncStore};
 use flate2::read::GzDecoder;
 use flate2::write::GzEncoder;
 use serde::{Deserialize, Serialize};
@@ -65,11 +65,12 @@ pub struct SyncOutcome {
 pub type Progress<'a> = &'a (dyn Fn(&str, usize, usize) + Send + Sync);
 
 /// Quick credential/bucket check used by `sync_configure`; also probes
-/// conditional-write support so backends like Aliyun OSS degrade to plain
-/// PUTs before the first real sync instead of failing mid-pass.
+/// conditional-write support so backends that reject or ignore conditional
+/// PUTs (Aliyun OSS, most WebDAV servers) degrade to plain PUTs before the
+/// first real sync instead of failing mid-pass.
 pub async fn test_connection(cfg: &SyncBackendConfig) -> Result<bool, AppError> {
-    let client = S3Client::new(cfg)?;
-    client.list("", 1).await?;
+    let client = SyncStore::new(cfg)?;
+    client.ensure_root().await?;
     client.probe_conditional_writes().await
 }
 
@@ -78,7 +79,7 @@ pub async fn sync_vault(
     cfg: &SyncBackendConfig,
     progress: Progress<'_>,
 ) -> Result<SyncOutcome, AppError> {
-    let client = S3Client::new(cfg)?;
+    let client = SyncStore::new(cfg)?;
     ensure_remote_identity(vault, &client).await?;
 
     progress("scan", 0, 0);
@@ -221,7 +222,7 @@ pub async fn sync_vault(
 /// First contact: create or verify the remote store identity.
 /// A vault that never synced adopts an existing remote id (joining a store);
 /// a vault with sync history refuses a foreign store.
-async fn ensure_remote_identity(vault: &Path, client: &S3Client) -> Result<String, AppError> {
+async fn ensure_remote_identity(vault: &Path, client: &SyncStore) -> Result<String, AppError> {
     let vault_id = local::ensure_vault_id(vault)?;
     match client.get(VAULT_KEY).await? {
         Some((bytes, _)) => {
@@ -423,7 +424,7 @@ fn merge(
 
 async fn apply_local(
     vault: &Path,
-    client: &S3Client,
+    client: &SyncStore,
     plan: &MergePlan,
     outcome: &mut SyncOutcome,
     progress: Progress<'_>,
@@ -761,6 +762,7 @@ mod tests {
             interval_minutes: 30,
             conditional_writes: true,
             scope: snapshot::SyncScope::all(),
+            ..SyncBackendConfig::default()
         };
         let noop: &(dyn Fn(&str, usize, usize) + Send + Sync) = &|_, _, _| {};
 

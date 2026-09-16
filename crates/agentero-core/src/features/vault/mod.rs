@@ -17,6 +17,9 @@ pub const AGENTS_DIR_README: &str =
 pub const SKILLS_DIR_README: &str =
     include_str!("../../../../../templates/vault/.agents/skills/README.md");
 
+/// Minimal LaTeX starter seeded into `thesis/` (only when the folder is absent).
+pub const THESIS_MAIN_TEX: &str = include_str!("../../../../../templates/vault/thesis/main.tex");
+
 // Onboarding notes and bundled skill package files are discovered by build.rs
 // and embedded here.
 include!(concat!(env!("OUT_DIR"), "/onboarding_templates.rs"));
@@ -156,11 +159,12 @@ fn seed_or_upgrade_bundled_file(
 
 /// Idempotent vault scaffold under `path` without overwriting existing user files.
 ///
-/// Creates: `papers/`, `notes/`, `.agentero/`, `.agents/` (+ `skills/`),
+/// Creates: `papers/`, `notes/`, `data/`, `.agentero/`, `.agents/` (+ `skills/`),
 /// `AGENTS.md` (if missing), seeds `.agents/README.md` and bundled skills from
 /// the app template, safely upgrades managed first-party skills (frontmatter
-/// `version`), seeds localized onboarding tutorial notes under `notes/`, and
-/// initializes `.agentero/catalog.sqlite`.
+/// `version`), seeds localized onboarding tutorial notes under `notes/`, seeds
+/// the `thesis/` LaTeX starter when that folder is absent, and initializes
+/// `.agentero/catalog.sqlite`.
 /// Does **not** create `PAPERS.md` / `library.bib`.
 ///
 /// Safe to call on every vault open after an app update so newly shipped skills
@@ -184,7 +188,14 @@ pub fn ensure_vault(path: &Path, locale: &str) -> Result<CreateVaultResult, AppE
     let mut created: Vec<String> = Vec::new();
     let mut updated: Vec<String> = Vec::new();
 
-    for dir in ["papers", "notes", ".agentero", ".agents", ".agents/skills"] {
+    for dir in [
+        "papers",
+        "notes",
+        "data",
+        ".agentero",
+        ".agents",
+        ".agents/skills",
+    ] {
         let p = join_rel(path, dir);
         if !p.exists() {
             fs::create_dir_all(&p)?;
@@ -215,6 +226,15 @@ pub fn ensure_vault(path: &Path, locale: &str) -> Result<CreateVaultResult, AppE
     let onboarding_files = bundled_onboarding_files(locale);
     for (rel, content) in &onboarding_files {
         seed_file_if_missing(path, rel, content, &mut created)?;
+    }
+
+    // Seed the LaTeX manuscript starter only when `thesis/` does not exist, so
+    // an existing (possibly real) manuscript directory is never touched.
+    let thesis_dir = join_rel(path, "thesis");
+    if !thesis_dir.exists() {
+        fs::create_dir_all(&thesis_dir)?;
+        created.push("thesis/".into());
+        seed_file_if_missing(path, "thesis/main.tex", THESIS_MAIN_TEX, &mut created)?;
     }
 
     // Catalog: always ensure schema (may create catalog.sqlite)
@@ -274,6 +294,8 @@ mod tests {
         let r = create_vault(&dir, "en").expect("create");
         assert!(dir.join("papers").is_dir());
         assert!(dir.join("notes").is_dir());
+        assert!(dir.join("data").is_dir());
+        assert!(dir.join("thesis/main.tex").is_file());
         assert!(!dir.join("plans").exists());
         assert!(dir.join(".agentero").is_dir());
         assert!(dir.join(".agents").is_dir());
@@ -310,10 +332,12 @@ mod tests {
         assert!(r.created.iter().any(|c| c.starts_with(".agents")));
         assert!(r.created.iter().any(|c| c.starts_with("notes/")));
 
-        // Second call does not wipe AGENTS.md, .agents/README.md, or onboarding notes
+        // Second call does not wipe AGENTS.md, .agents/README.md, onboarding
+        // notes, or a user-edited thesis manuscript.
         fs::write(dir.join("AGENTS.md"), "# custom\n").unwrap();
         fs::write(dir.join(".agents/README.md"), "# keep\n").unwrap();
         fs::write(dir.join(&onboarding_paths[0]), "# edited\n").unwrap();
+        fs::write(dir.join("thesis/main.tex"), "% my thesis\n").unwrap();
         let r2 = create_vault(&dir, "en").expect("again");
         let content = fs::read_to_string(dir.join("AGENTS.md")).unwrap();
         assert!(content.starts_with("# custom"));
@@ -324,6 +348,10 @@ mod tests {
         let onboarding = fs::read_to_string(dir.join(&onboarding_paths[0])).unwrap();
         assert!(onboarding.starts_with("# edited"));
         assert!(!r2.created.iter().any(|c| c == &onboarding_paths[0]));
+        let thesis = fs::read_to_string(dir.join("thesis/main.tex")).unwrap();
+        assert!(thesis.starts_with("% my thesis"));
+        assert!(!r2.created.iter().any(|c| c == "thesis/main.tex"));
+        assert!(!r2.created.iter().any(|c| c == "thesis/"));
 
         let _ = fs::remove_dir_all(&dir);
     }
@@ -595,6 +623,8 @@ mod tests {
         assert!(dir.join(".agentero/catalog.sqlite").is_file());
         assert!(dir.join("AGENTS.md").is_file());
         assert!(dir.join("papers").is_dir());
+        assert!(dir.join("data").is_dir());
+        assert!(dir.join("thesis/main.tex").is_file());
         assert!(!dir.join("PAPERS.md").exists());
         eprintln!(
             "create_vault wrote {} items to {}",

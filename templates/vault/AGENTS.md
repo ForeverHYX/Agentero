@@ -22,6 +22,8 @@ papers/<id>/
   root or into `source/`. Do not invent empty `attachments/` folders.
 
 - `notes/` — free-form concept notes (`[[wikilinks]]`, embeds, Mermaid, callouts).
+- `data/` — datasets and artifacts synced from a remote server; keep them out of `papers/`.
+- `thesis/` — LaTeX manuscript workspace; `thesis/main.tex` is a minimal starter.
 - `.agents/` — vault-local skills (`skills/<id>/SKILL.md`).
 
 ## Paper reading order

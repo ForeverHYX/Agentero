@@ -49,13 +49,24 @@ const LATEX_INTERMEDIATE_EXTS: &[&str] = &[
     "aux", // aux: cross-references, labels
     "log", // log: engine log
     "out", // out: PDF outline bookmarks
-    "toc", "lof", "lot", // table of contents / figures / tables
-    "fls", "fdb_latexmk", // latexmk file list + database
-    "synctex", "synctex.gz", // SyncTeX (gz has no real extension so check stem)
-    "nav", "snm", "vrb", // beamer navigation / metadata / verbatim
-    "bbl", "blg", // BibTeX output + log
-    "idx", "ind", "ilg", // makeindex
-    "glg", "glo", "gls", // glossary
+    "toc",
+    "lof",
+    "lot", // table of contents / figures / tables
+    "fls",
+    "fdb_latexmk", // latexmk file list + database
+    "synctex",
+    "synctex.gz", // SyncTeX (gz has no real extension so check stem)
+    "nav",
+    "snm",
+    "vrb", // beamer navigation / metadata / verbatim
+    "bbl",
+    "blg", // BibTeX output + log
+    "idx",
+    "ind",
+    "ilg", // makeindex
+    "glg",
+    "glo",
+    "gls", // glossary
     "xdv", // xelatex intermediate DVI
 ];
 

@@ -19,7 +19,7 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 
-pub const DEFAULT_TRANSLATOR_BASE_URL: &str = "https://translator.philfan.cn";
+pub const DEFAULT_TRANSLATOR_BASE_URL: &str = "https://translation-server.agentero.app";
 pub const DEFAULT_NETWORK_PROXY_URL: &str = "http://127.0.0.1:7890";
 /// Built-in URL-prefix GitHub mirrors. The user picks from this list instead of
 /// typing a custom URL. All entries must support `{base}/{canonical_github_url}`.

@@ -168,13 +168,13 @@ UI 刷新（`paper_resolve_identifier`）对 DOI/arXiv/URL **先走标识符解�
 | Cool Papers /kimi | `1` | 避免触发上游 LLM 配额 |
 | 通用 HTTP | `crate::core::http::client` | 共享连接池，单个请求超时 20s，PDF/TeX 下载 180s |
 
-所有调用均使用无 API key 的免费端点（Semantic Scholar、arXiv、Crossref、Unpaywall）。Cool Papers 无 auth。Translator Runtime 默认使用作者托管实例 `https://translator.philfan.cn`，用户可在设置中替换。
+所有调用均使用无 API key 的免费端点（Semantic Scholar、arXiv、Crossref、Unpaywall）。Cool Papers 无 auth。Translator Runtime 默认使用项目托管实例 `https://translation-server.agentero.app`，用户可在设置中替换。
 
 ## 4. 配置与可替换项
 
 | 配置项 | 位置 | 默认值 | 说明 |
 |---|---|---|---|
-| `translatorBaseUrl` | `features/system/settings/mod.rs` | `https://translator.philfan.cn` | 可替换为自托管 Translator Runtime |
+| `translatorBaseUrl` | `features/system/settings/mod.rs` | `https://translation-server.agentero.app` | 可替换为自托管 Translator Runtime |
 | `LookupImportArgs.translator_base_url` | 单次请求参数 | 空则使用设置值 | CLI/批量导入可临时覆盖 |
 | 后台 PDF 识别（RecognizeMetadata job） | `job_runners.rs` 直接读设置 `translator_base_url` | 空则用 `DEFAULT_TRANSLATOR_BASE_URL` | **不**经 IPC 入参传入（`ImportLocalPdfArgs` 无此字段） |
 

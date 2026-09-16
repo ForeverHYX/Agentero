@@ -29,7 +29,7 @@
  * Not imported by the app. Safe for CI with a live base, or local sidecar.
  */
 
-const DEFAULT_BASE = "https://translator.philfan.cn";
+const DEFAULT_BASE = "https://translation-server.agentero.app";
 /** Same class of UA as Host `translator_fetch`. */
 const APP_UA =
 	"agentero-lookup/0.1 (+https://github.com/poco-ai/agentero; probe)";

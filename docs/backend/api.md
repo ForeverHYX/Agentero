@@ -912,7 +912,7 @@ Agent：`agent_run_once` / `agent_warm` 在 vault 为 `remote:…` 时经 SSH `b
 **交互**：侧边栏魔棒 → 粘贴链接/编号 → Host `lookup_import_batch` → Translator → 写 paper 文件夹。  
 详见 [`paper-import.md`](paper-import.md)。
 
-**Translator 默认地址**：`https://translator.philfan.cn`（设置 `translatorBaseUrl` 可改）。  
+**Translator 默认地址**：`https://translation-server.agentero.app`（设置 `translatorBaseUrl` 可改）。  
 `POST {base}/search` 或 `/web`，body 为 plain text。
 
 #### `lookup_import_batch`（魔棒批量入库）
@@ -924,7 +924,7 @@ Agent：`agent_run_once` / `agent_warm` 在 vault 为 `remote:…` 时经 SSH `b
     vaultPath: string;
     parentDir: string;              // "papers" | "papers/nlp"
     texts: string[];                // 拆分后的原始 token 数组
-    translatorBaseUrl?: string;     // 来自设置，默认 https://translator.philfan.cn
+    translatorBaseUrl?: string;     // 来自设置，默认 https://translation-server.agentero.app
     taskId?: string;                // 前端后台任务 id；单条进度聚合在该任务下
     concurrency?: number;           // 最大并发入库数，默认 5，范围 1–10
   }

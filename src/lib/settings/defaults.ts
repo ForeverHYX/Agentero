@@ -21,7 +21,8 @@ export const DEFAULT_EMBEDDING_SETTINGS: EmbeddingSettings = {
 };
 
 /** Default Translator Runtime endpoint (overridable in Settings). */
-export const DEFAULT_TRANSLATOR_BASE_URL = "https://translator.philfan.cn";
+export const DEFAULT_TRANSLATOR_BASE_URL =
+	"https://translation-server.agentero.app";
 export const DEFAULT_NETWORK_PROXY_URL = "http://127.0.0.1:7890";
 
 /**

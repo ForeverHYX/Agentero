@@ -95,7 +95,7 @@ UI 阅读：优先 catalog 远程 URL；`source/` 为 arXiv TeX 归档；`PAPER.
 | 项 | 值 |
 |---|---|
 | 设置 key | `translatorBaseUrl`（Settings → General） |
-| 默认 | **`https://translator.philfan.cn`** |
+| 默认 | **`https://translation-server.agentero.app`** |
 | Host 常量 | `DEFAULT_TRANSLATOR_BASE_URL`（与设置默认一致） |
 
 - 魔棒入库时前端把设置中的 URL 传入 `lookup_import_batch.args.translatorBaseUrl`。
@@ -726,7 +726,7 @@ arXiv URL 推导：
 
 ### Phase B — Translator 服务
 
-- [x] HTTP 客户端 → `POST {translatorBaseUrl}/search|/web`（默认 `https://translator.philfan.cn`）
+- [x] HTTP 客户端 → `POST {translatorBaseUrl}/search|/web`（默认 `https://translation-server.agentero.app`）
 - [x] map → `PaperRecord` / catalog schema v2；设置页 `translatorBaseUrl`
 - [ ] 可选本机 sidecar 捆绑 / 探测；更细 dedupe UX
 

@@ -59,7 +59,7 @@ impl TranslatorApi {
 impl Default for TranslatorApi {
     fn default() -> Self {
         Self {
-            base_url: "https://translator.philfan.cn".to_string(),
+            base_url: "https://translation-server.agentero.app".to_string(),
         }
     }
 }

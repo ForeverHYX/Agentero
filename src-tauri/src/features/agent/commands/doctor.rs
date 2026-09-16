@@ -1,3 +1,4 @@
+#[cfg(not(target_os = "ios"))]
 use crate::app::terminal::open_terminal_confirm_login;
 use crate::core::error::{map_err, ApiResult};
 use crate::features::agent::doctor::{
@@ -50,6 +51,7 @@ pub async fn doctor_check_agents(
 }
 
 /// Open the template-owned CLI login command in a confirm-to-run terminal.
+#[cfg(not(target_os = "ios"))]
 #[tauri::command]
 #[specta::specta]
 pub fn doctor_open_agent_login_terminal(template_id: String) -> ApiResult<()> {

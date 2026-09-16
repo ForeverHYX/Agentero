@@ -140,7 +140,7 @@ pub(crate) async fn apply_probe_result(
     };
     // The user edited metadata (Edit-Metadata marks `manual`) before
     // recognition finished — their values win, skip entirely.
-    if record.meta_source.as_deref().is_some_and(|s| s != "local") {
+    if record.meta_source.as_deref() == Some("manual") {
         return Ok(RecognizeApply::Skipped("user-edited"));
     }
 

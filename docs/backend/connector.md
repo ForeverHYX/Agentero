@@ -33,7 +33,7 @@ Host 在 **`127.0.0.1:23119`** 模拟 Zotero 桌面 Connector HTTP，官方浏�
 | `ping` | 完整 |
 | `saveItems` | 完整 |
 | `saveAttachment` | 完整（浏览器上传 PDF） |
-| `saveStandaloneAttachment` | 完整（独立 PDF → 新建 paper；`canRecognize: false`） |
+| `saveStandaloneAttachment` | 完整（独立 PDF → 经 URL 识别元数据或回退建档，支持已存在条目去重补齐 PDF；`canRecognize: false`） |
 | `hasAttachmentResolvers` | 完整（DOI/arXiv 且尚无本地 PDF → true） |
 | `saveAttachmentFromResolver` | 完整（Crossref/Unpaywall 下载） |
 | `saveSnapshot` / `saveSingleFile` / `savePage` | 完整 |

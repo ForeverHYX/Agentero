@@ -3662,7 +3662,7 @@
 <li>前端不做识别，只切分多条输入（<code>src/components/sidebar/vault-sidebar-header.tsx</code> <code>parseLookupTexts()</code>），经 <code>lookup_import_batch</code>（<code>src-tauri/src/features/import/commands.rs:17</code>）进入 <code>import_by_identifier_batch</code>。</li>
 <li>Skill 目录约定已存在：<code>vault/.agents/skills/&lt;id&gt;/SKILL.md</code>（YAML frontmatter <code>name</code> / <code>description</code>，解析见 <code>src-tauri/src/features/agent/prompt/skills.rs</code> <code>parse_skill_metadata</code>）；<code>ensure_vault()</code> 播种 bundled skills，并按 frontmatter 整数 <code>version</code> 升级第一方 Skill（盘上版本低于模板则覆盖；无 <code>version</code> / 同版本 / 更高版本不覆盖）。</li>
 <li>文件树中 <code>.agents</code> 是 eager 目录（<code>src/lib/vault/tree.ts</code> <code>TREE_EAGER_ROOT_NAMES</code> / <code>TREE_ALLOWED_DOT_NAMES</code>），写入后 <code>refreshTree</code> 即可见。</li>
-<li>仓库内<strong>没有任何 git clone / npm 逻辑</strong>；可复用的下载基础在 <code>crates/agentero-core/src/features/paper/import/download.rs</code>：<code>http_get_bytes_with_progress()</code>（reqwest + 进度事件）与 arXiv e-print 的 <strong>tar/gzip 安全解压</strong>（<code>extract_tar_safe</code> / <code>sanitize_tar_path</code>，防路径穿越）。</li>
+<li>仓库内<strong>没有任何 git clone / npm 逻辑</strong>；候选发现与选中目录下载都走 GitHub REST API，不执行第三方代码。</li>
 </ul>
 <h3 id="2026">社区规范（2026）<a class="headerlink" href="#2026" title="Permanent link">&para;</a></h3>
 <ul>
@@ -3719,7 +3719,7 @@
 <h2 id="3">3. 下载与落盘策略<a class="headerlink" href="#3" title="Permanent link">&para;</a></h2>
 <p><strong>不依赖本机 git / node</strong>，按输入形态下载：</p>
 <ol>
-<li>GitHub repo 根：<code>GET https://codeload.github.com/{owner}/{repo}/tar.gz/{ref}</code>（ref 缺省时先经 <code>api.github.com/repos/{owner}/{repo}</code> 拿默认分支）；复用 <code>http_get_bytes_with_progress</code> 报进度。</li>
+<li>GitHub repo 根：ref 缺省时先经 <code>api.github.com/repos/{owner}/{repo}</code> 拿默认分支；候选发现阶段不下载仓库 tarball，而是 <code>GET /repos/{owner}/{repo}/git/trees/{ref}?recursive=1</code> 列路径，只读取匹配的 <code>SKILL.md</code> blob 来展示名称/描述。用户确认后才下载选中的 Skill 目录内容。</li>
 <li>已走 Host 网络代理（<code>networkProxy*</code>）。</li>
 <li>GitHub REST API 请求优先走本机已登录的 GitHub CLI：<code>gh api --hostname github.com ...</code>。没有 <code>gh</code>、未登录或 <code>gh api</code> 失败时，回退到 Host 自己的直连 <code>api.github.com</code> 请求（可复用 <code>GH_TOKEN</code> / <code>GITHUB_TOKEN</code> 或 <code>gh auth token</code>）；token 只发给 <code>api.github.com</code>，不会发给第三方 URL 前缀镜像。</li>
 <li>Settings → 通用 → <strong>GitHub 镜像</strong>（<code>githubMirrorEnabled</code> / <code>githubMirrorBaseUrl</code>）：从内置预设列表中选择一个 URL 前缀镜像；直连失败（超时/连接错误/5xx/429/403）时回退 <code>{base}/https://api|codeload.github.com/...</code>（如 <code>https://gh.llkk.cc</code>）。GitHub <code>403</code> 常见于未认证 API 配额、出口 IP 或区域网络拦截，按可恢复网络问题处理；<strong>其它 4xx（如 404）不回退</strong>。与网络代理正交。</li>
@@ -3728,8 +3728,8 @@
 <li>有子目录约束（tree URL / <code>--skill</code>）→ 只取匹配项；</li>
 <li>repo 根或指定路径发现 Skill → 返回候选列表，前端弹选择（见 §4）。</li>
 <li>校验 frontmatter：<code>name</code> 合法且与目录名一致；不一致时以 <code>name</code> 为准命名目标目录。frontmatter 解析统一走 <code>crates/agentero-core/src/frontmatter.rs</code>（<code>frontmatter_block</code> + <code>scalar_field</code>，支持引号、<code>&gt;</code> / <code>|</code> 折叠块、多行续行、CRLF，只读顶层键）。<code>description</code> 超过 1024 <strong>字符</strong>时按字符截断展示，不再拒绝安装；单个 <code>SKILL.md</code> 解析失败只跳过该候选，整个来源没有可用 Skill 才报错。见 <a href="../../bug_fix/skill-import-description-length/">bug_fix/skill-import-description-length.md</a>。</li>
-<li>将归档或 sparse 候选 metadata 暂存为一次性 discovery，并返回前端选择；此阶段不写入 Vault。</li>
-<li>用户确认后才落盘 <code>vault/.agents/skills/&lt;name&gt;/</code>（整目录拷贝，含 <code>references/</code> 等）。tree 子目录来源在这一步只下载被选中的 Skill 目录；文件内容走 GitHub Blob API（<code>api.github.com/repos/{owner}/{repo}/git/blobs/{sha}</code>），不依赖 <code>raw.githubusercontent.com</code>：</li>
+<li>将 sparse 候选 metadata 暂存为一次性 discovery，并返回前端选择；此阶段不写入 Vault，也不下载非 <code>SKILL.md</code> payload。</li>
+<li>用户确认后才落盘 <code>vault/.agents/skills/&lt;name&gt;/</code>（整目录拷贝，含 <code>references/</code> 等）。这一步只下载被选中的 Skill 目录；文件内容走 GitHub Blob API（<code>api.github.com/repos/{owner}/{repo}/git/blobs/{sha}</code>），不依赖 <code>raw.githubusercontent.com</code>：</li>
 <li>目标已存在 → 默认<strong>不覆盖</strong>，报「已存在，是否更新」（沿用 <code>ensure_vault</code> 不覆盖用户文件的原则）；</li>
 <li>在 skill 目录写 <code>agentero-skill.json</code> 来源记录（source URL + ref + 安装时间），为将来「检查更新」留钩子（参考 <code>skills-lock.json</code> / Obsidian BRAT）。</li>
 <li><strong>不落 catalog</strong>（skill 不是论文；<code>Url</code> kind 已有 <code>identifier_kind_column → None</code> 先例），不建 <code>papers/</code> 条目、不跑 <code>paper_commit</code>。</li>

@@ -5,11 +5,12 @@ Create Vault seeds these when missing. Pick with `$` in Composer.
 | Skill | Role |
 | --- | --- |
 | `paper-reader` | 精读 → `{paper}/NOTES.md`，只创建可解析双链 |
-| `author-lookup` | 一作 / 通讯 email·主页·GitHub·ORCID·OpenReview → `NOTES.md`，作者信息报告 → `attachments/` |
 | `agentero-cli` | headless `agentero` CLI，含只读双链检查；按平台播种（POSIX `agentero` / Windows `agentero-cli`） |
 | `vault-normalizer` | 整理现有研究目录并对比迁移前后的双链诊断 |
+| `acdemic-drawing` | 生成学术场景 Excalidraw 图 |
 | `idea-evaluator` | 研究 idea 评审 |
 | `deep-research` | 综述级文献调研 |
+| `research-paper-writing` | 论文写作与审稿前自查 |
 
 ## Versioning & upgrades
 
@@ -35,6 +36,6 @@ remove `version` or set it higher than the template after editing.
 (Yuyu Luo et al.).
 
 **License: [CC BY-NC-SA 4.0](https://creativecommons.org/licenses/by-nc-sa/4.0/)**  
-Full text: [`LICENSE-Supervisor-Skills.txt`](LICENSE-Supervisor-Skills.txt)
+Full text lives in each vendored skill package's `LICENSE` file.
 
-`paper-reader` / `author-lookup` / `agentero-cli` / `vault-normalizer` are first-party (Agentero license).
+`paper-reader` / `agentero-cli` / `vault-normalizer` are first-party (Agentero license).

@@ -6,13 +6,22 @@ describe("seededSkillIdsFromCreated", () => {
 		const ids = seededSkillIdsFromCreated([
 			"papers/",
 			".agents/skills/README.md",
-			".agents/skills/LICENSE-Supervisor-Skills.txt",
+			".agents/skills/acdemic-drawing/SKILL.md",
 			".agents/skills/deep-research/SKILL.md",
+			".agents/skills/deep-research/LICENSE",
 			".agents/skills/deep-research/references/quality-gates.md",
 			".agents/skills/idea-evaluator/SKILL.md",
 			".agents/skills/paper-reader/SKILL.md",
+			".agents/skills/paper-reader/author-lookup.md",
+			".agents/skills/research-paper-writing/references/method.md",
 		]);
-		expect(ids).toEqual(["deep-research", "idea-evaluator", "paper-reader"]);
+		expect(ids).toEqual([
+			"acdemic-drawing",
+			"deep-research",
+			"idea-evaluator",
+			"paper-reader",
+			"research-paper-writing",
+		]);
 	});
 
 	it("returns empty when no skill packages were created", () => {

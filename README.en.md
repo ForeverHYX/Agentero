@@ -174,7 +174,10 @@ agentero/
 - **Frontend**: [React](https://react.dev/), [TypeScript](https://www.typescriptlang.org/), [Tailwind CSS](https://tailwindcss.com/), [shadcn/ui](https://ui.shadcn.com/), [AI Elements](https://elements.ai-sdk.dev/)
 - **Window management**: Dockview
 - **PDF**: Embedded PDF
-- **Editor**: [Plate](https://platejs.org/) / Markdown
+- **Editor**: 
+  - [Plate](https://platejs.org/) / Markdown
+  - [CodeMirror](https://codemirror.net) / Code
+  - [Excalidraw](https://github.com/excalidraw/excalidraw)
 - **Agent**: [Agent Client Protocol](https://agentclientprotocol.com/), BYOA
 
 ### Getting started

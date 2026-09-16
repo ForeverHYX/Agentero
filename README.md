@@ -59,6 +59,8 @@ Agentero 是一个 Agent 时代的本地优先科研工作台，让输入、处�
   - 支持一键翻译、按页翻译、划词翻译，支持多种免费 API 以及 BYOK 的 API 翻译服务
   - 支持页码导航、底部缩放滑动条、大纲、⌘F 查找、平滑划词、高亮、批注、提问与翻译
   - 解析论文中的图、表、公式与算法，并结合上下文理解
+  - 支持 Excalidraw
+  - 支持 LaTeX 编译
 - **云同步**：支持 S3 兼容的云同步服务。
 - **远程访问**：通过 SSH 隧道浏览远程知识库，数据保留在用户自己的服务器上。
 - **多系统兼容**：Mac、Windows、Linux，快捷键与常用软件保持对齐，不改变使用习惯。
@@ -174,7 +176,10 @@ agentero/
 - **前端**：[React](https://react.dev/)、[TypeScript](https://www.typescriptlang.org/)、[Tailwind CSS](https://tailwindcss.com/)、[shadcn/ui](https://ui.shadcn.com/)、[AI Elements](https://elements.ai-sdk.dev/)
 - **窗口管理**： Dockview
 - **PDF**： Embedded PDF
-- **编辑器**：[Plate](https://platejs.org/) / Markdown
+- **编辑器**：
+  - [Plate](https://platejs.org/) / Markdown
+  - [CodeMirror](https://codemirror.net) / Code
+  - [Excalidraw](https://github.com/excalidraw/excalidraw)
 - **Agent**：[Agent Client Protocol](https://agentclientprotocol.com/)、BYOA
 
 ### 测试

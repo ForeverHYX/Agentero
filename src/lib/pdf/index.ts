@@ -92,6 +92,7 @@ export {
 	pickCrossrefRegionByLabel,
 } from "@/lib/pdf/crossref-resolve";
 export { createPdfViewportResizeGate } from "@/lib/pdf/dockview-resize";
+export { embedPdfDocumentId } from "@/lib/pdf/document-id";
 export {
 	ANNOTATIONS_FILE,
 	type HighlightCustom,

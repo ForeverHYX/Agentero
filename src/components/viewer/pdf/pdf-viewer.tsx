@@ -124,6 +124,7 @@ import {
 	annotationWikilinkMarkdown,
 	wikiTargetForPaper,
 } from "@/lib/pdf/annotation-ref";
+import { embedPdfDocumentId } from "@/lib/pdf/document-id";
 import { HIGHLIGHT_HEX_LIST } from "@/lib/pdf/highlight/palette";
 import {
 	getPdfAiRuntime,
@@ -160,12 +161,17 @@ export const PdfViewer = memo(function PdfViewer(props: PdfViewerProps) {
 
 	const source = isPdfViewerSource(props.source) ? props.source.trim() : null;
 	const sourceBytes = props.sourceBytes ?? null;
-	const docId =
+	const baseDocId =
 		props.docId?.trim() ||
 		props.paperRelPath ||
 		props.paperAbsPath ||
 		source ||
 		"pdf";
+	// Local buffers get a per-read revision id: the app-wide PDFium engine
+	// caches documents by `documentId`, so a reloaded buffer (TeX recompile /
+	// external overwrite) must register under a fresh id or the engine re-uses
+	// the stale document and drops the new bytes. See `embedPdfDocumentId`.
+	const docId = embedPdfDocumentId(baseDocId, sourceBytes);
 
 	// Make a private copy of the PDF bytes for this EmbedPDF mount. The worker
 	// engine may structured-clone/transfer the buffer; sharing the same

@@ -25,7 +25,7 @@ TeX compile flow 自己会在编译完成后读取输出 PDF 并更新对应 pan
 ## 回归
 
 ```bash
-pnpm exec vitest run test/pdf-disk-refresh.test.ts
+pnpm exec vitest run test/pdf-disk-refresh.test.ts test/pdf-document-id.test.ts
 ```
 
 覆盖：
@@ -33,4 +33,19 @@ pnpm exec vitest run test/pdf-disk-refresh.test.ts
 - watcher 命中打开的 PDF 会重新读字节并刷新 pane；
 - PDF 与 translation pane 同步换 buffer；
 - `texCompiling` pane 不被 watcher 中途刷新；
-- 无 PDF owner 或字节读取失败时不误刷新。
+- 无 PDF owner 或字节读取失败时不误刷新；
+- 重读得到的 buffer 会映射到新的 EmbedPDF documentId（防止 engine 缓存复用旧文档）。
+
+## 二次修复：buffer 换了但 PDFium 仍渲染旧文档
+
+上面的修复让 tab 的 `pdfBytes` 换成了新 `ArrayBuffer`，但界面上仍可能停在旧 PDF。原因是**共享的 PDFium engine 以 `documentId` 缓存文档**：
+
+- 全窗口共用一个 engine（`engine-provider.tsx`），EmbedPDF 重载靠 `plugins` 引用变化重建 registry；`initialDocument.documentId` 恒为 tab 的稳定 id。
+- cleanup 里 `pdfViewer.destroy()` 是 async 且未 await；`PluginRegistry.destroy()` 先 `await initPromise` 才关闭旧文档。
+- 新 registry 的 `initialize()` 会同步走到 `DocumentManagerPlugin.initialize → openDocumentBuffer`，且 worker 队列把 `openDocumentBuffer` 排在 `CRITICAL`、`closeDocument` 排在 `MEDIUM`。
+
+于是新文档先于旧文档关闭被打开；engine 的 `PdfCache.setDocument(id, …)` 发现同 id 已存在时会复用旧 context 并释放刚加载的新指针，新字节被静默丢弃。只有把 pane 彻底 unmount（关闭重开）才会清掉旧缓存。
+
+修复：`embedPdfDocumentId` 给 buffer-backed 的 documentId 追加每次读取的版本号（`<base>::r<n>`，按 `ArrayBuffer` 身份在 WeakMap 里分配），旧 id 由旧 registry 正常关闭，新 id 不与旧缓存冲突。URL 源保持原 id。
+
+> 注意：现有 store 层回归只断言 `pdfBytes` 被替换，无法覆盖 PDFium 是否真正 reload；`test/pdf-document-id.test.ts` 守住 documentId 必须随 buffer 变化这一约束。

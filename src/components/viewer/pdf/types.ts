@@ -32,7 +32,11 @@ export type PdfViewerProps = {
 	 * some webviews (Windows WebView2). `source` is the fallback (remote https).
 	 */
 	sourceBytes?: ArrayBuffer | null;
-	/** Stable per-tab document id (EmbedPDF documentId + scope key). */
+	/**
+	 * Base per-tab document id (EmbedPDF scope key). Buffer-backed sources get
+	 * a per-read revision suffix inside the viewer so a reloaded PDF registers
+	 * under a fresh PDFium document.
+	 */
 	docId?: string | null;
 	/** Absolute path to paper folder for annotations/marks persistence */
 	paperAbsPath?: string | null;

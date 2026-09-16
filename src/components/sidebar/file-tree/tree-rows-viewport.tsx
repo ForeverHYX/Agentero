@@ -46,7 +46,6 @@ type RowContext = {
 export type TreeRowsViewportProps = RowContext & {
 	flatRows: FlatRow[];
 	rowVirtualizer: Virtualizer<HTMLDivElement, Element>;
-	libraryRow: ReactNode;
 	trashRow: ReactNode;
 	createRow: ReactNode;
 };
@@ -119,7 +118,6 @@ function RenameRow({
 }
 
 function renderRow(row: FlatRow, props: TreeRowsViewportProps): ReactNode {
-	if (row.kind === "library") return props.libraryRow;
 	if (row.kind === "trash") return props.trashRow;
 	if (row.kind === "plaza")
 		return <PlazaRow expanded={props.expanded.has(PLAZA_VIRTUAL_PATH)} />;
@@ -156,7 +154,7 @@ export function TreeRowsViewport(props: TreeRowsViewportProps) {
 				const row = flatRows[vi.index];
 				if (!row) return null;
 				const depth =
-					row.kind === "library" || row.kind === "trash" || row.kind === "plaza"
+					row.kind === "trash" || row.kind === "plaza"
 						? 0
 						: row.kind === "plazaSource"
 							? 1

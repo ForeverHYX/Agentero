@@ -37,7 +37,8 @@ import {
 } from "@/components/ui/tooltip";
 import { contextPathIcon } from "@/lib/agent/context-path-icon";
 import { cn } from "@/lib/core/utils";
-import { LIBRARY_VIRTUAL_PATH, TRASH_VIRTUAL_PATH } from "@/lib/paper/api";
+import { isPapersRoot } from "@/lib/paper";
+import { TRASH_VIRTUAL_PATH } from "@/lib/paper/api";
 import {
 	PLAZA_VIRTUAL_PATH,
 	type PlazaSource,
@@ -234,16 +235,28 @@ export function NodeTreeRow({
 	texCompile,
 	vaultPath,
 }: NodeTreeRowProps) {
+	const { t } = useTranslation("sidebar");
 	if (node.kind === "directory") {
+		// `papers/` doubles as the library entry: library icon + title.
+		const isLibraryRoot = isPapersRoot(node.path);
 		return (
 			<div
 				className={cn(
 					"relative flex w-full items-center",
 					isCut && "opacity-50",
 				)}
+				{...(isLibraryRoot ? { "data-library-row": "" } : {})}
 			>
 				<div className="min-w-0 flex-1">
-					<FileTreeFolderRow path={node.path} name={node.name} />
+					<FileTreeFolderRow
+						path={node.path}
+						name={isLibraryRoot ? t("papersLibrary.title") : node.name}
+						icon={
+							isLibraryRoot ? (
+								<Library className="size-4 text-muted-foreground" />
+							) : undefined
+						}
+					/>
 				</div>
 				{pendingLoad && expanded ? (
 					<Loader2
@@ -420,72 +433,6 @@ function TexCompileActions({
 				</PopoverContent>
 			</Popover>
 		</FileTreeActions>
-	);
-}
-
-type LibraryRowProps = {
-	showDownload: boolean;
-	busy: boolean;
-	downloadingAll: boolean;
-	onDownloadAll: () => void;
-};
-
-export function LibraryRow({
-	showDownload,
-	busy,
-	downloadingAll,
-	onDownloadAll,
-}: LibraryRowProps) {
-	const { t } = useTranslation("sidebar");
-	return (
-		<FileTreeFile
-			path={LIBRARY_VIRTUAL_PATH}
-			name={t("papersLibrary.title")}
-			data-library-row
-		>
-			<FileTreeIcon>
-				<Library className="size-4 text-muted-foreground" />
-			</FileTreeIcon>
-			<FileTreeName className="min-w-0 flex-1 truncate">
-				{t("papersLibrary.title")}
-			</FileTreeName>
-			{showDownload ? (
-				<FileTreeActions
-					className="shrink-0"
-					onClick={(e) => e.stopPropagation()}
-					onKeyDown={(e) => e.stopPropagation()}
-				>
-					<Tooltip disableHoverableContent>
-						<TooltipTrigger asChild>
-							<Button
-								type="button"
-								variant="ghost"
-								size="icon-xs"
-								className="size-5"
-								aria-label={t("fileTree.downloadAllMissing")}
-								disabled={busy}
-								onClick={(e) => {
-									e.stopPropagation();
-									onDownloadAll();
-								}}
-							>
-								{downloadingAll ? (
-									<Loader2 className="size-3.5 animate-spin" />
-								) : (
-									<Download className="size-3.5" />
-								)}
-							</Button>
-						</TooltipTrigger>
-						<TooltipContent
-							side="right"
-							className="max-w-xs select-none cursor-default"
-						>
-							{t("fileTree.downloadAllMissing")}
-						</TooltipContent>
-					</Tooltip>
-				</FileTreeActions>
-			) : null}
-		</FileTreeFile>
 	);
 }
 

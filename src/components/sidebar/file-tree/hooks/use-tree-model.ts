@@ -5,6 +5,7 @@
 import { useCallback, useMemo } from "react";
 import {
 	isPaperDirectory,
+	isPapersRoot,
 	isUnderPaperAttachments,
 	type PaperMetadata,
 	type PaperTreeLabelMode,
@@ -12,6 +13,7 @@ import {
 	paperAttachmentsNode,
 	sortFileTreeNodes,
 } from "@/lib/paper";
+import { LIBRARY_VIRTUAL_PATH } from "@/lib/paper/api";
 import { PLAZA_VIRTUAL_PATH, visiblePlazaSources } from "@/lib/plaza";
 import type { FileNode } from "@/lib/vault";
 import { toVaultRelative } from "@/lib/wiki";
@@ -123,6 +125,14 @@ export function resolveTreeHighlightPath(
 	selectedPath: string,
 	byPathKey: ReadonlyMap<string, FileNode>,
 ): string {
+	// The library is now the `papers/` row: highlight that folder instead of a
+	// dedicated virtual row.
+	if (selectedPath === LIBRARY_VIRTUAL_PATH) {
+		const papersRoot = [...byPathKey.values()].find(
+			(node) => node.kind === "directory" && isPapersRoot(node.path),
+		);
+		if (papersRoot) return papersRoot.path;
+	}
 	if (isVirtualTreePath(selectedPath)) return selectedPath;
 
 	let cursor = selectedPath.replace(/\\/g, "/").replace(/\/+$/, "");
@@ -205,11 +215,9 @@ export function useTreeRows({
 	}, [displayNodes, expanded]);
 
 	const flatRows = useMemo<FlatRow[]>(() => {
-		// Virtual rows sit at the top: Library, Recycle Bin, then 广场 + its sources.
-		const out: FlatRow[] = [
-			{ key: "__library__", kind: "library" },
-			{ key: "__trash__", kind: "trash" },
-		];
+		// Virtual rows sit at the top: Recycle Bin, then 广场 + its sources.
+		// The library has no virtual row — the `papers/` folder row represents it.
+		const out: FlatRow[] = [{ key: "__trash__", kind: "trash" }];
 		if (plazaEnabled) {
 			out.push({ key: "__plaza__", kind: "plaza" });
 			if (expanded.has(PLAZA_VIRTUAL_PATH)) {

@@ -339,10 +339,13 @@ export const FileTreeFolder = ({
 export const FileTreeFolderRow = ({
 	path,
 	name,
+	icon,
 	className,
 }: {
 	path: string;
 	name: string;
+	/** Overrides the default folder glyph (e.g. the Library icon for `papers/`). */
+	icon?: ReactNode;
 	className?: string;
 }) => {
 	const {
@@ -409,11 +412,12 @@ export const FileTreeFolderRow = ({
 			<FileTreeDisclosureIcon
 				isExpanded={isExpanded}
 				icon={
-					isExpanded ? (
+					icon ??
+					(isExpanded ? (
 						<FolderOpenIcon className="size-4 text-blue-500" aria-hidden />
 					) : (
 						<FolderIcon className="size-4 text-blue-500" aria-hidden />
-					)
+					))
 				}
 			/>
 			<FileTreeName>{name}</FileTreeName>

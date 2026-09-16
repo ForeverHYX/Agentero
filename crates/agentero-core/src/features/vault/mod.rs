@@ -17,47 +17,10 @@ pub const AGENTS_DIR_README: &str =
 pub const SKILLS_DIR_README: &str =
     include_str!("../../../../../templates/vault/.agents/skills/README.md");
 
-/// Supervisor-Skills (HKUSTDial) CC BY-NC-SA 4.0 text.
-pub const SUPERVISOR_SKILLS_LICENSE: &str =
-    include_str!("../../../../../templates/vault/.agents/skills/LICENSE-Supervisor-Skills.txt");
-
-/// Bundled paper-reader skill (file-tree Zap workflow).
-pub const PAPER_READER_SKILL: &str =
-    include_str!("../../../../../templates/vault/.agents/skills/paper-reader/SKILL.md");
-
-/// Bundled agentero-cli skill (headless vault discover/import via CLI), POSIX variant.
-pub const AGENTERO_CLI_SKILL: &str =
-    include_str!("../../../../../templates/vault/.agents/skills/agentero-cli/SKILL.md");
-
-/// Bundled agentero-cli skill (headless vault discover/import via CLI), Windows variant.
-pub const AGENTERO_CLI_SKILL_WINDOWS: &str =
-    include_str!("../../../../../templates/vault/.agents/skills/agentero-cli/SKILL-windows.md");
-
-/// Variant for the host platform: the skill id stays the same on every OS, but
-/// the body matches the binary name and shell the agent actually uses.
-pub const AGENTERO_CLI_SKILL_FOR_PLATFORM: &str = if cfg!(windows) {
-    AGENTERO_CLI_SKILL_WINDOWS
-} else {
-    AGENTERO_CLI_SKILL
-};
-
-/// Bundled vault-normalizer skill (directory migration into Agentero layout).
-pub const VAULT_NORMALIZER_SKILL: &str =
-    include_str!("../../../../../templates/vault/.agents/skills/vault-normalizer/SKILL.md");
-
-/// Bundled idea-evaluator skill (from Supervisor-Skills).
-pub const IDEA_EVALUATOR_SKILL: &str =
-    include_str!("../../../../../templates/vault/.agents/skills/idea-evaluator/SKILL.md");
-
-/// Bundled deep-research skill (from Supervisor-Skills).
-pub const DEEP_RESEARCH_SKILL: &str =
-    include_str!("../../../../../templates/vault/.agents/skills/deep-research/SKILL.md");
-
-pub const AUTHOR_LOOKUP_SKILL: &str =
-    include_str!("../../../../../templates/vault/.agents/skills/author-lookup/SKILL.md");
-
-// Onboarding tutorial notes are discovered by build.rs and embedded here.
+// Onboarding notes and bundled skill package files are discovered by build.rs
+// and embedded here.
 include!(concat!(env!("OUT_DIR"), "/onboarding_templates.rs"));
+include!(concat!(env!("OUT_DIR"), "/skill_templates.rs"));
 
 /// Vault-relative path → content for bundled skill seeding (no overwrite).
 /// Paths are under the vault root (e.g. `.agents/skills/...`).
@@ -65,146 +28,7 @@ include!(concat!(env!("OUT_DIR"), "/onboarding_templates.rs"));
 /// When the app ships new skills, [`ensure_vault`] / [`create_vault`] add any
 /// missing paths here; existing files are left untouched so user edits survive.
 pub fn bundled_skill_files() -> &'static [(&'static str, &'static str)] {
-    &[
-        (".agents/skills/README.md", SKILLS_DIR_README),
-        (
-            ".agents/skills/LICENSE-Supervisor-Skills.txt",
-            SUPERVISOR_SKILLS_LICENSE,
-        ),
-        (".agents/skills/paper-reader/SKILL.md", PAPER_READER_SKILL),
-        (
-            ".agents/skills/author-lookup/SKILL.md",
-            AUTHOR_LOOKUP_SKILL,
-        ),
-        // Same skill id on every platform; the body matches the host OS the
-        // CLI (and the agent consuming this skill) actually runs on.
-        (
-            ".agents/skills/agentero-cli/SKILL.md",
-            AGENTERO_CLI_SKILL_FOR_PLATFORM,
-        ),
-        (
-            ".agents/skills/vault-normalizer/SKILL.md",
-            VAULT_NORMALIZER_SKILL,
-        ),
-        // idea-evaluator (Supervisor-Skills)
-        (
-            ".agents/skills/idea-evaluator/SKILL.md",
-            IDEA_EVALUATOR_SKILL,
-        ),
-        (
-            ".agents/skills/idea-evaluator/references/domain-evaluation-frameworks.md",
-            include_str!(
-                "../../../../../templates/vault/.agents/skills/idea-evaluator/references/domain-evaluation-frameworks.md"
-            ),
-        ),
-        (
-            ".agents/skills/idea-evaluator/references/fatal-flaws.md",
-            include_str!(
-                "../../../../../templates/vault/.agents/skills/idea-evaluator/references/fatal-flaws.md"
-            ),
-        ),
-        (
-            ".agents/skills/idea-evaluator/references/five-dimensions.md",
-            include_str!(
-                "../../../../../templates/vault/.agents/skills/idea-evaluator/references/five-dimensions.md"
-            ),
-        ),
-        (
-            ".agents/skills/idea-evaluator/references/lifecycle-capability-matching.md",
-            include_str!(
-                "../../../../../templates/vault/.agents/skills/idea-evaluator/references/lifecycle-capability-matching.md"
-            ),
-        ),
-        (
-            ".agents/skills/idea-evaluator/references/paradigm-elephant.md",
-            include_str!(
-                "../../../../../templates/vault/.agents/skills/idea-evaluator/references/paradigm-elephant.md"
-            ),
-        ),
-        (
-            ".agents/skills/idea-evaluator/references/paradigm-examples.md",
-            include_str!(
-                "../../../../../templates/vault/.agents/skills/idea-evaluator/references/paradigm-examples.md"
-            ),
-        ),
-        (
-            ".agents/skills/idea-evaluator/references/paradigm-first-principles.md",
-            include_str!(
-                "../../../../../templates/vault/.agents/skills/idea-evaluator/references/paradigm-first-principles.md"
-            ),
-        ),
-        (
-            ".agents/skills/idea-evaluator/references/paradigm-hamming.md",
-            include_str!(
-                "../../../../../templates/vault/.agents/skills/idea-evaluator/references/paradigm-hamming.md"
-            ),
-        ),
-        (
-            ".agents/skills/idea-evaluator/references/paradigm-shift-probe.md",
-            include_str!(
-                "../../../../../templates/vault/.agents/skills/idea-evaluator/references/paradigm-shift-probe.md"
-            ),
-        ),
-        (
-            ".agents/skills/idea-evaluator/references/paradigm-technology-cycle.md",
-            include_str!(
-                "../../../../../templates/vault/.agents/skills/idea-evaluator/references/paradigm-technology-cycle.md"
-            ),
-        ),
-        (
-            ".agents/skills/idea-evaluator/references/worked-examples.md",
-            include_str!(
-                "../../../../../templates/vault/.agents/skills/idea-evaluator/references/worked-examples.md"
-            ),
-        ),
-        // deep-research (Supervisor-Skills)
-        (
-            ".agents/skills/deep-research/SKILL.md",
-            DEEP_RESEARCH_SKILL,
-        ),
-        (
-            ".agents/skills/deep-research/references/citation-protocol.md",
-            include_str!(
-                "../../../../../templates/vault/.agents/skills/deep-research/references/citation-protocol.md"
-            ),
-        ),
-        (
-            ".agents/skills/deep-research/references/hedge-calibration.md",
-            include_str!(
-                "../../../../../templates/vault/.agents/skills/deep-research/references/hedge-calibration.md"
-            ),
-        ),
-        (
-            ".agents/skills/deep-research/references/output-structure.md",
-            include_str!(
-                "../../../../../templates/vault/.agents/skills/deep-research/references/output-structure.md"
-            ),
-        ),
-        (
-            ".agents/skills/deep-research/references/quality-gates.md",
-            include_str!(
-                "../../../../../templates/vault/.agents/skills/deep-research/references/quality-gates.md"
-            ),
-        ),
-        (
-            ".agents/skills/deep-research/references/search-strategy.md",
-            include_str!(
-                "../../../../../templates/vault/.agents/skills/deep-research/references/search-strategy.md"
-            ),
-        ),
-        (
-            ".agents/skills/deep-research/references/self-adversarial.md",
-            include_str!(
-                "../../../../../templates/vault/.agents/skills/deep-research/references/self-adversarial.md"
-            ),
-        ),
-        (
-            ".agents/skills/deep-research/references/synthesis-framework.md",
-            include_str!(
-                "../../../../../templates/vault/.agents/skills/deep-research/references/synthesis-framework.md"
-            ),
-        ),
-    ]
+    BUNDLED_SKILL_FILES
 }
 
 /// Parse optional integer `version:` from YAML frontmatter (Agentero managed
@@ -377,6 +201,12 @@ pub fn ensure_vault(path: &Path, locale: &str) -> Result<CreateVaultResult, AppE
     // Seed vault-local agent layout from `templates/vault/.agents/`. Missing
     // files are created; known untouched first-party skills may be upgraded.
     seed_file_if_missing(path, ".agents/README.md", AGENTS_DIR_README, &mut created)?;
+    seed_file_if_missing(
+        path,
+        ".agents/skills/README.md",
+        SKILLS_DIR_README,
+        &mut created,
+    )?;
     for (rel, content) in bundled_skill_files() {
         seed_or_upgrade_bundled_file(path, rel, content, &mut created, &mut updated)?;
     }
@@ -450,9 +280,6 @@ mod tests {
         assert!(dir.join(".agents/skills").is_dir());
         assert!(dir.join(".agents/README.md").is_file());
         assert!(dir.join(".agents/skills/README.md").is_file());
-        assert!(dir
-            .join(".agents/skills/LICENSE-Supervisor-Skills.txt")
-            .is_file());
         assert!(dir.join(".agents/skills/paper-reader/SKILL.md").is_file());
         assert!(dir.join(".agents/skills/agentero-cli/SKILL.md").is_file());
         assert!(dir.join(".agents/skills/idea-evaluator/SKILL.md").is_file());

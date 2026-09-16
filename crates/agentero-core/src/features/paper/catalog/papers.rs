@@ -927,12 +927,14 @@ pub fn update_meta(
         (!trimmed.is_empty()).then(|| trimmed.to_string())
     }
 
+    let mut old_title = String::new();
     let mut title_changed = false;
     if let Some(title) = patch.title.as_deref() {
         let title = title.trim();
         if title.is_empty() {
             return Err(AppError::message("title cannot be empty"));
         }
+        old_title = row.title.clone();
         title_changed = title != row.title;
         row.title = title.to_string();
     }
@@ -992,7 +994,18 @@ pub fn update_meta(
     row.updated_at = crate::time::now_rfc3339_millis();
     let updated = upsert_paper(vault_root, &row)?;
     if title_changed {
-        crate::features::wiki::append_title_alias_best_effort(vault_root, &path, &updated.title);
+        log::info!(
+            target: "agentero::catalog",
+            "paper title changed for {path}: old_title={:?}, new_title={:?}",
+            old_title,
+            updated.title
+        );
+        crate::features::wiki::sync_notes_title_and_alias(
+            vault_root,
+            &path,
+            &old_title,
+            &updated.title,
+        );
     }
     Ok(updated)
 }

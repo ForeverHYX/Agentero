@@ -74,7 +74,7 @@ pub struct SkillInstallArgs {
 
 #[tauri::command]
 #[specta::specta]
-pub fn skill_install(args: SkillInstallArgs) -> ApiResult<Vec<SkillImportResult>> {
+pub async fn skill_install(args: SkillInstallArgs) -> ApiResult<Vec<SkillImportResult>> {
     let op = OpTimer::start_with(
         "skill_install",
         format!("discovery_id={}", trunc(&args.discovery_id, 40)),
@@ -83,7 +83,8 @@ pub fn skill_install(args: SkillInstallArgs) -> ApiResult<Vec<SkillImportResult>
         std::path::Path::new(&args.vault_path),
         &args.discovery_id,
         &args.selected_names,
-    );
+    )
+    .await;
     op.finish_result(result)
 }
 

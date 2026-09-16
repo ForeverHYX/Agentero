@@ -417,10 +417,18 @@ pub fn should_fallback_github_error(err: &AppError) -> bool {
             .and_then(|s| s.parse::<u16>().ok());
         return matches!(code, Some(c) if c == 429 || (500..600).contains(&c));
     }
+    if let Some(rest) = msg.strip_prefix("GitHub blob request failed: ") {
+        let code = rest
+            .split_whitespace()
+            .next()
+            .and_then(|s| s.parse::<u16>().ok());
+        return matches!(code, Some(c) if c == 429 || (500..600).contains(&c));
+    }
     msg.starts_with("download:")
         || msg.starts_with("download body:")
         || msg.starts_with("skill metadata request:")
         || msg.starts_with("skill contents request:")
+        || msg.starts_with("skill blob request:")
         || msg.starts_with("http client:")
 }
 

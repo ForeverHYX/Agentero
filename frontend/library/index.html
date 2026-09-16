@@ -3628,7 +3628,7 @@
 <h2 id="_2">视图<a class="headerlink" href="#_2" title="Permanent link">&para;</a></h2>
 <ul>
 <li>虚拟路径 <code>agentero:library</code>（不写盘）。</li>
-<li><strong>全库</strong>：点 Library 节点或关光文档后默认页。</li>
+<li><strong>全库</strong>：点 <code>papers/</code> 论文库节点（根文件夹）或关光文档后默认页。</li>
 <li><strong>文件夹作用域</strong>：单击 <code>papers/</code> 下非 paper 叶目录（如 <code>papers/nlp</code>）→ 同一 Library panel 上按 <code>paper.path</code> <strong>前缀过滤</strong>（不新开 tab、不重新 RPC）。</li>
 <li><strong>非 papers 目录</strong>（<code>notes/</code>、<code>.agents/</code>、<code>plans/</code> 等）：不进入文件夹作用域，Library 显示全库（#160）。</li>
 <li>外部 CLI / 同步工具改动 <code>.agentero/catalog.sqlite</code> 或 <code>papers/</code> 结构时，前端会后台去抖重新 <code>paper_list</code>，同步 Library 表格与文件树论文标题。</li>
@@ -3677,11 +3677,11 @@
 </tr>
 <tr>
 <td>导入/导出</td>
-<td>Library 工具栏；导出 BibTeX 亦可在 Library 节点右键</td>
+<td>Library 工具栏；导出 BibTeX 亦可在 <code>papers/</code> 论文库节点右键</td>
 </tr>
 <tr>
 <td>发现引用</td>
-<td>Library 节点右键「发现引用我的新论文」→ 后台扫描全库反向引用 → 候选清单勾选入库；见 <a href="../../backend/citation-parsing/">../backend/citation-parsing.md</a> §7</td>
+<td><code>papers/</code> 论文库节点右键「发现引用我的新论文」→ 后台扫描全库反向引用 → 候选清单勾选入库；见 <a href="../../backend/citation-parsing/">../backend/citation-parsing.md</a> §7</td>
 </tr>
 <tr>
 <td>拖入 PDF</td>

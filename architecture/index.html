@@ -4016,7 +4016,7 @@
 </tbody>
 </table>
 <ul>
-<li><strong>文件树</strong>：顶部虚拟 Library + Recycle Bin、魔棒按钮。论文默认是叶子；<code>{paper}/attachments/</code> 非空时行上出现 chevron，子项直接挂在论文下。右键新建/删除/在 Finder 中显示/终端打开。多选（⌘/Shift）+ 拖拽移动。详见 <a href="../frontend/vault-tree/">vault-tree.md</a>。</li>
+<li><strong>文件树</strong>：顶部虚拟 Recycle Bin、魔棒按钮；<code>papers/</code> 根文件夹即论文库入口（<code>Library</code> 图标，右键含导出 / 发现引用等库操作）。论文默认是叶子；<code>{paper}/attachments/</code> 非空时行上出现 chevron，子项直接挂在论文下。右键新建/删除/在 Finder 中显示/终端打开。多选（⌘/Shift）+ 拖拽移动。详见 <a href="../frontend/vault-tree/">vault-tree.md</a>。</li>
 <li><strong>Dockview</strong>：每个打开文档一个 panel，支持 tab、上下左右分屏、多格网格。布局 <code>toJSON()</code> 持久化，path/mode 在 panel params。详见 <a href="../frontend/workspace/">workspace.md</a>。</li>
 <li><strong>论文 NOTES</strong>：默认左右分屏（PDF/HTML 左、<code>NOTES.md</code> 右）；多篇 paper 叠到同一两栏；body/NOTES tab 同步切换。</li>
 <li><strong>错误 Toast</strong>：右上角 Sonner，经 <code>notifyError</code>（<code>src/lib/core/notify.ts</code>）；表单就地校验不走 Toast。</li>
@@ -4026,7 +4026,7 @@
 <p>魔棒入库 → 下载 PDF 到 <code>{paper}/{id}.pdf</code>；arXiv 另解压 LaTeX 到 <code>source/</code>。成功后刷新树并 <code>openPaper</code>，展开并滚到新论文。详见 <a href="../frontend/paper-import/">paper-import.md</a> / <a href="../backend/paper-import/">backend/paper-import.md</a>。</p>
 <ul>
 <li><strong>可读正文</strong>：TeX 与 <code>PAPER.md</code> 有其一即可（优先 TeX）。无 TeX 时下载后 liteparse 生成 <code>PAPER.md</code>。</li>
-<li><strong>补下载</strong>：paper 行缺 PDF 或既无 TeX 也无 <code>PAPER.md</code> 时显示 Download（hover 说明原因）；Library 行可批量补下。</li>
+<li><strong>补下载</strong>：paper 行缺 PDF 或既无 TeX 也无 <code>PAPER.md</code> 时显示 Download（hover 说明原因）；<code>papers/</code> 论文库节点右键可批量补下。</li>
 <li><strong>Rescan</strong>：<code>paper_rescan</code> 从 <code>papers/</code> 目录（以 <code>NOTES.md</code> 为标记）补齐盘上有、catalog 无的条目。</li>
 <li><strong>Zotero Connector</strong>：Host 在 <code>127.0.0.1:23119</code> 收浏览器扩展 <code>saveItems</code> + <code>saveAttachment</code>。详见 <a href="../backend/connector/">backend/connector.md</a>。</li>
 <li><strong>MCP Server</strong>：设置开关打开后 Host 在 <code>127.0.0.1:8765/mcp</code> 提供 Streamable HTTP MCP（论文 metadata / 入库 / NOTES）。详见 <a href="../backend/mcp/">backend/mcp.md</a>。</li>

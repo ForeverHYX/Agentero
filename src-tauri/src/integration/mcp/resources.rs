@@ -2,7 +2,7 @@
 
 use super::McpController;
 use crate::features::paper::catalog::{self, papers};
-use agentero_core::features::vault::AGENTERO_CLI_SKILL_FOR_PLATFORM;
+use agentero_core::features::vault;
 use agentero_core::ops;
 
 pub const VAULT_URI: &str = "agentero://vault";
@@ -53,7 +53,13 @@ pub fn invariants_markdown() -> String {
 }
 
 pub fn skill_markdown() -> String {
-    AGENTERO_CLI_SKILL_FOR_PLATFORM.to_string()
+    vault::bundled_skill_files()
+        .iter()
+        .find_map(|(rel, content)| {
+            (*rel == ".agents/skills/agentero-cli/SKILL.md").then_some(*content)
+        })
+        .expect("agentero-cli skill bundled")
+        .to_string()
 }
 
 pub fn read(uri: &str, ctrl: &McpController) -> Option<(String, &'static str)> {

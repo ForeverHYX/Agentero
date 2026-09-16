@@ -15,9 +15,12 @@ overrides:
   hono@<4.12.34: '>=4.12.34 <5'
   ip-address@<10.3.1: '>=10.3.1 <11'
   js-yaml@<4.3.1: '>=4.3.1 <5'
+  lodash-es@<4.18.0: '>=4.18.0 <5'
   mermaid@<11.16.1: '>=11.16.1 <12'
   # Scoped to 3.x: nanoid 5/6 are also installed and unaffected by the advisory.
   nanoid@<3.3.18: '>=3.3.18 <4'
+  # Scoped to the vulnerable 4.x–5.1.15 range (Dependabot #42/#46/#47/#48).
+  nanoid@>=4.0.0 <5.1.16: '>=5.1.16 <6'
   postcss@<8.5.23: '>=8.5.23'
   qs@<6.16.0: '>=6.16.0 <7'
   undici@<7.29.0: '>=7.29.0 <8'

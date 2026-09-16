@@ -4,7 +4,11 @@ import {
 } from "@embedpdf/plugin-viewport/react";
 import { useZoom } from "@embedpdf/plugin-zoom/react";
 import { useEffect, useLayoutEffect, useRef } from "react";
-import { bindZoomGesture, type ZoomGesturePoint } from "@/lib/pdf/wheel-zoom";
+import { EMBED_PAGE_ATTR } from "@/components/viewer/pdf/coords";
+import {
+	bindZoomGesture,
+	computeCenteredScrollLeft,
+} from "@/lib/pdf/wheel-zoom";
 import { clampZoomPreviewScale, zoomPreviewTranslate } from "@/lib/pdf/zoom";
 
 /** Safety net for a dropped `gestureend`: commit the pending preview. */
@@ -28,8 +32,9 @@ const ZOOM_COMMIT_EPSILON = 1e-3;
  * the viewport towards the start of the document, and a fixed step of 10–20%
  * made a slow pinch feel like it was not responding at all.
  *
- * The transform keeps the gesture's own point fixed, so a pinch scales around
- * the fingers rather than the viewport center.
+ * Both the preview transform and the committed zoom anchor on the real
+ * reading-area center, never on the pointer, so the post-commit horizontal
+ * recenter agrees with the preview and the page does not shift on release.
  */
 export function WheelZoomHandler({ docId }: { docId: string }) {
 	const viewportRef = useViewportElement();
@@ -73,6 +78,42 @@ export function WheelZoomHandler({ docId }: { docId: string }) {
 		if (!container || !scroll) return;
 		if (Number.isFinite(scroll.left)) container.scrollLeft = scroll.left;
 		if (Number.isFinite(scroll.top)) container.scrollTop = scroll.top;
+
+		// EmbedPDF anchored the zoom on the comment-rail-narrowed clientWidth it
+		// observes (DockviewViewport reserves the rail via rightGutter), so the
+		// page sits ~rightGutter/2 left of the real screen center. This runs in the
+		// same layout effect, after the scroller is laid out and before paint, so
+		// the live page rects already reflect the committed zoom — pick the page
+		// nearest the viewport's vertical center and recenter it horizontally.
+		// Only the horizontal offset is corrected; scrollTop is preserved.
+		if (container.scrollWidth > container.clientWidth) {
+			const viewportRect = container.getBoundingClientRect();
+			const viewportMidY = viewportRect.top + container.clientHeight / 2;
+			let best: HTMLElement | null = null;
+			let bestDist = Number.POSITIVE_INFINITY;
+			for (const el of container.querySelectorAll<HTMLElement>(
+				`[${EMBED_PAGE_ATTR}]`,
+			)) {
+				const r = el.getBoundingClientRect();
+				const dist = Math.abs(r.top + r.height / 2 - viewportMidY);
+				if (dist < bestDist) {
+					bestDist = dist;
+					best = el;
+				}
+			}
+			if (best) {
+				const pageRect = best.getBoundingClientRect();
+				const pageCenter = pageRect.left + pageRect.width / 2;
+				const viewportCenter = viewportRect.left + container.clientWidth / 2;
+				container.scrollLeft = computeCenteredScrollLeft({
+					scrollLeft: container.scrollLeft,
+					scrollWidth: container.scrollWidth,
+					clientWidth: container.clientWidth,
+					pageCenter,
+					viewportCenter,
+				});
+			}
+		}
 	}, [viewportRef, zoomState.currentZoomLevel]);
 
 	useEffect(() => {
@@ -92,8 +133,9 @@ export function WheelZoomHandler({ docId }: { docId: string }) {
 
 		let previewZoom = 1;
 		let previewScale = 1;
-		let pointer: ZoomGesturePoint = { x: 0, y: 0 };
-		/** Gesture point in the transformed element's own coordinates. */
+		/** Fixed reading-area center captured at gesture start; the single anchor for preview, commit and recenter. */
+		let anchor = { x: 0, y: 0 };
+		/** The anchor in the transformed element's own coordinates. */
 		let local = { x: 0, y: 0 };
 		let watchdog: ReturnType<typeof setTimeout> | null = null;
 		let running = false;
@@ -109,11 +151,11 @@ export function WheelZoomHandler({ docId }: { docId: string }) {
 			running = false;
 			clearWatchdog();
 			const containerRect = container.getBoundingClientRect();
-			// The focus the zoom plugin anchors on: the gesture point keeps its
-			// viewport position once the scroller is scaled to `target`.
+			// Derived from the same fixed anchor as the preview transform, so the
+			// post-commit layout effect and recenter never disagree with the preview.
 			const focus = {
-				vx: pointer.x - containerRect.left,
-				vy: pointer.y - containerRect.top,
+				vx: anchor.x - containerRect.left,
+				vy: anchor.y - containerRect.top,
 			};
 			const target = previewZoom * previewScale;
 			if (Math.abs(target - zoomLevelRef.current) < ZOOM_COMMIT_EPSILON) {
@@ -148,7 +190,7 @@ export function WheelZoomHandler({ docId }: { docId: string }) {
 
 		const binding = bindZoomGesture({
 			target: container,
-			onZoomStart: (point) => {
+			onZoomStart: () => {
 				if (running) commit();
 				clearWatchdog();
 				// Measure the element without a stale preview transform; a commit whose
@@ -156,15 +198,13 @@ export function WheelZoomHandler({ docId }: { docId: string }) {
 				// deferred scroll instead.
 				pendingCommitRef.current = false;
 				resetPreview();
+				// Ctrl/Cmd+wheel and trackpad pinch always anchor on the real
+				// reading-area center, never the pointer position; preview, commit
+				// focus and post-commit recenter share this one fixed point.
 				const containerRect = container.getBoundingClientRect();
-				// WebKit's GestureEvent does not always carry coordinates.
-				pointer = {
-					x: Number.isFinite(point.x)
-						? point.x
-						: containerRect.left + containerRect.width / 2,
-					y: Number.isFinite(point.y)
-						? point.y
-						: containerRect.top + containerRect.height / 2,
+				anchor = {
+					x: containerRect.left + container.clientWidth / 2,
+					y: containerRect.top + container.clientHeight / 2,
 				};
 				previewZoom = zoomLevelRef.current || 1;
 				previewScale = 1;
@@ -173,8 +213,8 @@ export function WheelZoomHandler({ docId }: { docId: string }) {
 				if (element) {
 					const elementRect = element.getBoundingClientRect();
 					local = {
-						x: pointer.x - elementRect.left,
-						y: pointer.y - elementRect.top,
+						x: anchor.x - elementRect.left,
+						y: anchor.y - elementRect.top,
 					};
 					element.style.transformOrigin = "0 0";
 					// Rasterize the pages once and let the compositor scale that raster

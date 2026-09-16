@@ -1,5 +1,5 @@
 /**
- * Vault cloud sync (S3-compatible) — Host command wrappers.
+ * Vault cloud sync (S3-compatible / WebDAV) — Host command wrappers.
  * Design: docs/development/cloud-sync-s3.md
  */
 
@@ -22,7 +22,11 @@ export type SyncScope = {
 	attachments: boolean;
 };
 
+/** Storage backend discriminator; legacy configs without one are S3. */
+export type SyncBackendKind = "s3" | "webdav";
+
 export type SyncBackendConfig = {
+	backend: SyncBackendKind;
 	endpoint: string;
 	region: string;
 	bucket: string;
@@ -31,6 +35,11 @@ export type SyncBackendConfig = {
 	/** Masked (`***`) on the way out; send the mask back to keep the secret. */
 	secretKey: string;
 	forcePathStyle: boolean;
+	/** WebDAV server directory, e.g. `https://dav.jianguoyun.com/dav/agentero/`. */
+	webdavUrl: string;
+	webdavUsername: string;
+	/** Masked like the S3 secret key. */
+	webdavPassword: string;
 	/** Background sync: on open, after 30s quiet, and every intervalMinutes. */
 	autoSync: boolean;
 	intervalMinutes: number;
@@ -82,7 +91,10 @@ export function isSyncProgressPhase(phase: string): phase is SyncPhase {
 	return SYNC_PHASES.includes(phase);
 }
 
-export const emptySyncConfig = (): SyncBackendConfig => ({
+export const emptySyncConfig = (
+	backend: SyncBackendKind = "s3",
+): SyncBackendConfig => ({
+	backend,
 	endpoint: "",
 	region: "us-east-1",
 	bucket: "",
@@ -90,6 +102,9 @@ export const emptySyncConfig = (): SyncBackendConfig => ({
 	accessKey: "",
 	secretKey: "",
 	forcePathStyle: true,
+	webdavUrl: "",
+	webdavUsername: "",
+	webdavPassword: "",
 	autoSync: true,
 	intervalMinutes: 30,
 	conditionalWrites: true,
@@ -120,13 +135,17 @@ function statusFromWire(status: SyncStatus_Serialize): SyncStatus {
 
 function configFromWire(config: SyncBackendConfigWire): SyncBackendConfig {
 	return {
-		endpoint: config.endpoint,
+		backend: (config.backend as SyncBackendKind | undefined) ?? "s3",
+		endpoint: config.endpoint ?? "",
 		region: config.region ?? "us-east-1",
-		bucket: config.bucket,
+		bucket: config.bucket ?? "",
 		prefix: config.prefix ?? "",
-		accessKey: config.accessKey,
-		secretKey: config.secretKey,
+		accessKey: config.accessKey ?? "",
+		secretKey: config.secretKey ?? "",
 		forcePathStyle: config.forcePathStyle ?? true,
+		webdavUrl: config.webdavUrl ?? "",
+		webdavUsername: config.webdavUsername ?? "",
+		webdavPassword: config.webdavPassword ?? "",
 		autoSync: config.autoSync ?? true,
 		intervalMinutes: config.intervalMinutes ?? 30,
 		conditionalWrites: config.conditionalWrites ?? true,

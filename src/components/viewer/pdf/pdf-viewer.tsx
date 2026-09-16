@@ -346,6 +346,7 @@ function PdfViewerInner({
 	paperMeta: paperMetaProp = null,
 	isActive = true,
 	isRemotePaper = false,
+	plainViewer = false,
 	translationPane = false,
 	translationOnly = false,
 	importIdentifier,
@@ -914,9 +915,11 @@ function PdfViewerInner({
 		scrollRef,
 		hostRef,
 		isRemotePaper,
+		plainViewer,
 	});
 
 	const handleToggleLayoutTranslateWithDualPane = useCallback(() => {
+		if (plainViewer) return;
 		if (!dualPaneTranslate) {
 			toggleLayoutTranslate();
 			return;
@@ -926,6 +929,7 @@ function PdfViewerInner({
 		// layout-translation job so only one task runs at a time.
 		onOpenTranslationTab?.(docId, paperAbsPath ?? null, paperTitle ?? null);
 	}, [
+		plainViewer,
 		dualPaneTranslate,
 		toggleLayoutTranslate,
 		onOpenTranslationTab,
@@ -1128,6 +1132,7 @@ function PdfViewerInner({
 		setSelectionMenu,
 		onVisualDraft: handleVisualDraft,
 		screenPointForRegion,
+		plainViewer,
 	});
 
 	// ---- Selection action menu ----
@@ -1159,14 +1164,14 @@ function PdfViewerInner({
 	// available while the result card streams beside it.
 	useEffect(() => {
 		const quote = selectionMenu?.anchor.quote?.trim();
-		if (!selectionMenu || !autoTranslateSelection || !quote) {
+		if (!selectionMenu || plainViewer || !autoTranslateSelection || !quote) {
 			autoTranslatedSelectionRef.current = null;
 			return;
 		}
 		if (autoTranslatedSelectionRef.current === selectionMenu) return;
 		autoTranslatedSelectionRef.current = selectionMenu;
 		translateSelection(selectionMenu.anchor);
-	}, [autoTranslateSelection, selectionMenu, translateSelection]);
+	}, [autoTranslateSelection, plainViewer, selectionMenu, translateSelection]);
 
 	// Sticky right-rail annotate chip. Hover focuses the field and EmbedPDF may
 	// clear the live selection; keep the snapped draft after the chip has been
@@ -1176,7 +1181,7 @@ function PdfViewerInner({
 	const selectionCommentInteractedRef = useRef(false);
 
 	useEffect(() => {
-		if (isRemotePaper) {
+		if (isRemotePaper || plainViewer) {
 			selectionCommentInteractedRef.current = false;
 			setSelectionCommentDraft(null);
 			return;
@@ -1194,7 +1199,7 @@ function PdfViewerInner({
 		if (!selectionCommentInteractedRef.current) {
 			setSelectionCommentDraft(null);
 		}
-	}, [isRemotePaper, selectionMenu]);
+	}, [isRemotePaper, plainViewer, selectionMenu]);
 
 	const handleSelectionCommentActiveChange = useCallback((active: boolean) => {
 		if (active) selectionCommentInteractedRef.current = true;
@@ -1362,8 +1367,9 @@ function PdfViewerInner({
 			visualCropPending,
 			visualDraftOpen: false,
 			translationOnly,
+			plainViewer,
 		}),
-		[regionSelecting, visualCropPending, translationOnly],
+		[regionSelecting, visualCropPending, translationOnly, plainViewer],
 	);
 
 	const handleLayoutRegionClick = useCallback(
@@ -1533,6 +1539,7 @@ function PdfViewerInner({
 					onToggleFigures={handleToggleFigures}
 					visible={leftChromeVisible}
 					isRemotePaper={isRemotePaper}
+					plainViewer={plainViewer}
 				/>
 			)}
 			{!translationOnly && jumpBackTarget && (
@@ -1552,7 +1559,7 @@ function PdfViewerInner({
 					showReferences={showReferences}
 				/>
 			)}
-			{!translationOnly && (
+			{!translationOnly && !plainViewer && (
 				<PdfFiguresPanel
 					documentId={docId}
 					paperAbsPath={paperAbsPath}
@@ -1576,7 +1583,7 @@ function PdfViewerInner({
 					onClose={closeFind}
 				/>
 			)}
-			{!translationOnly && (
+			{!translationOnly && !plainViewer && (
 				<PdfToolbar
 					regionSelecting={regionSelecting}
 					visualCropPending={visualCropPending}
@@ -1596,7 +1603,7 @@ function PdfViewerInner({
 			<DockviewViewport
 				documentId={docId}
 				hostRef={hostRef}
-				rightGutter={translationOnly ? 0 : COMMENT_RAIL_WIDTH_PX}
+				rightGutter={translationOnly || plainViewer ? 0 : COMMENT_RAIL_WIDTH_PX}
 				className="agentero-scroll-both min-h-0 min-w-0 flex-1"
 			>
 				<WheelZoomHandler docId={docId} />
@@ -1625,13 +1632,13 @@ function PdfViewerInner({
 				<PdfCardStack
 					hidden={privacyHidden}
 					selectionMenu={{
-						state: selectionMenu,
+						state: plainViewer ? null : selectionMenu,
 						onHighlight: handleHighlight,
 						onAsk: handleMenuAsk,
 						onAddToChat: handleMenuAddToChat,
 						onTranslate: handleMenuTranslate,
-						showHighlight: !isRemotePaper,
-						showTranslate: !isRemotePaper,
+						showHighlight: !isRemotePaper && !plainViewer,
+						showTranslate: !isRemotePaper && !plainViewer,
 					}}
 					copiedLabelPos={copiedLabelPos}
 					citationPreview={{

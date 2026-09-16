@@ -14,6 +14,7 @@ import type { LibraryColumnPref } from "@/lib/settings";
 import { isMarkdownPath, paperRelFromNotes } from "@/lib/vault";
 import type { WikiRenameHeadingRequest } from "@/lib/wiki";
 import { type DocTab, tabIsPaperNotes } from "@/lib/workspace/tabs";
+import { isPlainPdfPath } from "@/lib/workspace/viewer";
 
 // Heavyweight viewers are lazy-loaded so the EmbedPDF (PDFium) and Plate
 // editor bundles stay out of the initial chunk and are fetched on first use.
@@ -349,6 +350,7 @@ export const DocView = memo(function DocView({
 						paperMeta={tab.paperMeta}
 						isActive={active}
 						isRemotePaper={isRemoteArxivPath(tab.path)}
+						plainViewer={isPlainPdfPath(tab.path)}
 						importIdentifier={tab.paperMeta?.source_url ?? undefined}
 						onOpenSettings={pdf.onOpenSettings}
 						className="h-full w-full"

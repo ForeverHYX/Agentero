@@ -1,4 +1,5 @@
 import { isUnderPapers } from "@/lib/paper/paths";
+import { isRemoteArxivPath } from "@/lib/paper/remote-paper";
 import { isMarkdownPath } from "@/lib/vault/fs";
 
 export type CenterViewMode =
@@ -80,6 +81,16 @@ export function preferredModeForPath(path: string | null): CenterViewMode {
 	if (isMarkdownPath(path)) return "markdown";
 	if (isUnderPapers(path)) return "markdown";
 	return "text";
+}
+
+/**
+ * PDFs outside `papers/` (e.g. a compiled plans/a.pdf) render as a plain
+ * viewer: no layout analysis, visual annotation, translation, selection
+ * toolbar, or marks. Remote arXiv papers keep their own remote behavior.
+ */
+export function isPlainPdfPath(path: string | null): boolean {
+	if (!path) return false;
+	return !isUnderPapers(path) && !isRemoteArxivPath(path);
 }
 
 export type TextLanguageId = "json" | "yaml" | "python" | "tex" | "bib";

@@ -207,6 +207,8 @@ export type PdfPageModeSlice = {
 	 * Selection / annotation / search / citation chrome stay unmounted.
 	 */
 	translationOnly?: boolean;
+	/** PDFs outside papers/: annotation / translate / layout layers stay off. */
+	plainViewer?: boolean;
 };
 
 export type PdfPageHandlers = {
@@ -627,34 +629,38 @@ export const PdfPageLayers = memo(function PdfPageLayers({
 				 * dim/saturation-reduce the whole layer slightly. Link annotations
 				 * are affected too but remain legible.
 				 */}
-				<div
-					className={cn(
-						"absolute inset-0",
-						pdfDark && PDF_ANNOTATION_DARK_CLASS,
-						PDF_PRIVACY_HIDE_CLASS,
-					)}
-				>
-					<AnnotationLayer
-						documentId={docId}
-						pageIndex={pageIndex}
-						annotationRenderers={PASSIVE_HIGHLIGHT_RENDERERS}
-						selectionMenu={(menuProps) => (
-							<HighlightAnnotationMenu
-								{...menuProps}
-								docId={docId}
-								onEdit={handlers.onEditHighlightAnnotation}
-								onDelete={handlers.onDeleteHighlightAnnotation}
-								onChangeColor={handlers.onChangeHighlightColor}
-							/>
+				{!mode.plainViewer ? (
+					<div
+						className={cn(
+							"absolute inset-0",
+							pdfDark && PDF_ANNOTATION_DARK_CLASS,
+							PDF_PRIVACY_HIDE_CLASS,
 						)}
+					>
+						<AnnotationLayer
+							documentId={docId}
+							pageIndex={pageIndex}
+							annotationRenderers={PASSIVE_HIGHLIGHT_RENDERERS}
+							selectionMenu={(menuProps) => (
+								<HighlightAnnotationMenu
+									{...menuProps}
+									docId={docId}
+									onEdit={handlers.onEditHighlightAnnotation}
+									onDelete={handlers.onDeleteHighlightAnnotation}
+									onChangeColor={handlers.onChangeHighlightColor}
+								/>
+							)}
+						/>
+					</div>
+				) : null}
+				{!mode.plainViewer ? (
+					<PageTranslateTab
+						pageIndex={pageIndex}
+						active={pageTranslateState.active}
+						running={pageTranslateState.running}
+						onToggle={handlers.onTogglePageLayoutTranslate}
 					/>
-				</div>
-				<PageTranslateTab
-					pageIndex={pageIndex}
-					active={pageTranslateState.active}
-					running={pageTranslateState.running}
-					onToggle={handlers.onTogglePageLayoutTranslate}
-				/>
+				) : null}
 				<div className={PDF_PRIVACY_HIDE_CLASS}>
 					<CitationLinkLayer
 						links={marks.citationLinks.get(pageIndex) ?? EMPTY_CITATION_LINKS}
@@ -727,7 +733,7 @@ export const PdfPageLayers = memo(function PdfPageLayers({
 				 * All kinds crop on click; hover and keyboard focus preview the
 				 * exact bbox that would be cropped.
 				 */}
-				{!mode.regionSelecting && !mode.visualDraftOpen
+				{!mode.regionSelecting && !mode.visualDraftOpen && !mode.plainViewer
 					? layout.hoverableRegionsByPage.get(pageIndex)?.map((region) => {
 							// Fixed-size chip in a zoom-scaled box: only draw it where
 							// it actually fits inside the region.
@@ -938,15 +944,17 @@ export const PdfPageLayers = memo(function PdfPageLayers({
 							/>
 						))
 					: null}
-				<div className={PDF_PRIVACY_HIDE_CLASS}>
-					<SelectionGutter
-						items={pins}
-						activeId={marks.activeCardId}
-						onOpen={handlers.onOpenPin}
-						onEnter={handlers.onCardHoverEnter}
-						onLeave={handlers.onCardHoverLeave}
-					/>
-				</div>
+				{!mode.plainViewer ? (
+					<div className={PDF_PRIVACY_HIDE_CLASS}>
+						<SelectionGutter
+							items={pins}
+							activeId={marks.activeCardId}
+							onOpen={handlers.onOpenPin}
+							onEnter={handlers.onCardHoverEnter}
+							onLeave={handlers.onCardHoverLeave}
+						/>
+					</div>
+				) : null}
 				{/*
 				 * Emphasis overlay for the hovered or edited comment-rail card.
 				 * Visual notes reuse the shared region frame so the rail card,
@@ -1013,31 +1021,33 @@ export const PdfPageLayers = memo(function PdfPageLayers({
 						) : null,
 					),
 				)}
-				<div className={PDF_PRIVACY_HIDE_CLASS}>
-					<CommentCardsLayer
-						items={comments}
-						pageWidthPx={width}
-						pageHeightPx={height}
-						editingId={marks.editingCommentId}
-						wikiTarget={marks.commentWikiTarget}
-						hoveredId={marks.hoveredCommentId}
-						selectionDraft={selectionDraftOnPage}
-						onCommitSelectionComment={handlers.onCommitSelectionComment}
-						onSelectionCommentActiveChange={
-							handlers.onSelectionCommentActiveChange
-						}
-						onDismissSelectionComment={handlers.onDismissSelectionComment}
-						onOpen={handlers.onOpenComment}
-						onSave={handlers.onSaveComment}
-						onCancel={handlers.onCancelComment}
-						onDelete={handlers.onDeleteComment}
-						onCopyLink={handlers.onCopyCommentLink}
-						onCopyEmbed={handlers.onCopyCommentEmbed}
-						onAddToChat={handlers.onAddCommentToChat}
-						onHover={handlers.onHoverComment}
-						onLeave={handlers.onLeaveComment}
-					/>
-				</div>
+				{!mode.plainViewer ? (
+					<div className={PDF_PRIVACY_HIDE_CLASS}>
+						<CommentCardsLayer
+							items={comments}
+							pageWidthPx={width}
+							pageHeightPx={height}
+							editingId={marks.editingCommentId}
+							wikiTarget={marks.commentWikiTarget}
+							hoveredId={marks.hoveredCommentId}
+							selectionDraft={selectionDraftOnPage}
+							onCommitSelectionComment={handlers.onCommitSelectionComment}
+							onSelectionCommentActiveChange={
+								handlers.onSelectionCommentActiveChange
+							}
+							onDismissSelectionComment={handlers.onDismissSelectionComment}
+							onOpen={handlers.onOpenComment}
+							onSave={handlers.onSaveComment}
+							onCancel={handlers.onCancelComment}
+							onDelete={handlers.onDeleteComment}
+							onCopyLink={handlers.onCopyCommentLink}
+							onCopyEmbed={handlers.onCopyCommentEmbed}
+							onAddToChat={handlers.onAddCommentToChat}
+							onHover={handlers.onHoverComment}
+							onLeave={handlers.onLeaveComment}
+						/>
+					</div>
+				) : null}
 			</PagePointerProvider>
 		</div>
 	);

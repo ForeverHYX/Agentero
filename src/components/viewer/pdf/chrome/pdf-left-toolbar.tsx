@@ -30,6 +30,8 @@ type PdfLeftToolbarProps = {
 	visible: boolean;
 	/** True for remote papers with no local sidecar. */
 	isRemotePaper?: boolean;
+	/** True for PDFs outside papers/: no figures/layout-analysis entry. */
+	plainViewer?: boolean;
 };
 
 /** Top-left toggle group: outline, references, figures. Buttons are only
@@ -47,6 +49,7 @@ export function PdfLeftToolbar({
 	analyzing,
 	visible,
 	isRemotePaper = false,
+	plainViewer = false,
 }: PdfLeftToolbarProps) {
 	const { t } = useTranslation("viewer");
 	const hasOutline = outline.length > 0;
@@ -104,22 +107,26 @@ export function PdfLeftToolbar({
 							</TooltipContent>
 						</Tooltip>
 					) : null}
-					<Tooltip>
-						<TooltipTrigger asChild>
-							<Button
-								type="button"
-								size="icon-xs"
-								variant={showFigures ? "secondary" : "ghost"}
-								aria-label={t("figures.title")}
-								aria-pressed={showFigures}
-								disabled={analyzing || isRemotePaper}
-								onClick={onToggleFigures}
-							>
-								<Boxes className="size-3.5" />
-							</Button>
-						</TooltipTrigger>
-						<TooltipContent side="bottom">{t("figures.title")}</TooltipContent>
-					</Tooltip>
+					{!plainViewer ? (
+						<Tooltip>
+							<TooltipTrigger asChild>
+								<Button
+									type="button"
+									size="icon-xs"
+									variant={showFigures ? "secondary" : "ghost"}
+									aria-label={t("figures.title")}
+									aria-pressed={showFigures}
+									disabled={analyzing || isRemotePaper}
+									onClick={onToggleFigures}
+								>
+									<Boxes className="size-3.5" />
+								</Button>
+							</TooltipTrigger>
+							<TooltipContent side="bottom">
+								{t("figures.title")}
+							</TooltipContent>
+						</Tooltip>
+					) : null}
 				</div>
 			</TooltipProvider>
 		</div>

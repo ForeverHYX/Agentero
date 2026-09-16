@@ -82,6 +82,13 @@ export type PdfViewerProps = {
 	 */
 	isRemotePaper?: boolean;
 	/**
+	 * True for PDFs outside `papers/` (e.g. a compiled plans/a.pdf). Renders a
+	 * plain viewer: layout analysis, visual annotation, full-text translation,
+	 * the selection toolbar, and annotations are all hidden; basic reading
+	 * (pages, zoom, search, text selection + copy) stays.
+	 */
+	plainViewer?: boolean;
+	/**
 	 * Identifier used by the "Import to library" action for remote papers.
 	 * Usually the arXiv abs/source URL.
 	 */

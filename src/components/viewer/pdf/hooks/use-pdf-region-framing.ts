@@ -63,6 +63,8 @@ export type UsePdfRegionFramingOptions = {
 		pageIndex0: number,
 		region: PdfAskNormalizedRect,
 	) => ScreenPoint;
+	/** True for PDFs outside papers/ (plain viewer): no visual annotation. */
+	plainViewer?: boolean;
 };
 
 export type PdfRegionFraming = {
@@ -98,6 +100,7 @@ export function usePdfRegionFraming({
 	setSelectionMenu,
 	onVisualDraft,
 	screenPointForRegion,
+	plainViewer = false,
 }: UsePdfRegionFramingOptions): PdfRegionFraming {
 	const { t } = useTranslation("viewer");
 	const [regionSelecting, setRegionSelecting] = useState(false);
@@ -118,15 +121,16 @@ export function usePdfRegionFraming({
 
 	/** Enter/leave region framing. Shared by the toolbar and the handle. */
 	const toggleRegionSelect = useCallback(() => {
-		if (visualCropPendingRef.current) return;
+		if (plainViewer || visualCropPendingRef.current) return;
 		setSelectionMenu(null);
 		selectionCap?.clear(docId);
 		setRegionSelecting((active) => !active);
-	}, [selectionCap, docId, setSelectionMenu]);
+	}, [plainViewer, selectionCap, docId, setSelectionMenu]);
 
 	/** Crop a region and hand it to the visual-mark cluster (#396). */
 	const beginVisualAnnotation = useCallback(
 		async (page: number, region: PdfAskNormalizedRect) => {
+			if (plainViewer) return;
 			if (!engine || !docCap || visualCropPendingRef.current) return;
 			if (!docCap.isDocumentOpen(docId)) return;
 			const document = docCap.getDocument(docId);
@@ -167,7 +171,15 @@ export function usePdfRegionFraming({
 				setVisualCropRegion(null);
 			}
 		},
-		[engine, docCap, docId, t, onVisualDraft, screenPointForRegion],
+		[
+			plainViewer,
+			engine,
+			docCap,
+			docId,
+			t,
+			onVisualDraft,
+			screenPointForRegion,
+		],
 	);
 
 	const handleVisualRegionSelect = useCallback(

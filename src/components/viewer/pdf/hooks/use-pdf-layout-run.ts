@@ -79,6 +79,11 @@ export type UsePdfLayoutRunOptions = {
 	/** True for remote papers with no local sidecar; disables layout analysis. */
 	isRemotePaper?: boolean;
 	/**
+	 * True for PDFs outside papers/ (plain viewer): no layout analysis at all,
+	 * including the in-viewer auto-run loose PDFs otherwise get.
+	 */
+	plainViewer?: boolean;
+	/**
 	 * Dual-pane translation companion reuses the source pane's layout store /
 	 * sidecar; it must not enqueue a second analysis pass on open.
 	 */
@@ -105,6 +110,7 @@ export function usePdfLayoutRun({
 	docCap,
 	docCapRef,
 	isRemotePaper = false,
+	plainViewer = false,
 	translationPane = false,
 }: UsePdfLayoutRunOptions): PdfLayoutRun {
 	const { t } = useTranslation("viewer");
@@ -121,7 +127,7 @@ export function usePdfLayoutRun({
 	 */
 	const startLayoutAnalysis = useCallback(
 		(opts?: StartLayoutAnalysisOptions) => {
-			if (isRemotePaper) return;
+			if (isRemotePaper || plainViewer) return;
 			const docs = docCapRef.current ?? docCap;
 			if (!docs?.isDocumentOpen(docId)) {
 				if (opts?.notifyOnError !== false) {
@@ -298,6 +304,7 @@ export function usePdfLayoutRun({
 			docCap,
 			docCapRef,
 			isRemotePaper,
+			plainViewer,
 		],
 	);
 	const startLayoutAnalysisRef = useRef(startLayoutAnalysis);
@@ -317,7 +324,7 @@ export function usePdfLayoutRun({
 	// Loose PDFs (no paper folder) still analyze in-viewer.
 	const layoutAutoStartedForDocRef = useRef<string | null>(null);
 	useEffect(() => {
-		if (translationPane || isRemotePaper) return;
+		if (translationPane || isRemotePaper || plainViewer) return;
 		if (!isActive) return;
 		if (!layoutCap || totalPages <= 0) return;
 		if (getLayoutDocumentResult(docId)) return;
@@ -400,6 +407,7 @@ export function usePdfLayoutRun({
 	}, [
 		translationPane,
 		isRemotePaper,
+		plainViewer,
 		isActive,
 		layoutCap,
 		docCap,

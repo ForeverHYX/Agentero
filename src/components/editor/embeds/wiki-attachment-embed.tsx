@@ -8,7 +8,7 @@ import { PdfViewer } from "@/components/viewer";
 import { createKeyedCache } from "@/lib/core/keyed-cache";
 import { cn } from "@/lib/core/utils";
 import { localFileToArrayBuffer } from "@/lib/paper/media";
-import { imageMimeFromPath } from "@/lib/workspace/viewer";
+import { imageMimeFromPath, isPlainPdfPath } from "@/lib/workspace/viewer";
 
 type WikiAttachmentEmbedProps = {
 	kind: "image" | "pdf";
@@ -239,6 +239,7 @@ export function WikiAttachmentEmbed({
 			source={null}
 			sourceBytes={state.bytes}
 			docId={`wiki-embed:${targetPath}:${revision}`}
+			plainViewer={isPlainPdfPath(targetPath)}
 			className="h-96 w-full"
 		/>
 	);

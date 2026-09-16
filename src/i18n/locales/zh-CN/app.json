@@ -244,6 +244,8 @@
 		"batchProgress": "{{phase}} · {{current}} / {{total}}",
 		"lookupImport": "添加论文",
 		"lookupFetching": "正在拉取元数据与资源…",
+		"skillLookup": "查找 Skill",
+		"skillLookupFetching": "正在查找可安装的 Skill…",
 		"libraryImport": "导入文献库",
 		"importPdf": "导入 PDF",
 		"recognizeMeta": "识别论文元数据",

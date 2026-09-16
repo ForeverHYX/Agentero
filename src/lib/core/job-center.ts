@@ -287,6 +287,8 @@ function jobParams(params: unknown): JobParams {
 
 function importPanelTitle(params: unknown): string {
 	switch (jobParams(params).mode) {
+		case "skillLookup":
+			return i18n.t("app:tasks.skillLookup");
 		case "skill":
 			return i18n.t("sidebar:lookup.skillImportTask");
 		case "localPdf":

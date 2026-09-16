@@ -168,7 +168,11 @@ export async function lookupSubmit(
 					vaultPath,
 					path: parentDir,
 					lane: "normal",
-					params: { mode: "lookup", text: input },
+					params: {
+						mode:
+							inferLookupSource(input) === "skill" ? "skillLookup" : "lookup",
+						text: input,
+					},
 				});
 				if (expectTitleSearch) pendingSearchJobIds.add(job.id);
 				try {
@@ -197,8 +201,16 @@ export async function runLookupImportJob(
 	if (!input) throw new Error("import job is missing its identifier");
 	const settings = getSettings();
 	const expectTitleSearch = looksLikeTitleSearchQuery(input);
+	const isSkillLookup = lookupJobMode(ctx.params) === "skillLookup";
 
-	await reportTaskPhase(ctx, i18n.t("app:tasks.lookupFetching"));
+	await reportTaskPhase(
+		ctx,
+		i18n.t(
+			isSkillLookup
+				? "app:tasks.skillLookupFetching"
+				: "app:tasks.lookupFetching",
+		),
+	);
 	const result = await addPapersByIdentifiers({
 		vaultRoot: vaultPath,
 		parentDir,
@@ -352,6 +364,14 @@ function lookupJobText(params: unknown): string {
 			? (params as { text?: unknown }).text
 			: undefined;
 	return typeof text === "string" ? text.trim() : "";
+}
+
+function lookupJobMode(params: unknown): string {
+	const mode =
+		params && typeof params === "object"
+			? (params as { mode?: unknown }).mode
+			: undefined;
+	return typeof mode === "string" ? mode : "";
 }
 
 /** Picked a title-search candidate → import it as a normal identifier. */

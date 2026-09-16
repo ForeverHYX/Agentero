@@ -244,6 +244,8 @@
 		"batchProgress": "{{phase}} · {{current}} / {{total}}",
 		"lookupImport": "Add paper",
 		"lookupFetching": "Fetching metadata & assets…",
+		"skillLookup": "Find Skills",
+		"skillLookupFetching": "Finding installable Skills…",
 		"libraryImport": "Import bibliography",
 		"importPdf": "Import PDF",
 		"recognizeMeta": "Match paper metadata",

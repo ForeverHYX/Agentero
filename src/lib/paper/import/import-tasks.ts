@@ -24,6 +24,7 @@ import { runPlazaImportJob } from "@/lib/plaza/import";
 
 export type ImportMode =
 	| "lookup"
+	| "skillLookup"
 	| "skill"
 	| "localPdf"
 	| "plaza"
@@ -34,6 +35,7 @@ const HANDLERS: Record<
 	(ctx: TaskExecutorContext) => Promise<void>
 > = {
 	lookup: runLookupImportJob,
+	skillLookup: runLookupImportJob,
 	skill: runSkillImportJob,
 	localPdf: runLocalPdfImportJob,
 	plaza: runPlazaImportJob,

@@ -578,6 +578,14 @@ export const commands = {
 	 *  fails to load.
 	 */
 	webProxyAllowHost: (args: WebProxyAllowHostArgs) => typedError<ApiResult<boolean>, string>(__TAURI_INVOKE("web_proxy_allow_host", { args })),
+	/**
+	 *  Detect available LaTeX engines on the system (pdflatex, xelatex, lualatex, etc.).
+	 */
+	detectLatexEngines: () => __TAURI_INVOKE<ApiResult<LatexEngine[]>>("detect_latex_engines"),
+	/**
+	 *  Compile a .tex file to PDF using the specified engine.
+	 */
+	compileTex: (texPath: string, engine: string) => __TAURI_INVOKE<ApiResult<CompileResult>>("compile_tex", { texPath, engine }),
 };
 
 /** Events */
@@ -625,6 +633,7 @@ export const events = {
 	vaultOpenError: makeEvent<VaultOpenErrorEvent>("vault:open-error"),
 	vaultOpenRequest: makeEvent<VaultOpenRequestEvent>("vault:open-request"),
 	windowClosed: makeEvent<WindowClosedEvent_Deserialize>("window:closed"),
+	compileLog: makeEvent<CompileLogEvent>("compile:log"),
 };
 
 /* Types */
@@ -1716,6 +1725,31 @@ export type BuiltinProviderStatus = {
 	translateModel: string,
 	embeddingModel: string,
 	ocrModel: string,
+};
+
+/**  A detected LaTeX rendering engine. */
+export type LatexEngine = {
+	id: string,
+	label: string,
+	path: string | null,
+};
+
+/**  Result of a TeX compilation. */
+export type CompileResult = {
+	ok: boolean,
+	pdf_path: string | null,
+	log: string,
+};
+
+/**  Arguments for `compile_tex`. */
+export type CompileTexArgs = {
+	tex_path: string,
+	engine: string,
+};
+
+/**  A single line emitted during TeX compilation. */
+export type CompileLogEvent = {
+	line: string,
 };
 
 /**  Status for a common agent row in Settings. */

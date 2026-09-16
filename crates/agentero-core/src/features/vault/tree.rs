@@ -41,6 +41,24 @@ const IGNORE_NAMES: &[&str] = &[
 
 const ALLOWED_DOT_NAMES: &[&str] = &[".env.example", ".agents"];
 
+/// File extensions produced by LaTeX engines (pdflatex / xelatex / lualatex /
+/// latexmk / tectonic / bibtex / biber / makeindex / glossary). They pile up
+/// next to the .tex source after each compile; hide them from the file tree
+/// to keep the source folder readable.
+const LATEX_INTERMEDIATE_EXTS: &[&str] = &[
+    "aux", // aux: cross-references, labels
+    "log", // log: engine log
+    "out", // out: PDF outline bookmarks
+    "toc", "lof", "lot", // table of contents / figures / tables
+    "fls", "fdb_latexmk", // latexmk file list + database
+    "synctex", "synctex.gz", // SyncTeX (gz has no real extension so check stem)
+    "nav", "snm", "vrb", // beamer navigation / metadata / verbatim
+    "bbl", "blg", // BibTeX output + log
+    "idx", "ind", "ilg", // makeindex
+    "glg", "glo", "gls", // glossary
+    "xdv", // xelatex intermediate DVI
+];
+
 const EAGER_ROOT_NAMES: &[&str] = &["papers", "notes", ".agents"];
 
 /// Any of these marks a directory as a paper unit whose `source/` is lazy.
@@ -78,7 +96,38 @@ fn should_ignore(name: &str) -> bool {
     if name.starts_with('.') {
         return true;
     }
-    name.ends_with(".egg-info")
+    if name.ends_with(".egg-info") {
+        return true;
+    }
+    // LaTeX engine byproducts (see LATEX_INTERMEDIATE_EXTS). Compare the
+    // extension case-insensitively and also handle the special `*.synctex.gz`
+    // compound extension.
+    let ext = Path::new(name)
+        .extension()
+        .and_then(|s| s.to_str())
+        .map(str::to_ascii_lowercase);
+    if let Some(ext) = ext {
+        if LATEX_INTERMEDIATE_EXTS.iter().any(|e| *e == ext) {
+            return true;
+        }
+        // *.foo.gz — match the inner extension (e.g. `synctex` from `x.synctex.gz`).
+        if ext == "gz" {
+            if let Some(inner) = Path::new(name)
+                .file_stem()
+                .and_then(|s| Path::new(s).extension())
+                .and_then(|s| s.to_str())
+                .map(str::to_ascii_lowercase)
+            {
+                if LATEX_INTERMEDIATE_EXTS
+                    .iter()
+                    .any(|e| *e == inner || format!("{e}.gz") == inner)
+                {
+                    return true;
+                }
+            }
+        }
+    }
+    false
 }
 
 fn natural_name_cmp(a: &str, b: &str) -> Ordering {
@@ -428,6 +477,70 @@ mod tests {
 
         // Outside the vault is rejected.
         assert!(list_children(root, Path::new("/"), &caps).is_err());
+    }
+
+    #[test]
+    fn latex_compile_byproducts_are_hidden() {
+        let root = &temp_root("latex-hidden");
+        // A .tex source + a PDF + the typical byproducts left behind by
+        // pdflatex / latexmk / beamer / bibtex / synctex. The source folder
+        // must show only the .tex and the .pdf.
+        write(&root.join("notes/main.tex"), "\\documentclass{article}");
+        write(&root.join("notes/main.pdf"), "%PDF-1.4");
+        write(&root.join("notes/main.aux"), "x");
+        write(&root.join("notes/main.log"), "x");
+        write(&root.join("notes/main.out"), "x");
+        write(&root.join("notes/main.toc"), "x");
+        write(&root.join("notes/main.lof"), "x");
+        write(&root.join("notes/main.lot"), "x");
+        write(&root.join("notes/main.fls"), "x");
+        write(&root.join("notes/main.fdb_latexmk"), "x");
+        write(&root.join("notes/main.synctex.gz"), "x");
+        write(&root.join("notes/main.nav"), "x");
+        write(&root.join("notes/main.snm"), "x");
+        write(&root.join("notes/main.bbl"), "x");
+        write(&root.join("notes/main.blg"), "x");
+        write(&root.join("notes/main.idx"), "x");
+        write(&root.join("notes/main.gls"), "x");
+        write(&root.join("notes/main.xdv"), "x");
+        // Case insensitivity (BibTeX on Windows is happy to emit MAIN.AUX).
+        write(&root.join("notes/UPPER.AUX"), "x");
+
+        let tree = build_tree(root, &CapsCache::new());
+        let notes = find(&tree, "notes").unwrap();
+        let names: Vec<&str> = notes
+            .children
+            .as_ref()
+            .unwrap()
+            .iter()
+            .map(|n| n.name.as_str())
+            .collect();
+        assert!(names.contains(&"main.tex"), "main.tex visible: {names:?}");
+        assert!(names.contains(&"main.pdf"), "main.pdf visible: {names:?}");
+        for hidden in [
+            "main.aux",
+            "main.log",
+            "main.out",
+            "main.toc",
+            "main.lof",
+            "main.lot",
+            "main.fls",
+            "main.fdb_latexmk",
+            "main.synctex.gz",
+            "main.nav",
+            "main.snm",
+            "main.bbl",
+            "main.blg",
+            "main.idx",
+            "main.gls",
+            "main.xdv",
+            "UPPER.AUX",
+        ] {
+            assert!(
+                !names.contains(&hidden),
+                "{hidden} should be hidden but found in tree: {names:?}"
+            );
+        }
     }
 
     #[test]

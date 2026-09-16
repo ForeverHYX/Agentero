@@ -17,6 +17,7 @@ import {
 import { PLAZA_VIRTUAL_PATH } from "@/lib/plaza";
 import type { FileNode } from "@/lib/vault";
 import type { PaperRowActions } from "./hooks/use-paper-row-actions";
+import type { TexCompileActions } from "./hooks/use-tex-compile";
 import { pathKey } from "./tree-helpers";
 import { TreeRenameInput } from "./tree-inputs";
 import {
@@ -35,6 +36,8 @@ type RowContext = {
 	paperMetaByRelPath?: ReadonlyMap<string, PaperMetadata>;
 	paperTreeLabelMode: PaperTreeLabelMode;
 	paperActions: PaperRowActions;
+	texCompile?: TexCompileActions;
+	vaultPath?: string | null;
 	renameDraft?: TreeRenameDraft | null;
 	onConfirmRename?: (path: string, newName: string) => void | Promise<void>;
 	onCancelRename?: () => void;
@@ -136,6 +139,8 @@ function renderRow(row: FlatRow, props: TreeRowsViewportProps): ReactNode {
 				props.loadingDirs.has(row.node.path)
 			}
 			expanded={props.expanded.has(row.node.path)}
+			texCompile={props.texCompile}
+			vaultPath={props.vaultPath}
 		/>
 	);
 }

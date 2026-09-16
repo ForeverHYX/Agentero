@@ -8,7 +8,7 @@ import {
 } from "react";
 import { useTranslation } from "react-i18next";
 import { cn } from "@/lib/core/utils";
-import { isValidVaultEntryName } from "@/lib/vault";
+import { isPapersParent, isValidVaultEntryName } from "@/lib/vault";
 import type { TreeCreateKind } from "./types";
 
 /** Inline name input — VS Code / Cursor style create. */
@@ -16,13 +16,24 @@ export function TreeCreateInput({
 	kind,
 	onConfirm,
 	onCancel,
+	parentPath,
+	vaultRoot,
 }: {
 	kind: TreeCreateKind;
 	onConfirm: (name: string) => void;
 	onCancel: () => void;
+	/** Absolute path of the parent directory. */
+	parentPath?: string;
+	/** Vault root absolute path. */
+	vaultRoot?: string;
 }) {
 	const { t } = useTranslation("sidebar");
-	const defaultName = kind === "file" ? "Untitled.md" : "New Folder";
+	// Papers/ (or parentPath not provided): default .md suffix + IDE-like selection.
+	// Outside papers/ + file: no suffix, full selection so user types the full name.
+	const insidePapers =
+		parentPath && vaultRoot ? isPapersParent(parentPath, vaultRoot) : true;
+	const defaultName =
+		kind === "file" ? (insidePapers ? "Untitled.md" : "") : "New Folder";
 	const [value, setValue] = useState(defaultName);
 	const [error, setError] = useState<string | null>(null);
 	const inputRef = useRef<HTMLInputElement>(null);
@@ -32,15 +43,20 @@ export function TreeCreateInput({
 		const el = inputRef.current;
 		if (!el) return;
 		el.focus();
-		// Select basename without extension for files (IDE-like).
 		if (kind === "file") {
-			const dot = defaultName.lastIndexOf(".");
-			if (dot > 0) el.setSelectionRange(0, dot);
-			else el.select();
+			if (insidePapers) {
+				// IDE-like: select basename, leave extension selected.
+				const dot = defaultName.lastIndexOf(".");
+				if (dot > 0) el.setSelectionRange(0, dot);
+				else el.select();
+			} else {
+				// Outside papers: full selection so user types the complete filename.
+				el.select();
+			}
 		} else {
 			el.select();
 		}
-	}, [kind, defaultName]);
+	}, [kind, defaultName, insidePapers]);
 
 	const commit = useCallback(() => {
 		if (committedRef.current) return;

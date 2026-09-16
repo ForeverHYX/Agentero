@@ -143,4 +143,11 @@ export function paperRelFromNotes(
 	return abs;
 }
 
+/** Is `parentPath` (absolute, vault-rooted) inside the `papers/` folder? */
+export function isPapersParent(parentPath: string, vaultRoot: string): boolean {
+	const rel = vaultRelativePath(vaultRoot, parentPath);
+	if (!rel) return false;
+	return rel === "papers" || rel.startsWith("papers/");
+}
+
 export { basenameOf } from "@/lib/core/path";

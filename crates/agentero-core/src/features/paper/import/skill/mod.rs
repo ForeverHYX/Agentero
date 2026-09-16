@@ -8,6 +8,7 @@ use std::time::Duration;
 
 use base64::Engine;
 use flate2::read::GzDecoder;
+use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 use walkdir::WalkDir;
 
@@ -181,6 +182,12 @@ async fn discover_skill_subpath(
 
 async fn default_branch(owner: &str, repo: &str) -> Result<String, AppError> {
     let canonical = format!("https://api.github.com/repos/{owner}/{repo}");
+    if let Some(body) =
+        fetch_github_api_json_via_gh::<serde_json::Value>(&canonical, "invalid GitHub response")
+            .await?
+    {
+        return default_branch_from_body(body);
+    }
     let candidates = crate::http::github_url_candidates(&canonical);
     let mut last_err: Option<AppError> = None;
     for (index, url) in candidates.iter().enumerate() {
@@ -227,11 +234,73 @@ async fn default_branch_once(url: &str) -> Result<String, AppError> {
         .json()
         .await
         .map_err(|e| AppError::message(format!("invalid GitHub response: {e}")))?;
+    default_branch_from_body(body)
+}
+
+fn default_branch_from_body(body: serde_json::Value) -> Result<String, AppError> {
     body.get("default_branch")
         .and_then(|value| value.as_str())
         .filter(|value| !value.is_empty())
         .map(str::to_string)
         .ok_or_else(|| AppError::message("GitHub response did not include a default branch"))
+}
+
+fn github_api_endpoint(canonical: &str) -> Option<String> {
+    let url = url::Url::parse(canonical).ok()?;
+    if url.host_str() != Some("api.github.com") {
+        return None;
+    }
+    let mut endpoint = url.path().to_string();
+    if let Some(query) = url.query() {
+        endpoint.push('?');
+        endpoint.push_str(query);
+    }
+    Some(endpoint)
+}
+
+async fn fetch_github_api_json_via_gh<T>(
+    canonical: &str,
+    invalid_context: &str,
+) -> Result<Option<T>, AppError>
+where
+    T: DeserializeOwned,
+{
+    let Some(endpoint) = github_api_endpoint(canonical) else {
+        return Ok(None);
+    };
+    let Some(gh) = crate::process::resolve_command("gh") else {
+        return Ok(None);
+    };
+
+    let mut command = tokio::process::Command::new(gh);
+    command
+        .args(["api", "--hostname", "github.com", &endpoint])
+        .kill_on_drop(true);
+    let output = match tokio::time::timeout(Duration::from_secs(20), command.output()).await {
+        Ok(Ok(output)) => output,
+        Ok(Err(error)) => {
+            log::debug!(target: "agentero::skill", "gh api failed to start: {error}");
+            return Ok(None);
+        }
+        Err(_) => {
+            log::warn!(target: "agentero::skill", "gh api timed out for {endpoint}");
+            return Ok(None);
+        }
+    };
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        let snippet = crate::http::http_err_snippet(stderr.trim());
+        log::debug!(
+            target: "agentero::skill",
+            "gh api failed for {endpoint}: {}",
+            snippet
+        );
+        return Ok(None);
+    }
+
+    serde_json::from_slice(&output.stdout)
+        .map(Some)
+        .map_err(|e| AppError::message(format!("{invalid_context}: {e}")))
 }
 
 async fn fetch_archive_with_mirror_fallback(
@@ -442,6 +511,12 @@ async fn github_contents(
 }
 
 async fn fetch_github_blob_with_mirror_fallback(canonical: &str) -> Result<GithubBlob, AppError> {
+    if let Some(blob) =
+        fetch_github_api_json_via_gh::<GithubBlob>(canonical, "invalid GitHub blob response")
+            .await?
+    {
+        return Ok(blob);
+    }
     let candidates = crate::http::github_url_candidates(canonical);
     let mut last_err: Option<AppError> = None;
     for (index, url) in candidates.iter().enumerate() {
@@ -493,6 +568,14 @@ async fn fetch_github_blob_once(url: &str) -> Result<GithubBlob, AppError> {
 async fn fetch_github_json_with_mirror_fallback(
     canonical: &str,
 ) -> Result<GithubContentsResponse, AppError> {
+    if let Some(response) = fetch_github_api_json_via_gh::<GithubContentsResponse>(
+        canonical,
+        "invalid GitHub contents response",
+    )
+    .await?
+    {
+        return Ok(response);
+    }
     let candidates = crate::http::github_url_candidates(canonical);
     let mut last_err: Option<AppError> = None;
     for (index, url) in candidates.iter().enumerate() {
@@ -930,6 +1013,23 @@ mod tests {
         .unwrap();
         assert_eq!(name, "example-skill");
         assert_eq!(description, "Useful instructions");
+    }
+
+    #[test]
+    fn derives_gh_api_endpoint_only_for_direct_github_api_urls() {
+        assert_eq!(
+            github_api_endpoint("https://api.github.com/repos/o/r/contents/skills/pptx?ref=main")
+                .as_deref(),
+            Some("/repos/o/r/contents/skills/pptx?ref=main")
+        );
+        assert_eq!(
+            github_api_endpoint("https://gh.llkk.cc/https://api.github.com/repos/o/r").as_deref(),
+            None
+        );
+        assert_eq!(
+            github_api_endpoint("https://codeload.github.com/o/r/tar.gz/main").as_deref(),
+            None
+        );
     }
 
     #[test]

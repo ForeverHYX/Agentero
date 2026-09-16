@@ -38,7 +38,7 @@
 
 1. GitHub repo 根：`GET https://codeload.github.com/{owner}/{repo}/tar.gz/{ref}`（ref 缺省时先经 `api.github.com/repos/{owner}/{repo}` 拿默认分支）；复用 `http_get_bytes_with_progress` 报进度。
    - 已走 Host 网络代理（`networkProxy*`）。
-   - 直连 GitHub REST API 时会自动复用 `GH_TOKEN` / `GITHUB_TOKEN`，或本机已登录 GitHub CLI 的 `gh auth token --hostname github.com`。token 只发给 `api.github.com`，不会发给第三方 URL 前缀镜像。
+   - GitHub REST API 请求优先走本机已登录的 GitHub CLI：`gh api --hostname github.com ...`。没有 `gh`、未登录或 `gh api` 失败时，回退到 Host 自己的直连 `api.github.com` 请求（可复用 `GH_TOKEN` / `GITHUB_TOKEN` 或 `gh auth token`）；token 只发给 `api.github.com`，不会发给第三方 URL 前缀镜像。
    - Settings → 通用 → **GitHub 镜像**（`githubMirrorEnabled` / `githubMirrorBaseUrl`）：从内置预设列表中选择一个 URL 前缀镜像；直连失败（超时/连接错误/5xx/429/403）时回退 `{base}/https://api|codeload.github.com/...`（如 `https://gh.llkk.cc`）。GitHub `403` 常见于未认证 API 配额、出口 IP 或区域网络拦截，按可恢复网络问题处理；**其它 4xx（如 404）不回退**。与网络代理正交。
 2. GitHub tree 子目录：先经 `api.github.com/repos/{owner}/{repo}/contents/{subpath}?ref={ref}` 递归列目录，只读取候选目录里的 `SKILL.md` blob 来展示候选；不下载 `assets/`、`references/`、`scripts/` 等 payload。这样 monorepo 中的单个 Skill 不需要下载整仓 tarball，且发现阶段很轻。
 3. 解压或列目录后，递归扫描 `**/SKILL.md`：

@@ -32,6 +32,9 @@ export function useTexCompile(): TexCompileActions {
 	const [selectedEngine, setSelectedEngine] = useState<string | null>(null);
 	const [compilingPath, setCompilingPath] = useState<string | null>(null);
 	const unlistenRef = useRef<(() => void) | null>(null);
+	// Once the user explicitly picks an engine, never overwrite their choice
+	// on subsequent engine-list refreshes (mount, vault switch, etc.).
+	const userPickedRef = useRef(false);
 
 	// Load engines on mount.
 	useEffect(() => {
@@ -41,7 +44,8 @@ export function useTexCompile(): TexCompileActions {
 			.then((res) => {
 				if (res.ok && res.data) {
 					setEngines(res.data);
-					if (res.data.length > 0) {
+					// First-time default: only seed if the user has not picked yet.
+					if (res.data.length > 0 && !userPickedRef.current) {
 						setSelectedEngine(res.data[0].id);
 					}
 				}
@@ -63,6 +67,7 @@ export function useTexCompile(): TexCompileActions {
 	}, []);
 
 	const selectEngine = useCallback((id: string) => {
+		userPickedRef.current = true;
 		setSelectedEngine(id);
 	}, []);
 

@@ -1,4 +1,5 @@
 import {
+	Check,
 	ChevronDown,
 	ChevronRight,
 	Download,
@@ -378,26 +379,38 @@ function TexCompileActions({
 						</div>
 					) : hasEngines ? (
 						<div role="listbox" className="flex flex-col">
-							{actions.engines.map((engine) => (
-								<button
-									key={engine.id}
-									type="button"
-									role="option"
-									aria-selected={actions.selectedEngine === engine.id}
-									className={cn(
-										"flex w-full items-center rounded-sm px-2 py-1.5 text-left text-xs",
-										"hover:bg-accent hover:text-accent-foreground",
-										"focus:bg-accent focus:text-accent-foreground focus:outline-none",
-									)}
-									onClick={(e) => {
-										e.stopPropagation();
-										actions.selectEngine(engine.id);
-										setPickerOpen(false);
-									}}
-								>
-									{engine.label}
-								</button>
-							))}
+							{actions.engines.map((engine) => {
+								const isSelected = actions.selectedEngine === engine.id;
+								return (
+									<button
+										key={engine.id}
+										type="button"
+										role="option"
+										aria-selected={isSelected}
+										className={cn(
+											"flex w-full items-center gap-1.5 rounded-sm px-2 py-1.5 text-left text-xs",
+											"focus:outline-none",
+											isSelected
+												? "bg-accent font-medium text-accent-foreground"
+												: "hover:bg-accent hover:text-accent-foreground focus-visible:bg-accent focus-visible:text-accent-foreground",
+										)}
+										onClick={(e) => {
+											e.stopPropagation();
+											actions.selectEngine(engine.id);
+											setPickerOpen(false);
+										}}
+									>
+										<Check
+											className={cn(
+												"size-3 shrink-0",
+												isSelected ? "opacity-100" : "opacity-0",
+											)}
+											aria-hidden
+										/>
+										<span className="flex-1 truncate">{engine.label}</span>
+									</button>
+								);
+							})}
 						</div>
 					) : (
 						<div className="px-2 py-1.5 text-muted-foreground text-xs">

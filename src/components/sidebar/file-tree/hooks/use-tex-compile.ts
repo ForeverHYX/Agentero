@@ -1,20 +1,22 @@
 /**
- * Compile state and actions for .tex files in the file tree.
- * Manages engine detection, busy state, and compilation lifecycle.
+ * React adapter over the lib-level TeX compile store. Keeps the historical
+ * TexCompileActions shape so the file tree keeps working unchanged; engine
+ * state and the compile lifecycle live in @/lib/workspace/tex-compile so
+ * plain actions (⌘\ split, tab buttons) can compile too.
  */
 
-import { listen } from "@tauri-apps/api/event";
-import { useCallback, useEffect, useRef, useState } from "react";
-import { commands } from "@/lib/core/bindings";
-import { notifyError, notifySuccess } from "@/lib/core/notify";
-import { openTab } from "@/lib/workspace/actions";
-import type { CenterViewMode } from "@/lib/workspace/viewer";
+import { useCallback, useEffect } from "react";
+import { useStore } from "zustand";
+import { openTexPdf } from "@/lib/workspace/actions";
+import {
+	initTexEngines,
+	type LatexEngine,
+	selectTexEngine,
+	texCompileStore,
+} from "@/lib/workspace/tex-compile";
+import { isTexPath } from "@/lib/workspace/viewer";
 
-export type LatexEngine = {
-	id: string;
-	label: string;
-	path: string | null;
-};
+export type { LatexEngine };
 
 export type TexCompileActions = {
 	engines: LatexEngine[];
@@ -27,100 +29,37 @@ export type TexCompileActions = {
 };
 
 export function useTexCompile(): TexCompileActions {
-	const [engines, setEngines] = useState<LatexEngine[]>([]);
-	const [enginesLoading, setEnginesLoading] = useState(false);
-	const [selectedEngine, setSelectedEngine] = useState<string | null>(null);
-	const [compilingPath, setCompilingPath] = useState<string | null>(null);
-	const unlistenRef = useRef<(() => void) | null>(null);
-	// Once the user explicitly picks an engine, never overwrite their choice
-	// on subsequent engine-list refreshes (mount, vault switch, etc.).
-	const userPickedRef = useRef(false);
-
-	// Load engines on mount.
 	useEffect(() => {
-		setEnginesLoading(true);
-		commands
-			.detectLatexEngines()
-			.then((res) => {
-				if (res.ok && res.data) {
-					setEngines(res.data);
-					// First-time default: only seed if the user has not picked yet.
-					if (res.data.length > 0 && !userPickedRef.current) {
-						setSelectedEngine(res.data[0].id);
-					}
-				}
-			})
-			.catch(() => {
-				// Silently ignore — button won't show if no engines found.
-			})
-			.finally(() => setEnginesLoading(false));
-
-		listen<{ line: string }>("compile:log", () => {
-			// Drain log events; log UI can be added later.
-		}).then((unlisten) => {
-			unlistenRef.current = unlisten;
-		});
-
-		return () => {
-			unlistenRef.current?.();
-		};
+		initTexEngines();
 	}, []);
 
-	const selectEngine = useCallback((id: string) => {
-		userPickedRef.current = true;
-		setSelectedEngine(id);
-	}, []);
+	const engines = useStore(texCompileStore, (s) => s.engines);
+	const enginesLoading = useStore(texCompileStore, (s) => s.enginesLoading);
+	const selectedEngine = useStore(texCompileStore, (s) => s.selectedEngine);
+	const compilingPath = useStore(texCompileStore, (s) => s.compilingPath);
 
 	const compileTex = useCallback(
 		async (texPath: string, _vaultPath: string) => {
-			const engine = selectedEngine;
-			if (!engine) {
-				notifyError("请先选择一个 LaTeX 引擎");
-				return;
-			}
-
-			setCompilingPath(texPath);
-
-			try {
-				const res = await commands.compileTex(texPath, engine);
-
-				if (!res.ok) {
-					notifyError(res.error?.message ?? "编译失败");
-					return;
-				}
-
-				const result = res.data;
-				if (result && result.ok && result.pdf_path) {
-					notifySuccess("编译成功");
-					openTab(result.pdf_path, {
-						preferMode: "pdf" as CenterViewMode,
-					});
-				} else {
-					notifyError("编译失败，请检查日志");
-				}
-			} catch (e) {
-				notifyError(String(e));
-			} finally {
-				setCompilingPath(null);
-			}
+			// The compile button always recompiles: openTexPdf(forceCompile)
+			// splits a shimmer placeholder beside the editor right away and
+			// fills it in when the compile lands.
+			await openTexPdf(texPath, { forceCompile: true });
 		},
-		[selectedEngine],
+		[],
 	);
 
 	/**
 	 * True when `path` is a .tex file NOT under a papers/ folder.
 	 */
 	const isTexFile = useCallback((path: string): boolean => {
-		if (!/\.tex$/i.test(path)) return false;
-		const rel = path.replace(/^.*[/\\]papers[/\\]/, "papers/");
-		return !rel.startsWith("papers/");
+		return isTexPath(path);
 	}, []);
 
 	return {
 		engines,
 		enginesLoading,
 		selectedEngine,
-		selectEngine,
+		selectEngine: selectTexEngine,
 		compileTex,
 		compilingPath,
 		isTexFile,

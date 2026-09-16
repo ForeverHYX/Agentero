@@ -47,6 +47,8 @@ export type DocTab = {
 	notesKey: number;
 	/** One-shot, monotonic intent consumed by the mounted Markdown editor. */
 	navigationIntent?: { id: number; fragment: LinkFragment };
+	/** Transient: compiled-PDF pane is waiting on a running LaTeX compile. */
+	texCompiling?: boolean;
 	loaded: boolean;
 };
 

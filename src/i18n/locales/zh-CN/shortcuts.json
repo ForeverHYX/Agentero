@@ -33,7 +33,7 @@
 		"focusNotes": "聚焦笔记",
 		"closeTab": "关闭对话框 / 标签 / 窗口",
 		"reopenTab": "重新打开已关闭标签",
-		"splitPane": "向右分栏",
+		"splitPane": "向右分栏（TeX：打开编译 PDF）",
 		"nextTab": "下一个标签",
 		"prevTab": "上一个标签",
 		"visualAnnotation": "添加视觉批注（PDF）",

@@ -86,6 +86,8 @@
 		"close": "Close {{title}}",
 		"showHtml": "Show HTML version",
 		"showPdf": "Show PDF version",
+		"openTexPdf": "Open PDF",
+		"texCompiling": "Compiling…",
 		"closeSplit": "Close split · {{title}}",
 		"contextClose": "Close",
 		"contextOpenNotes": "Open Notes",

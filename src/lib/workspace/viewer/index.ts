@@ -93,6 +93,17 @@ export function isPlainPdfPath(path: string | null): boolean {
 	return !isUnderPapers(path) && !isRemoteArxivPath(path);
 }
 
+/** .tex source file outside papers/ (compilable in the file tree). */
+export function isTexPath(path: string | null): boolean {
+	if (!path || !/\.tex$/i.test(path)) return false;
+	return !isUnderPapers(path);
+}
+
+/** Compiled output path for a .tex source: same dir, same stem, .pdf. */
+export function texPdfPath(texPath: string): string {
+	return texPath.replace(/\.tex$/i, ".pdf");
+}
+
 export type TextLanguageId = "json" | "yaml" | "python" | "tex" | "bib";
 
 /**

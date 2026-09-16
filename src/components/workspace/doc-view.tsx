@@ -1,4 +1,5 @@
 import { lazy, memo, Suspense, useCallback } from "react";
+import { useTranslation } from "react-i18next";
 import { PapersLibrary } from "@/components/library/papers-library";
 import { Skeleton } from "@/components/ui/skeleton";
 import type { PdfViewerHandle } from "@/components/viewer";
@@ -167,6 +168,24 @@ function TabLoadingSkeleton() {
 }
 
 /**
+ * Compiled-PDF pane while its LaTeX compile is still running: a minimal
+ * centered hint (the bytes do not exist on disk yet).
+ */
+function TexCompilingPlaceholder() {
+	const { t } = useTranslation("app");
+	return (
+		<div
+			className="flex min-h-0 flex-1 flex-col items-center justify-center gap-3 p-6"
+			aria-busy="true"
+			role="status"
+		>
+			<Skeleton className="library-shimmer h-3.5 w-28" />
+			<p className="text-muted-foreground text-xs">{t("tabs.texCompiling")}</p>
+		</div>
+	);
+}
+
+/**
  * DocView routes by tab kind/mode and only reads the matching domain props.
  * Compare just the fields the active branch consumes so a change in one
  * domain (e.g. library query keystrokes) does not re-render PDF / editor
@@ -232,6 +251,9 @@ export const DocView = memo(function DocView({
 		(list: PdfVisualSessionTrace[]) => pdf.onVisualTracesChange(tab.id, list),
 		[pdf, tab.id],
 	);
+	if (tab.texCompiling) {
+		return <TexCompilingPlaceholder />;
+	}
 	if (!tab.loaded) {
 		return <TabLoadingSkeleton />;
 	}

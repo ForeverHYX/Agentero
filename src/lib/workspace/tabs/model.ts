@@ -11,7 +11,7 @@ import type { CenterViewMode } from "@/lib/workspace/viewer";
 
 export { basenameOf, normalizePathKey as normalizeTabPath };
 
-const SPLIT_PANE_ID_MARKER = "::pane-";
+export const SPLIT_PANE_ID_MARKER = "::pane-";
 
 export function tabIdForPath(path: string): string {
 	if (isLibraryVirtualPath(path)) return LIBRARY_VIRTUAL_PATH;

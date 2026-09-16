@@ -33,7 +33,7 @@
 		"focusNotes": "Focus notes",
 		"closeTab": "Close dialog, tab, or window",
 		"reopenTab": "Reopen closed tab",
-		"splitPane": "Split pane right",
+		"splitPane": "Split pane right (TeX: open compiled PDF)",
 		"nextTab": "Next tab",
 		"prevTab": "Previous tab",
 		"visualAnnotation": "Add visual annotation (PDF)",

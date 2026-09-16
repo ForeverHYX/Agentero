@@ -50,6 +50,7 @@ import { isLibraryVirtualPath, isTrashVirtualPath } from "@/lib/paper/api";
 import { moveDocToWindow } from "@/lib/shell/leaf";
 import { formatShortcutById } from "@/lib/shell/shortcuts";
 import { TAG_COLOR_IDS, tagSwatchStyle } from "@/lib/ui/tag-colors";
+import { openTexPdf } from "@/lib/workspace/actions";
 import { installDockviewDragSelectionGuard } from "@/lib/workspace/dockview-drag-selection";
 import { installDockviewDropOverlayCleanup } from "@/lib/workspace/dockview-drop-overlay-cleanup";
 import { installDockviewSashFrameLoop } from "@/lib/workspace/dockview-sash";
@@ -66,7 +67,7 @@ import {
 	tabIdForPath,
 	tabNotesEligible,
 } from "@/lib/workspace/tabs";
-import type { CenterViewMode } from "@/lib/workspace/viewer";
+import { type CenterViewMode, isTexPath } from "@/lib/workspace/viewer";
 
 /** Grey + paper tag palette (same swatches as library tags). */
 const TAB_GROUP_COLORS = ["grey", ...TAG_COLOR_IDS] as const;
@@ -876,6 +877,18 @@ export const DockWorkspace = memo(
 							label: t("tabs.contextOpenNotes"),
 							shortcut: formatShortcutById("splitPane"),
 							action: () => onOpenNotesRef.current?.(panel.id),
+						}),
+						"separator",
+					);
+				}
+				if (tab != null && isTexPath(tab.path)) {
+					menu.push(
+						buildTabContextMenuItem({
+							label: t("tabs.openTexPdf"),
+							shortcut: formatShortcutById("splitPane"),
+							action: () => {
+								void openTexPdf(tab.path, { referencePanelId: panel.id });
+							},
 						}),
 						"separator",
 					);

@@ -25,6 +25,7 @@ import {
 	isPaperDirectory,
 	isRemoteArxivPath,
 	isUnderPaperAttachments,
+	localFileToArrayBuffer,
 	paperDirFromPath,
 	type RemotePaperItem,
 	remoteArxivPath,
@@ -64,6 +65,7 @@ import {
 import { loadSettings } from "@/lib/settings";
 import { setLayoutMode } from "@/lib/shell/ui-store";
 import {
+	ensureLocalFsScope,
 	type FileNode,
 	isMarkdownPath,
 	joinVaultPath,
@@ -126,6 +128,7 @@ import {
 	reseedExcalidrawTab,
 	reseedTextTab,
 	revokeTabMediaSources,
+	SPLIT_PANE_ID_MARKER,
 	splitPaneIdForPath,
 	syncTabSeedsForPath,
 	tabHasNotesSplit,
@@ -134,7 +137,13 @@ import {
 	tabNotesEligible,
 	translationSplitPlacement,
 } from "./tabs";
-import { type CenterViewMode, preferredModeForPath } from "./viewer";
+import { compileTexFile, texCompileStore } from "./tex-compile";
+import {
+	type CenterViewMode,
+	isTexPath,
+	preferredModeForPath,
+	texPdfPath,
+} from "./viewer";
 
 /**
  * When the strip would be empty with a Vault open, insert full Library.
@@ -524,6 +533,114 @@ function cloneTabForSplit(tab: DocTab, tabs: DocTab[]): DocTab {
 	};
 }
 
+/**
+ * Open (or refresh) the compiled PDF of a .tex file as a right split of its
+ * editor pane — the TeX analogue of the paper→NOTES right split. When the
+ * PDF is missing on disk (or `forceCompile`, the compile-button path), the
+ * pane opens immediately with a shimmer placeholder while the compile runs,
+ * then fills in. Existing PDF tabs are refreshed in place (new bytes
+ * identity reloads EmbedPDF) and activated.
+ */
+export async function openTexPdf(
+	texPath: string,
+	opts?: { referencePanelId?: string | null; forceCompile?: boolean },
+): Promise<void> {
+	if (!isTexPath(texPath)) return;
+	// One in-flight compile at a time (mirrors compileTexFile's guard).
+	if (texCompileStore.getState().compilingPath) return;
+
+	// Locate the reference editor panel (handles ::pane-N clones); open the
+	// editor first when it is not on screen so the PDF lands beside it.
+	const canonicalTexId = tabIdForPath(texPath);
+	const refId =
+		opts?.referencePanelId ??
+		getTabs().find(
+			(t) =>
+				t.id === canonicalTexId ||
+				t.id.startsWith(`${canonicalTexId}${SPLIT_PANE_ID_MARKER}`),
+		)?.id ??
+		null;
+	if (!refId) {
+		// openTab creates the dockview panel synchronously, so the id below
+		// resolves immediately.
+		openTab(texPath, { preferMode: "text" });
+	}
+	const referencePanelId = refId ?? canonicalTexId;
+
+	const pdfPath = texPdfPath(texPath);
+	const pdfId = tabIdForPath(pdfPath);
+	await ensureLocalFsScope(vaultStore.getState().vaultPath);
+
+	if (!opts?.forceCompile) {
+		// Fast path: the PDF is already on disk → open/refresh, no shimmer.
+		const bytes = await localFileToArrayBuffer(pdfPath);
+		if (bytes) {
+			if (getTabs().some((t) => t.id === pdfId)) {
+				updateTab(pdfId, {
+					pdfBytes: bytes,
+					loaded: true,
+					texCompiling: false,
+					title: basenameOf(pdfPath),
+				});
+				setActiveTabId(pdfId);
+				dockHandle()?.activatePanel(pdfId);
+			} else {
+				openTab(pdfPath, {
+					preferMode: "pdf",
+					placement: { direction: "right", referencePanelId },
+				});
+			}
+			return;
+		}
+	}
+
+	// Compile-first flow: show the PDF pane immediately as a shimmer
+	// placeholder, then fill it once the compile lands.
+	const paneAlreadyOpen = getTabs().some((t) => t.id === pdfId);
+	if (paneAlreadyOpen) {
+		updateTab(pdfId, { texCompiling: true });
+		setActiveTabId(pdfId);
+		dockHandle()?.activatePanel(pdfId);
+	} else {
+		// Hand-rolled openTab prefix (placeholder + dock placement) without
+		// the async resource load — the PDF does not exist yet, so
+		// loadTabResources would only surface a cannotPreview error.
+		const beforeTabs = getTabs();
+		const { tabs: nextTabs, id: insertedId } = insertPlaceholderTab(
+			beforeTabs,
+			pdfPath,
+			"pdf",
+		);
+		const placeholder =
+			nextTabs.find((t) => t.id === insertedId) ??
+			createPlaceholderTab(pdfPath, "pdf");
+		setTabs(nextTabs);
+		setActiveTabId(insertedId);
+		dockHandle()?.openPanel(placeholder, {
+			direction: "right",
+			referencePanelId,
+		});
+		updateTab(insertedId, { texCompiling: true });
+	}
+
+	const compiled = await compileTexFile(texPath);
+	const bytes = compiled ? await localFileToArrayBuffer(compiled) : null;
+	if (!compiled || !bytes) {
+		// Failure already notified. Drop a pane we just created (it would sit
+		// on a shimmer forever); just un-flag a pre-existing one so it shows
+		// its previous content again.
+		if (paneAlreadyOpen) updateTab(pdfId, { texCompiling: false });
+		else closeTab(pdfId, { remember: false });
+		return;
+	}
+	updateTab(pdfId, {
+		pdfBytes: bytes,
+		loaded: true,
+		texCompiling: false,
+		title: basenameOf(pdfPath),
+	});
+}
+
 /** Obsidian-style Split pane: add a right pane and keep columns evenly sized. */
 export function splitActivePane(): void {
 	const id = getActiveTabId();
@@ -531,6 +648,12 @@ export function splitActivePane(): void {
 	const tabs = getTabs();
 	const active = tabs.find((t) => t.id === id);
 	if (!active) return;
+
+	// TeX editor ⌘\ → open/refresh its compiled PDF as the right split.
+	if (isTexPath(active.path)) {
+		void openTexPdf(active.path, { referencePanelId: active.id });
+		return;
+	}
 
 	const notesId = active.notesPath ? tabIdForPath(active.notesPath) : null;
 	const shouldOpenDefaultNotes =
@@ -1500,7 +1623,12 @@ export function hydratePlaceholderTabs(tabIds: readonly string[]): void {
 	}
 	for (const id of new Set(tabIds)) {
 		const tab = getTabs().find((candidate) => candidate.id === id);
-		if (!tab || tab.loaded || placeholderLoads.has(id)) continue;
+		// texCompiling panes are owned by the compile flow (openTexPdf fills
+		// them itself); hydrating here would race the compile and swap the
+		// shimmer for a cannotPreview error within milliseconds.
+		if (!tab || tab.loaded || tab.texCompiling || placeholderLoads.has(id)) {
+			continue;
+		}
 		placeholderLoads.add(id);
 		void (async () => {
 			const vaultState = vaultStore.getState();

@@ -20,6 +20,8 @@ import { PLAZA_SOURCES, PLAZA_VIRTUAL_PATH } from "@/lib/plaza";
 import { getSettings, patchSettings } from "@/lib/settings/react-store";
 import { type FileNode, resolveCreateParent } from "@/lib/vault";
 import { openInTerminal, revealInFileManager } from "@/lib/vault/reveal";
+import { openTexPdf } from "@/lib/workspace/actions";
+import { isTexPath } from "@/lib/workspace/viewer";
 import type { TreeContextMenuPortalProps } from "../tree-context-menu";
 import { pathKey } from "../tree-helpers";
 import type {
@@ -253,6 +255,13 @@ export function useTreeContextMenu({
 					onOpenPaperNotes(menu.path);
 				}
 			: undefined,
+		onOpenTexPdf:
+			targets.length === 1 && isTexPath(menu.path)
+				? () => {
+						setMenu(null);
+						void openTexPdf(menu.path);
+					}
+				: undefined,
 		onEditMeta:
 			isPaperMenu && onEditPaperMeta
 				? () => {

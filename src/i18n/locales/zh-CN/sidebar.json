@@ -71,6 +71,10 @@
 			"invalidFolderPath": "必须位于 papers/ 下"
 		},
 		"compileTex": "编译",
+		"openTexPdf": "打开 PDF",
+		"compileSuccess": "编译成功",
+		"compileFailed": "编译失败，请检查日志",
+		"selectEngineFirst": "请先选择一个 LaTeX 引擎",
 		"latexEngine": "LaTeX 引擎",
 		"detectingEngines": "检测引擎中…",
 		"noLatexEngine": "未找到 LaTeX 引擎"

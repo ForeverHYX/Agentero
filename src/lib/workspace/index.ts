@@ -18,6 +18,7 @@ export {
 	openPlazaSource,
 	openTab,
 	openTabNotes,
+	openTexPdf,
 	openVaultRel,
 	persistFile,
 	reopenClosedTab,

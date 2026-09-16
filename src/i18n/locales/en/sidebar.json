@@ -71,6 +71,10 @@
 			"invalidFolderPath": "Must be under papers/"
 		},
 		"compileTex": "Compile",
+		"openTexPdf": "Open PDF",
+		"compileSuccess": "Compile succeeded",
+		"compileFailed": "Compile failed — check the log",
+		"selectEngineFirst": "Select a LaTeX engine first",
 		"latexEngine": "LaTeX engine",
 		"detectingEngines": "Detecting engines…",
 		"noLatexEngine": "No LaTeX engine found"

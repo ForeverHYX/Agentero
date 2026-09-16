@@ -3593,7 +3593,7 @@
 </tr>
 <tr>
 <td>移至新窗口</td>
-<td>文档 tab <strong>右键</strong> → <strong>移动至新窗口</strong> → 独立 <code>doc-*</code> Webview；源 panel 关闭（Library / Trash 除外）；弹出窗自带 Vault watcher，Markdown 外部改盘就地重载；URL <code>mode</code> 参数与主窗口一致参与 PDF 模式保护（探测失败不降级 Markdown）</td>
+<td>文档 tab <strong>右键</strong> → <strong>移动至新窗口</strong> → 独立 <code>doc-*</code> Webview；源 panel 关闭（Library / Trash 除外）；弹出窗自带 Vault watcher，Markdown / PDF 外部改盘就地重载；URL <code>mode</code> 参数与主窗口一致参与 PDF 模式保护（探测失败不降级 Markdown）</td>
 </tr>
 <tr>
 <td>Split pane</td>
@@ -3654,6 +3654,10 @@
 <tr>
 <td>生命周期</td>
 <td>与 ExcalidrawViewer 同契约：props 播种 + <code>reloadKey</code> 信号，内容 / dirty / 800ms 防抖自动保存由编辑器持有，<code>persistTextFile</code> 带磁盘冲突守卫与按路径写队列；外部改盘 <code>reloadKey</code> bump 后<strong>原地换 doc</strong>（视图、滚动、撤销历史保留，不重挂载）</td>
+</tr>
+<tr>
+<td>TeX</td>
+<td><code>.tex</code> 保存成功落盘后静默触发一次 LaTeX 编译；若同名 PDF pane 已打开，编译期间显示 shimmer，完成后以最新 PDF 字节原地刷新；保存连发时合并为一个尾随编译</td>
 </tr>
 <tr>
 <td>接入</td>

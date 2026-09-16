@@ -4323,11 +4323,12 @@
 </table>
 <p><strong>只允许 <code>/papers*</code> 原地浏览。</strong> 其余同域路径（<code>/models</code>、<code>/datasets</code>、<code>/docs</code>…）与站外链接一律 handoff 到系统浏览器；同域的走 <code>externalPath</code> 换算回上游 origin。登录一族（<code>/login</code>、<code>/register</code>、<code>/reset</code>、<code>/binding</code>）是另一套独立应用，本就不该在代理里跑——我们不注入任何登录态（§7）。</p>
 <p><strong>隐藏站点 header</strong>（<code>header.antd5-layout-header</code>）。面板是论文流，不是浏览器：全局导航只提供「走出去」的入口，还带登录按钮。隐去之后页面自带的搜索框、<code>本周热门 / 最新推荐 / 全部论文</code> 排序 tab 与卡片栅格都还在，面板反而更干净。</p>
+<p><strong>桌面宽度 + 横滑</strong>：论文页把布局钉在 1280px（<code>.ms-page-*</code> 的 <code>min-width</code>、页面适配器的固定宽），所以面板按「窄桌面窗口」浏览站点：iframe 保持站点自己的 1280 布局，<strong>frame 自己的文档就是横向滚动口</strong>——若把页面压到面板宽，就没有任何可滚动余量了。frame 的滚轮/触控板增量不会可靠地传到外层，桥接因此自己处理 <code>wheel</code>：首帧记下位置，若这一帧文档自己没横向移动（引擎不认横滚），就把累计的 <code>deltaX</code>（以及 Shift+滚轮）补到 <code>scrollLeft</code> 上；<strong>不取消事件</strong>，所以斜向手势的纵向滚动照常，页内自己的横向滚动器也优先。站点加载时会对页面上的操作项调 <code>scrollIntoView({ block: "center", inline: "center" })</code>，在窄 frame 里这会把整个文档拽到右侧、左边缘被推出视口（#550）；桥接包一层 <code>scrollIntoView</code>，把被它移动过的祖先的 <code>scrollLeft</code> 复原（只挡横向、纵向照常）。站点自己的 <code>.ms-page-container</code> 也是可脚本滚动的容器，会被浏览器停在右移 10px 处、吃掉卡片左边距，桥接禁掉它的平滑滚动并把它钉回 0。</p>
 <p><strong>入库</strong>：<code>/papers/&lt;arxivId&gt;</code> 本身就是全部所需身份，所以列表卡片和详情页注入的「入库」都只发 <code>{ id, branch: "arxiv", url: "https://arxiv.org/abs/&lt;id&gt;" }</code>，直接落到 §3.2.1 的 arXiv 路线（能多拿 <code>arxiv_id</code> 与 LaTeX 源码）。<strong>没有新增任何 Rust 入库命令，前端 <code>import.ts</code> 零改动。</strong></p>
 <p>两处都是带 Agentero 标的按钮，一眼能认出是我们的动作而不是站点自己的：</p>
 <ul>
-<li><strong>列表</strong>：绝对定位在卡片右下角，与统计行同高；自带边框/圆角/中性灰底，浅色深色主题都成立。</li>
-<li><strong>列表</strong>：只装饰真正排布出盒子的卡片（<code>offsetWidth</code>/<code>offsetHeight</code> 阈值）。零宽的 <code>/papers/</code> 锚点会让绝对定位的按钮甩到容器边缘，露在卡片外面。</li>
+<li><strong>列表</strong>：按钮与标题同处一层 flex 行（<code>.agentero-import-titlerow</code>）。标题自带宽度钳制与省略号，按钮不能塞进标题里，所以把两者并排，并把按钮高度设成标题的 <code>line-height</code>，让它居中在文字上。自带边框/圆角/中性灰底，浅色深色主题都成立。</li>
+<li><strong>列表</strong>：只装饰标题能解析出文本叶子的卡片（<code>titleOf</code> 取卡内第一个纯文本子 <code>div</code>），并跳过指向当前页的锚点（详情页 tab 条）。这两条一起让装饰不会落到站点自己的导航锚点上。</li>
 <li><strong>详情页</strong>：插在站点那排 <code>arXiv 原文 / PDF / Git</code> 的最左侧，并<strong>在运行时借用 <code>arXiv 原文</code> 的 className</strong>，所以尺寸与外观完全一致。定位靠那颗 arXiv favicon（<code>img[src*="arxiv.org"]</code>）——那排的类名是哈希的、文案是本地化的，图标 src 两者都不是。</li>
 <li><strong>图标</strong>：品牌标缩到只剩那副铜色眼镜。完整的插画式 logo 在 14px（站点图标尺寸）下糊成一团。</li>
 <li><strong>必须在链接拦截器之前注册点击处理并整体吞掉事件</strong>——卡片按钮就长在卡片自己的 <code>&lt;a&gt;</code> 里面，否则入库的同时会被路由带走。</li>

@@ -34,20 +34,21 @@
 
 ## 3. 下载与落盘策略
 
-**首版只走 codeload tarball，不依赖本机 git / node**：
+**不依赖本机 git / node**，按输入形态下载：
 
-1. `GET https://codeload.github.com/{owner}/{repo}/tar.gz/{ref}`（ref 缺省时先经 `api.github.com/repos/{owner}/{repo}` 拿默认分支）；复用 `http_get_bytes_with_progress` 报进度。
+1. GitHub repo 根：`GET https://codeload.github.com/{owner}/{repo}/tar.gz/{ref}`（ref 缺省时先经 `api.github.com/repos/{owner}/{repo}` 拿默认分支）；复用 `http_get_bytes_with_progress` 报进度。
    - 已走 Host 网络代理（`networkProxy*`）。
    - Settings → 通用 → **GitHub 镜像**（`githubMirrorEnabled` / `githubMirrorBaseUrl`）：从内置预设列表中选择一个 URL 前缀镜像；直连失败（超时/连接错误/5xx/429）时回退 `{base}/https://api|codeload.github.com/...`（如 `https://gh.llkk.cc`）。**4xx（如 404）不回退**。与网络代理正交。
-2. 解压到临时目录（复用 `extract_tar_safe` 系安全逻辑），递归扫描 `**/SKILL.md`：
+2. GitHub tree 子目录：先经 `api.github.com/repos/{owner}/{repo}/contents/{subpath}?ref={ref}` 递归列目录，只下载该子树内文件到临时目录；raw 文件下载同样走 GitHub 镜像 fallback。这样 monorepo 中的单个 Skill 不需要下载整仓 tarball。
+3. 解压或暂存到临时目录后，递归扫描 `**/SKILL.md`：
    - 有子目录约束（tree URL / `--skill`）→ 只取匹配项；
    - repo 根或指定路径发现 Skill → 返回候选列表，前端弹选择（见 §4）。
-3. 校验 frontmatter：`name` 合法且与目录名一致；不一致时以 `name` 为准命名目标目录。frontmatter 解析统一走 `crates/agentero-core/src/frontmatter.rs`（`frontmatter_block` + `scalar_field`，支持引号、`>` / `|` 折叠块、多行续行、CRLF，只读顶层键）。`description` 超过 1024 **字符**时按字符截断展示，不再拒绝安装；单个 `SKILL.md` 解析失败只跳过该候选，整个来源没有可用 Skill 才报错。见 [bug_fix/skill-import-description-length.md](../bug_fix/skill-import-description-length.md)。
-4. 将归档和候选 metadata 暂存为一次性 discovery，并返回前端选择；此阶段不写入 Vault。
-5. 用户确认后才落盘 `vault/.agents/skills/<name>/`（整目录拷贝，含 `references/` 等）：
+4. 校验 frontmatter：`name` 合法且与目录名一致；不一致时以 `name` 为准命名目标目录。frontmatter 解析统一走 `crates/agentero-core/src/frontmatter.rs`（`frontmatter_block` + `scalar_field`，支持引号、`>` / `|` 折叠块、多行续行、CRLF，只读顶层键）。`description` 超过 1024 **字符**时按字符截断展示，不再拒绝安装；单个 `SKILL.md` 解析失败只跳过该候选，整个来源没有可用 Skill 才报错。见 [bug_fix/skill-import-description-length.md](../bug_fix/skill-import-description-length.md)。
+5. 将归档或 sparse 子树文件和候选 metadata 暂存为一次性 discovery，并返回前端选择；此阶段不写入 Vault。
+6. 用户确认后才落盘 `vault/.agents/skills/<name>/`（整目录拷贝，含 `references/` 等）：
    - 目标已存在 → 默认**不覆盖**，报「已存在，是否更新」（沿用 `ensure_vault` 不覆盖用户文件的原则）；
    - 在 skill 目录写 `agentero-skill.json` 来源记录（source URL + ref + 安装时间），为将来「检查更新」留钩子（参考 `skills-lock.json` / Obsidian BRAT）。
-6. **不落 catalog**（skill 不是论文；`Url` kind 已有 `identifier_kind_column → None` 先例），不建 `papers/` 条目、不跑 `paper_commit`。
+7. **不落 catalog**（skill 不是论文；`Url` kind 已有 `identifier_kind_column → None` 先例），不建 `papers/` 条目、不跑 `paper_commit`。
 
 私有 repo / 浅 clone 回退、GitLab 支持均延后。
 

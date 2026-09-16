@@ -184,15 +184,6 @@ impl<'a> AssetProgressAggregator<'a> {
         }
     }
 
-    /// A lone stream reporting under its own phase (e.g. a skill archive).
-    pub(crate) fn single(
-        app: Option<&'a AppHandle>,
-        task_id: Option<&'a str>,
-        phase: &'static str,
-    ) -> Self {
-        Self::new(app, task_id, phase, 1)
-    }
-
     /// Handle for one stream of this aggregator.
     pub(crate) fn stream(&self, slot: usize) -> StreamProgress<'_, 'a> {
         StreamProgress { agg: self, slot }

@@ -1,18 +1,15 @@
-//! Skill import: discover GitHub-backed skill archives, let the user pick
+//! Skill import: discover GitHub-backed Skill packages, let the user pick
 //! candidates, and install them into `.agents/skills`.
 
 use std::fs;
-use std::io::Read;
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
 use base64::Engine;
-use flate2::read::GzDecoder;
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 use walkdir::WalkDir;
 
-use super::download::{extract_tar_safe, http_get_bytes_with_progress, AssetProgressAggregator};
 use super::AppHandle;
 use crate::error::AppError;
 pub use crate::features::scholar_api::identifiers::SkillSource;
@@ -90,6 +87,20 @@ struct GithubBlob {
     size: u64,
 }
 
+#[derive(Debug, Deserialize)]
+struct GithubTree {
+    tree: Vec<GithubTreeEntry>,
+    truncated: bool,
+}
+
+#[derive(Debug, Deserialize)]
+struct GithubTreeEntry {
+    path: String,
+    sha: Option<String>,
+    #[serde(rename = "type")]
+    kind: String,
+}
+
 pub async fn discover_skill_source(
     vault: &Path,
     source: &SkillSource,
@@ -103,46 +114,20 @@ pub async fn discover_skill_source(
     if source.subpath.is_some() {
         return discover_skill_subpath(vault, source, &reference, app, task_id).await;
     }
-    let archive_url = format!(
-        "https://codeload.github.com/{}/{}/tar.gz/{}",
-        source.owner,
-        source.repo,
-        urlencoding::encode(&reference)
-    );
-    let aggregator = AssetProgressAggregator::single(app, task_id, "skill");
-    let archive =
-        fetch_archive_with_mirror_fallback(&archive_url, Duration::from_secs(120), aggregator)
-            .await?;
-    if archive.len() > MAX_ARCHIVE_BYTES {
-        return Err(AppError::message("skill archive is too large"));
-    }
-
-    let discovery_id = uuid::Uuid::new_v4().to_string();
-    let temp = discovery_dir(&discovery_id)?;
-    fs::create_dir_all(&temp)?;
-    fs::write(temp.join("archive.tar.gz"), &archive)?;
-    fs::write(
-        temp.join("source.json"),
-        serde_json::to_vec(&serde_json::json!({
-            "source": source,
-            "reference": reference,
-        }))?,
-    )?;
-    let candidates = discover_candidates(&temp, vault, source)?;
-    if candidates.is_empty() {
-        let _ = fs::remove_dir_all(&temp);
-        return Err(AppError::message(
-            "no importable SKILL.md was found in this source",
-        ));
-    }
-    Ok(SkillDiscovery {
-        discovery_id,
-        source: source.source.clone(),
-        candidates,
-    })
+    discover_skill_sparse(vault, source, &reference, app, task_id).await
 }
 
 async fn discover_skill_subpath(
+    vault: &Path,
+    source: &SkillSource,
+    reference: &str,
+    app: Option<&AppHandle>,
+    task_id: Option<&str>,
+) -> Result<SkillDiscovery, AppError> {
+    discover_skill_sparse(vault, source, reference, app, task_id).await
+}
+
+async fn discover_skill_sparse(
     vault: &Path,
     source: &SkillSource,
     reference: &str,
@@ -303,34 +288,6 @@ where
         .map_err(|e| AppError::message(format!("{invalid_context}: {e}")))
 }
 
-async fn fetch_archive_with_mirror_fallback(
-    canonical: &str,
-    timeout: Duration,
-    aggregator: AssetProgressAggregator<'_>,
-) -> Result<Vec<u8>, AppError> {
-    let candidates = crate::http::github_url_candidates(canonical);
-    let mut last_err: Option<AppError> = None;
-    for (index, url) in candidates.iter().enumerate() {
-        match http_get_bytes_with_progress(url, timeout, None, aggregator.stream(0)).await {
-            Ok(bytes) => return Ok(bytes),
-            Err(err) => {
-                let retry =
-                    index + 1 < candidates.len() && crate::http::should_fallback_github_error(&err);
-                if retry {
-                    log::warn!(
-                        target: "agentero::skill",
-                        "skill archive via {url} failed ({err}); trying mirror"
-                    );
-                    last_err = Some(err);
-                    continue;
-                }
-                return Err(err);
-            }
-        }
-    }
-    Err(last_err.unwrap_or_else(|| AppError::message("skill archive download failed")))
-}
-
 async fn fetch_github_subpath_to_root(
     source: &SkillSource,
     reference: &str,
@@ -380,11 +337,11 @@ async fn discover_sparse_candidates(
     _app: Option<&AppHandle>,
     _task_id: Option<&str>,
 ) -> Result<Vec<SparseSkillCandidate>, AppError> {
-    let subpath = source
-        .subpath
-        .as_deref()
-        .ok_or_else(|| AppError::message("GitHub tree URL is missing a subpath"))?;
-    let mut pending = vec![subpath.to_string()];
+    if source.subpath.is_none() {
+        return discover_sparse_candidates_from_tree(source, reference).await;
+    }
+
+    let mut pending = vec![source.subpath.as_deref().unwrap_or_default().to_string()];
     let mut files = 0_usize;
     let mut candidates = Vec::new();
 
@@ -429,6 +386,53 @@ async fn discover_sparse_candidates(
                 _ => {}
             }
         }
+    }
+    Ok(candidates)
+}
+
+async fn discover_sparse_candidates_from_tree(
+    source: &SkillSource,
+    reference: &str,
+) -> Result<Vec<SparseSkillCandidate>, AppError> {
+    let tree = github_tree(source, reference).await?;
+    if tree.truncated {
+        return Err(AppError::message(
+            "GitHub tree is too large to list Skills before download",
+        ));
+    }
+
+    let mut candidates = Vec::new();
+    for entry in tree.tree {
+        if entry.kind != "blob" {
+            continue;
+        }
+        if !entry.path.ends_with("/SKILL.md") && entry.path != "SKILL.md" {
+            continue;
+        }
+        let sha = entry
+            .sha
+            .as_deref()
+            .ok_or_else(|| AppError::message("GitHub file is missing a blob SHA"))?;
+        let bytes = github_blob_bytes(source, sha).await?;
+        let Ok(content) = String::from_utf8(bytes) else {
+            continue;
+        };
+        let Ok((name, description)) = parse_skill_metadata(&content) else {
+            continue;
+        };
+        if !source.skill_names.is_empty()
+            && !source
+                .skill_names
+                .iter()
+                .any(|requested| requested == "*" || requested == &name)
+        {
+            continue;
+        }
+        candidates.push(SparseSkillCandidate {
+            path: skill_dir_from_skill_md_path(&entry.path)?,
+            name,
+            description,
+        });
     }
     Ok(candidates)
 }
@@ -496,18 +500,92 @@ async fn github_contents(
     reference: &str,
     path: &str,
 ) -> Result<Vec<GithubContentEntry>, AppError> {
-    let canonical = format!(
-        "https://api.github.com/repos/{}/{}/contents/{}?ref={}",
-        source.owner,
-        source.repo,
-        encode_github_path(path),
-        urlencoding::encode(reference)
-    );
+    let canonical = if path.trim_matches('/').is_empty() {
+        format!(
+            "https://api.github.com/repos/{}/{}/contents?ref={}",
+            source.owner,
+            source.repo,
+            urlencoding::encode(reference)
+        )
+    } else {
+        format!(
+            "https://api.github.com/repos/{}/{}/contents/{}?ref={}",
+            source.owner,
+            source.repo,
+            encode_github_path(path),
+            urlencoding::encode(reference)
+        )
+    };
     let response = fetch_github_json_with_mirror_fallback(&canonical).await?;
     match response {
         GithubContentsResponse::Entry(entry) => Ok(vec![entry]),
         GithubContentsResponse::Entries(entries) => Ok(entries),
     }
+}
+
+async fn github_tree(source: &SkillSource, reference: &str) -> Result<GithubTree, AppError> {
+    let canonical = format!(
+        "https://api.github.com/repos/{}/{}/git/trees/{}?recursive=1",
+        source.owner,
+        source.repo,
+        urlencoding::encode(reference)
+    );
+    fetch_github_tree_with_mirror_fallback(&canonical).await
+}
+
+async fn fetch_github_tree_with_mirror_fallback(canonical: &str) -> Result<GithubTree, AppError> {
+    if let Some(tree) =
+        fetch_github_api_json_via_gh::<GithubTree>(canonical, "invalid GitHub tree response")
+            .await?
+    {
+        return Ok(tree);
+    }
+    let candidates = crate::http::github_url_candidates(canonical);
+    let mut last_err: Option<AppError> = None;
+    for (index, url) in candidates.iter().enumerate() {
+        match fetch_github_tree_once(url).await {
+            Ok(value) => return Ok(value),
+            Err(err) => {
+                let retry =
+                    index + 1 < candidates.len() && crate::http::should_fallback_github_error(&err);
+                if retry {
+                    log::warn!(
+                        target: "agentero::skill",
+                        "GitHub tree via {url} failed ({err}); trying mirror"
+                    );
+                    last_err = Some(err);
+                    continue;
+                }
+                return Err(err);
+            }
+        }
+    }
+    Err(last_err.unwrap_or_else(|| AppError::message("GitHub tree request failed")))
+}
+
+async fn fetch_github_tree_once(url: &str) -> Result<GithubTree, AppError> {
+    let client = crate::http::client_builder()
+        .timeout(Duration::from_secs(20))
+        .user_agent("Agentero/skill-import")
+        .build()
+        .map_err(|e| AppError::message(format!("http client: {e}")))?;
+    let request = client
+        .get(url)
+        .header("Accept", "application/vnd.github+json");
+    let response = crate::http::with_github_api_auth(request, url)
+        .send()
+        .await
+        .map_err(|e| AppError::message(format!("skill tree request: {e}")))?;
+    if !response.status().is_success() {
+        return Err(AppError::message(format!(
+            "GitHub tree request failed: {}",
+            response.status()
+        )));
+    }
+    response
+        .json()
+        .await
+        .map_err(|e| AppError::message(format!("invalid GitHub tree response: {e}")))
 }
 
 async fn fetch_github_blob_with_mirror_fallback(canonical: &str) -> Result<GithubBlob, AppError> {
@@ -677,13 +755,8 @@ pub async fn install_discovered_skills(
         .get("reference")
         .and_then(|value| value.as_str())
         .ok_or_else(|| AppError::message("skill discovery reference is missing"))?;
-    let archive_path = temp.join("archive.tar.gz");
-    let result = if archive_path.is_file() {
-        let archive = fs::read(archive_path)?;
-        install_from_archive(&temp, vault, &source, reference, &archive, selected_names)
-    } else {
-        install_from_sparse_discovery(&temp, vault, &source, reference, selected_names).await
-    };
+    let result =
+        install_from_sparse_discovery(&temp, vault, &source, reference, selected_names).await;
     let _ = fs::remove_dir_all(&temp);
     result
 }
@@ -694,23 +767,6 @@ pub fn discard_skill_discovery(discovery_id: &str) -> Result<(), AppError> {
         fs::remove_dir_all(temp)?;
     }
     Ok(())
-}
-
-fn install_from_archive(
-    temp: &Path,
-    vault: &Path,
-    source: &SkillSource,
-    reference: &str,
-    archive: &[u8],
-    selected_names: &[String],
-) -> Result<Vec<SkillImportResult>, AppError> {
-    let tar_bytes = decode_gzip(archive)?;
-    if tar_bytes.len() > MAX_ARCHIVE_BYTES {
-        return Err(AppError::message("unpacked skill archive is too large"));
-    }
-    extract_tar_safe(temp, &tar_bytes)?;
-
-    install_from_staged_dir(temp, vault, source, reference, selected_names)
 }
 
 fn install_from_staged_dir(
@@ -814,7 +870,11 @@ async fn install_from_sparse_discovery(
         }
 
         fetch_github_subpath_to_root(source, reference, &candidate.path, &payload_root).await?;
-        let staged_dir = payload_root.join(sanitize_github_path(&candidate.path)?);
+        let staged_dir = if candidate.path.is_empty() {
+            payload_root.clone()
+        } else {
+            payload_root.join(sanitize_github_path(&candidate.path)?)
+        };
         copy_dir(&staged_dir, &target)?;
         let provenance = serde_json::json!({
             "source": source.source,
@@ -836,38 +896,6 @@ async fn install_from_sparse_discovery(
         });
     }
     Ok(results)
-}
-
-fn discover_candidates(
-    temp: &Path,
-    vault: &Path,
-    source: &SkillSource,
-) -> Result<Vec<SkillCandidate>, AppError> {
-    if temp.join("archive.tar.gz").is_file() {
-        let archive = fs::read(temp.join("archive.tar.gz"))?;
-        let tar_bytes = decode_gzip(&archive)?;
-        extract_tar_safe(temp, &tar_bytes)?;
-    }
-    discover_candidates_from_dir(temp, source).map(|candidates| {
-        candidates
-            .into_iter()
-            .map(|candidate| {
-                let already_installed = vault.join(".agents/skills").join(&candidate.name).is_dir();
-                SkillCandidate {
-                    name: candidate.name,
-                    description: candidate.description,
-                    source: source.source.clone(),
-                    relative_path: candidate
-                        .dir
-                        .strip_prefix(temp)
-                        .unwrap_or(&candidate.dir)
-                        .to_string_lossy()
-                        .replace('\\', "/"),
-                    already_installed,
-                }
-            })
-            .collect()
-    })
 }
 
 fn discover_candidates_from_dir(
@@ -899,7 +927,9 @@ fn discover_candidates_from_dir(
         });
     }
     if candidates.len() > MAX_EXTRACTED_FILES {
-        return Err(AppError::message("skill archive contains too many files"));
+        return Err(AppError::message(
+            "skill source contains too many candidates",
+        ));
     }
 
     Ok(candidates
@@ -933,15 +963,6 @@ fn discovery_dir(discovery_id: &str) -> Result<PathBuf, AppError> {
     let id = uuid::Uuid::parse_str(discovery_id)
         .map_err(|_| AppError::message("invalid skill discovery id"))?;
     Ok(std::env::temp_dir().join(format!("agentero-skill-discovery-{id}")))
-}
-
-fn decode_gzip(bytes: &[u8]) -> Result<Vec<u8>, AppError> {
-    let mut decoder = GzDecoder::new(bytes);
-    let mut output = Vec::new();
-    decoder
-        .read_to_end(&mut output)
-        .map_err(|e| AppError::message(format!("skill archive gzip: {e}")))?;
-    Ok(output)
 }
 
 fn parse_skill_metadata(content: &str) -> Result<(String, String), AppError> {
@@ -1051,11 +1072,13 @@ mod tests {
         assert!(description.ends_with('…'));
     }
 
-    #[tokio::test]
-    async fn installs_monorepo_skipping_unusable_skills() {
+    #[test]
+    fn installs_from_staged_dir_skipping_unusable_skills() {
         let tag = format!("agentero-skill-install-{}", std::process::id());
         let vault = std::env::temp_dir().join(&tag);
+        let staged = std::env::temp_dir().join(format!("{tag}-staged"));
         let _ = fs::remove_dir_all(&vault);
+        let _ = fs::remove_dir_all(&staged);
         fs::create_dir_all(&vault).unwrap();
 
         let long_description = format!("深度研究代理团队。Triggers: {}", "深度研究，".repeat(200));
@@ -1073,23 +1096,12 @@ mod tests {
                 "# Template without frontmatter".to_string(),
             ),
         ];
-        let mut tar = tar::Builder::new(Vec::new());
         for (path, content) in &files {
-            let mut header = tar::Header::new_gnu();
-            header.set_size(content.len() as u64);
-            header.set_mode(0o644);
-            header.set_cksum();
-            tar.append_data(&mut header, path, content.as_bytes())
-                .unwrap();
+            let target = staged.join(path);
+            fs::create_dir_all(target.parent().unwrap()).unwrap();
+            fs::write(target, content).unwrap();
         }
-        let mut encoder = flate2::write::GzEncoder::new(Vec::new(), flate2::Compression::default());
-        std::io::Write::write_all(&mut encoder, &tar.into_inner().unwrap()).unwrap();
-        let archive = encoder.finish().unwrap();
 
-        let discovery_id = uuid::Uuid::new_v4().to_string();
-        let staged = discovery_dir(&discovery_id).unwrap();
-        fs::create_dir_all(&staged).unwrap();
-        fs::write(staged.join("archive.tar.gz"), &archive).unwrap();
         let source = SkillSource {
             owner: "acme".into(),
             repo: "repo".into(),
@@ -1098,16 +1110,9 @@ mod tests {
             skill_names: Vec::new(),
             source: "https://github.com/acme/repo".into(),
         };
-        fs::write(
-            staged.join("source.json"),
-            serde_json::to_vec(&serde_json::json!({ "source": source, "reference": "main" }))
-                .unwrap(),
-        )
-        .unwrap();
 
-        let results = install_discovered_skills(&vault, &discovery_id, &["*".to_string()])
-            .await
-            .unwrap();
+        let results =
+            install_from_staged_dir(&staged, &vault, &source, "main", &["*".to_string()]).unwrap();
         let mut names: Vec<&str> = results.iter().map(|r| r.name.as_str()).collect();
         names.sort_unstable();
         assert_eq!(names, ["deep-research", "paper-reader"]);

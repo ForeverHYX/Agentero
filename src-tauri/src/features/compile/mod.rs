@@ -140,7 +140,20 @@ pub async fn compile_tex(
         cwd.display()
     );
 
-    let mut cmd = tokio::process::Command::new(&engine);
+    // GUI apps inherit launchd's minimal PATH (no /Library/TeX/texbin), so a
+    // bare engine name fails to spawn even though detection found it. Resolve
+    // the same way detect_latex_engines does and spawn the absolute path.
+    let engine_path = match resolve_engine(&engine) {
+        Some(p) => p,
+        None => {
+            return ApiResult::err(crate::core::error::AppError::message(format!(
+                "engine not found on this system: {}",
+                engine
+            )))
+        }
+    };
+
+    let mut cmd = tokio::process::Command::new(&engine_path);
     cmd.current_dir(cwd);
 
     match engine.as_str() {

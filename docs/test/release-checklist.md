@@ -188,7 +188,7 @@ cargo test -p agentero-cli
 | 5.6 | 左栏·Info | 添加 tag，选一种颜色 | chip 出现；Library tags 列同色；重启后仍在 | ☐ |
 | 5.7 | 左栏·Info | 删除某 tag | Library 与 Info 同步消失 | ☐ |
 | 5.8 | 中间栏·Library | 点 **Rescan**（空态或工具栏） | 盘上有、表中无的 paper 出现 | ☐ |
-| 5.9 | 左栏·树 | 在 Library 节点右键 **导出论文库** | 得到可用 BibTeX | ☐ |
+| 5.9 | 左栏·树 | 在 `papers/` 论文库节点右键 **导出论文库** | 得到可用 BibTeX | ☐ |
 | 5.10 | 中间栏·Library | 对缺 PDF 的行触发批量 Download | 任务条有进度；缺的资源补齐 | ☐ |
 | 5.11 | 中间栏·Library | 打开有阅读记录的 paper，回到 Library | 标题列左侧出现阅读热力条；未读论文无热力条 | ☐ |
 

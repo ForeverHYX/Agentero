@@ -987,7 +987,7 @@ Agent：`agent_run_once` / `agent_warm` 在 vault 为 `remote:…` 时经 SSH `b
 
 #### `paper_download_assets`
 
-为已有 paper 文件夹补下载缺失的 PDF（及 arXiv LaTeX）。用于文件树单篇 Download，以及 Library 行「下载全部缺失」。下载完成后前端会独立入队 `paper_parse_body` 后台任务生成 `PAPER.md`（若该 paper 无 TeX 且有 PDF）。
+为已有 paper 文件夹补下载缺失的 PDF（及 arXiv LaTeX）。用于文件树单篇 Download，以及 `papers/` 论文库节点右键「下载全部不完整论文资源」。下载完成后前端会独立入队 `paper_parse_body` 后台任务生成 `PAPER.md`（若该 paper 无 TeX 且有 PDF）。
 
 - **参数**（invoke 字段名 `args`）：
 

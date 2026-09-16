@@ -1,12 +1,15 @@
 # 文件树
 
-左侧 Vault 文件树：虚拟 Library / Recycle Bin、魔棒、paper 行操作、多选拖拽。
+左侧 Vault 文件树：虚拟 Recycle Bin、`papers/` 论文库入口、魔棒、paper 行操作、多选拖拽。
+
+## 论文库入口
+
+`papers/` 根文件夹即论文库入口：行首用 `Library` 图标，标题显示为「论文库」，仍可展开组织子文件夹；单击打开全库表格。其右键菜单在通用文件夹操作之外，追加入库操作：下载全部不完整论文资源、导出 BibTeX、发现引用我的新论文。
 
 ## 虚拟节点
 
 | 节点 | 路径常量 | 行为 |
 |---|---|---|
-| Library | `agentero:library` | 打开全库表格；右键导出 BibTeX / 发现引用我的新论文 |
 | Recycle Bin | `agentero:trash` | 打开回收站视图；右键清空 |
 | 广场 | `agentero:plaza` | 单击只切换展开/收起（纯虚拟文件夹，无广场首页）；`Globe` 图标。子来源含 Cool Papers、ModelScope 论文、Skill 推荐与 **订阅**；右键父节点列出全部来源逐条勾选显隐（`plazaHiddenSources`） |
 

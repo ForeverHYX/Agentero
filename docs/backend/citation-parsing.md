@@ -93,7 +93,7 @@
 
 ## 7. 反向引用发现（谁引用了我的库）
 
-> 状态：**已实现**（Host `features/refs/citing.rs`，命令 `library_citing_scan`，入口在文件树 Library 节点右键）。
+> 状态：**已实现**（Host `features/refs/citing.rs`，命令 `library_citing_scan`，入口在文件树 `papers/` 论文库节点右键）。
 
 方向与本文其余部分**相反**：不是「这篇论文引了谁」，而是「库里的论文被哪些**新论文**引用了、且这些新论文还没入库」。和 M5 的「未入库一键导入」不是同一件事——那个是正向引用的批量版。
 

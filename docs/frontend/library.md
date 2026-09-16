@@ -10,7 +10,7 @@
 ## 视图
 
 - 虚拟路径 `agentero:library`（不写盘）。
-- **全库**：点 Library 节点或关光文档后默认页。
+- **全库**：点 `papers/` 论文库节点（根文件夹）或关光文档后默认页。
 - **文件夹作用域**：单击 `papers/` 下非 paper 叶目录（如 `papers/nlp`）→ 同一 Library panel 上按 `paper.path` **前缀过滤**（不新开 tab、不重新 RPC）。
 - **非 papers 目录**（`notes/`、`.agents/`、`plans/` 等）：不进入文件夹作用域，Library 显示全库（#160）。
 - 外部 CLI / 同步工具改动 `.agentero/catalog.sqlite` 或 `papers/` 结构时，前端会后台去抖重新 `paper_list`，同步 Library 表格与文件树论文标题。
@@ -28,8 +28,8 @@
 | Rescan | `paper_rescan`：盘上有、catalog 无则补齐 |
 | 行右键 | 打开 / 编辑元数据（远程 Vault 隐藏编辑项）/ 添加到对话 / 在 Finder 中显示（仅本地）/ 删除→回收站；单击打开、双击复制 |
 | Download | 库内任一篇缺资源时批量补下 |
-| 导入/导出 | Library 工具栏；导出 BibTeX 亦可在 Library 节点右键 |
-| 发现引用 | Library 节点右键「发现引用我的新论文」→ 后台扫描全库反向引用 → 候选清单勾选入库；见 [../backend/citation-parsing.md](../backend/citation-parsing.md) §7 |
+| 导入/导出 | Library 工具栏；导出 BibTeX 亦可在 `papers/` 论文库节点右键 |
+| 发现引用 | `papers/` 论文库节点右键「发现引用我的新论文」→ 后台扫描全库反向引用 → 候选清单勾选入库；见 [../backend/citation-parsing.md](../backend/citation-parsing.md) §7 |
 | 拖入 PDF | Finder / 其它 App 把一个或多个 PDF 拖到 Library 表：虚线 overlay（仅 PDF），松手后直接后台导入。文件夹作用域导入到当前 `papers/…`；全库则落到树选中的 Papers 夹（否则 `papers/`）。识别、重命名和版面分析在后台继续；非 PDF 不显示 overlay、不入库 |
 
 ## Tags（前端）

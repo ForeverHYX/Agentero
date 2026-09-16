@@ -78,7 +78,7 @@ catalog **始终**写入 `pdf_url` / `html_url`（有则仍可供在线预览）
 
 - **显示条件**：缺 PDF **或**（既无 TeX 也无 `PAPER.md`）。可读正文 **TeX 与 PAPER.md 二选一即可，优先 TeX**（有 TeX 不强制 PAPER.md）。**不再**因缺少空 `source/` 单独显示 Download。hover 说明原因。
 - **点击**：`paper_download_assets` → PDF 到论文根目录 → arXiv 尽量 TeX 到 `source/` → 无 TeX 则 liteparse `PAPER.md`。
-- **Library 行**：库内任一篇不完整时批量同一逻辑。
+- **论文库节点**（`papers/` 根文件夹右键）：库内任一篇不完整时批量同一逻辑。
 
 **精读（Zap 图标 + 自动触发）**：
 

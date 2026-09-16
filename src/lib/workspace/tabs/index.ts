@@ -20,6 +20,7 @@ export {
 	paperReadingPlacements,
 	readingPairCloseIds,
 	refreshExcalidrawTab,
+	refreshPdfTab,
 	refreshTextTab,
 	reseedExcalidrawTab,
 	reseedMarkdownTab,

@@ -13,7 +13,7 @@
 | 文件树拖入 | left/right/above/below/within 分屏落点 |
 | 关 panel | dockview X → `closeTab`；焦点 `onDidActivePanelChange` |
 | 循环 | `⌥⌘←/→` 按 `api.panels` **视觉序** |
-| 移至新窗口 | 文档 tab **右键** → **移动至新窗口** → 独立 `doc-*` Webview；源 panel 关闭（Library / Trash 除外）；弹出窗自带 Vault watcher，Markdown 外部改盘就地重载；URL `mode` 参数与主窗口一致参与 PDF 模式保护（探测失败不降级 Markdown） |
+| 移至新窗口 | 文档 tab **右键** → **移动至新窗口** → 独立 `doc-*` Webview；源 panel 关闭（Library / Trash 除外）；弹出窗自带 Vault watcher，Markdown / PDF 外部改盘就地重载；URL `mode` 参数与主窗口一致参与 PDF 模式保护（探测失败不降级 Markdown） |
 | Split pane | `⌘\` / `Ctrl+\` 向右新增 pane；当前论文未开 NOTES 时默认打开 NOTES，否则复制当前 pane；横向 pane 重新等宽 |
 | NOTES 开关 | Layout 菜单；优先叠右列 |
 | 打开笔记 | 论文 tab 右键 /文件树论文行右键 → NOTES 进右侧阅读列（已开则聚焦；菜单显示 `⌘\` / `Ctrl+\`） |
@@ -40,6 +40,7 @@
 | 换行 | `EditorView.lineWrapping` 全局启用 |
 | 主题 | 基础 chrome 走 shadcn CSS 变量（`--foreground` / `--font-mono` / `--muted` …），语法色 light 用默认高亮、dark 用 oneDark，`Compartment` 随 `resolvedTheme` 热切换 |
 | 生命周期 | 与 ExcalidrawViewer 同契约：props 播种 + `reloadKey` 信号，内容 / dirty / 800ms 防抖自动保存由编辑器持有，`persistTextFile` 带磁盘冲突守卫与按路径写队列；外部改盘 `reloadKey` bump 后**原地换 doc**（视图、滚动、撤销历史保留，不重挂载） |
+| TeX | `.tex` 保存成功落盘后静默触发一次 LaTeX 编译；若同名 PDF pane 已打开，编译期间显示 shimmer，完成后以最新 PDF 字节原地刷新；保存连发时合并为一个尾随编译 |
 | 接入 | 懒加载 chunk（`doc-view.tsx` 分支）；dockview `renderer: 'always'` + 编辑器 LRU 保活；弹出窗 watcher / 会话恢复 / `applyDiskChange` 均已覆盖 `text` 模式 |
 
 ## 面板类型

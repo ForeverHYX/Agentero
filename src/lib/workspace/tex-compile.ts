@@ -35,15 +35,53 @@ export const texCompileStore = createStore<TexCompileState>(() => ({
 	compilingPath: null,
 }));
 
-let enginesInited = false;
 let logDrained = false;
 // Once the user explicitly picks an engine, never overwrite their choice
 // on subsequent engine-list refreshes.
 let userPickedEngine = false;
+// Single-flight detection promise: callers can await it instead of racing
+// the async result (compile right after a window reload used to read an
+// empty list and falsely report "no engine").
+let enginesPromise: Promise<void> | null = null;
 
 /**
- * Detect engines once per window (idempotent; safe to call from every entry
- * point). Also wires the compile:log drain.
+ * Detect engines (single-flight; concurrent callers share one invoke).
+ * The promise is dropped when the scan fails or finds nothing, so the next
+ * entry point retries instead of staying engine-less until a window reload.
+ */
+export function ensureTexEngines(): Promise<void> {
+	if (!enginesPromise) {
+		enginesPromise = (async () => {
+			texCompileStore.setState({ enginesLoading: true });
+			try {
+				const res = await commands.detectLatexEngines();
+				if (res.ok && res.data && res.data.length > 0) {
+					const prev = texCompileStore.getState();
+					texCompileStore.setState({ engines: res.data });
+					// First-time default: only seed if the user has not picked yet.
+					if (!prev.selectedEngine && !userPickedEngine) {
+						texCompileStore.setState({ selectedEngine: res.data[0].id });
+					}
+				} else {
+					// Failed scan or engine-less host: allow a later retry (a
+					// TeX install mid-session is picked up by the next compile).
+					enginesPromise = null;
+				}
+			} catch {
+				// Transient IPC failure (e.g. during window reload): retry later.
+				enginesPromise = null;
+			} finally {
+				texCompileStore.setState({ enginesLoading: false });
+			}
+		})();
+	}
+	return enginesPromise;
+}
+
+/**
+ * Kick off engine detection (idempotent; safe to call from every entry
+ * point). Also wires the compile:log drain. Await `ensureTexEngines` when
+ * the result is needed.
  */
 export function initTexEngines(): void {
 	if (logDrained === false) {
@@ -52,28 +90,7 @@ export function initTexEngines(): void {
 			// Drain log events; log UI can be added later.
 		});
 	}
-	if (enginesInited) return;
-	enginesInited = true;
-
-	texCompileStore.setState({ enginesLoading: true });
-	commands
-		.detectLatexEngines()
-		.then((res) => {
-			if (res.ok && res.data) {
-				const prev = texCompileStore.getState();
-				texCompileStore.setState({ engines: res.data });
-				// First-time default: only seed if the user has not picked yet.
-				if (res.data.length > 0 && !prev.selectedEngine && !userPickedEngine) {
-					texCompileStore.setState({ selectedEngine: res.data[0].id });
-				}
-			}
-		})
-		.catch(() => {
-			// Silently ignore — button won't show if no engines found.
-		})
-		.finally(() => {
-			texCompileStore.setState({ enginesLoading: false });
-		});
+	void ensureTexEngines();
 }
 
 export function selectTexEngine(id: string): void {
@@ -86,9 +103,18 @@ export function selectTexEngine(id: string): void {
  * job: the tasks panel shows live latexmk progress (rule / run milestones)
  * and a cancel button; `compilingPath` still drives the file-tree spinner.
  * Returns the absolute pdf path on success, else null.
+ *
+ * `quietSuccess` skips the success toast (save-triggered compiles would spam
+ * one per autosave); failures always notify.
  */
-export async function compileTexFile(texPath: string): Promise<string | null> {
+export async function compileTexFile(
+	texPath: string,
+	opts?: { quietSuccess?: boolean },
+): Promise<string | null> {
 	initTexEngines();
+	// Wait for the in-flight scan: reading the store immediately after a
+	// window reload races detection and falsely reports "no engine".
+	await ensureTexEngines();
 	const { selectedEngine, engines, compilingPath } = texCompileStore.getState();
 	const engine = selectedEngine ?? engines[0]?.id ?? null;
 	if (!engine) {
@@ -108,7 +134,9 @@ export async function compileTexFile(texPath: string): Promise<string | null> {
 			force: true,
 			params: { engine },
 		});
-		notifySuccess(i18n.t("sidebar:fileTree.compileSuccess"));
+		if (!opts?.quietSuccess) {
+			notifySuccess(i18n.t("sidebar:fileTree.compileSuccess"));
+		}
 		// latexmk writes {stem}.pdf next to the source (deterministic path).
 		return texPdfPath(texPath);
 	} catch (e) {

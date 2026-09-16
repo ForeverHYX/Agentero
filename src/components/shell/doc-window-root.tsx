@@ -36,6 +36,7 @@ import {
 	loadTabResources,
 	patchFromTabResources,
 	refreshExcalidrawTab,
+	refreshPdfTab,
 	refreshTextTab,
 	reseedMarkdownTab,
 	reseedNotesTab,
@@ -207,6 +208,12 @@ export function DocWindowRoot() {
 				setTab((prev) => {
 					if (!prev) return prev;
 					return refreshTextTab([prev], absPath, content)[0] ?? prev;
+				});
+			},
+			refreshPdf: (absPath: string, bytes: ArrayBuffer) => {
+				setTab((prev) => {
+					if (!prev) return prev;
+					return refreshPdfTab([prev], absPath, bytes)[0] ?? prev;
 				});
 			},
 		}),

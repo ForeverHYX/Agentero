@@ -13,6 +13,7 @@ import {
 	loadPersistedTabs,
 	patchTab,
 	refreshExcalidrawTab,
+	refreshPdfTab,
 	refreshTextTab,
 	reseedMarkdownTab,
 	reseedNotesTab,
@@ -201,4 +202,9 @@ export function refreshTabExcalidraw(absPath: string, content: string): void {
 /** Reseed an open plain-text tab after an external/Agent write. */
 export function refreshTabText(absPath: string, content: string): void {
 	setTabs((prev) => refreshTextTab(prev, absPath, content));
+}
+
+/** Reload an open PDF pane after its file changed on disk (compile / external). */
+export function refreshTabPdf(absPath: string, bytes: ArrayBuffer): void {
+	setTabs((prev) => refreshPdfTab(prev, absPath, bytes));
 }

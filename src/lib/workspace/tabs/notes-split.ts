@@ -286,6 +286,30 @@ export function refreshTextTab(
 	});
 }
 
+/**
+ * Refresh an open PDF / translation pane from disk. A fresh `pdfBytes`
+ * identity is the viewer's reload signal (EmbedPDF re-inits on the new
+ * buffer); panes the TeX compile flow owns (`texCompiling`) are skipped —
+ * openTexPdf fills those itself when the run lands.
+ */
+export function refreshPdfTab(
+	prev: DocTab[],
+	absPath: string,
+	bytes: ArrayBuffer,
+): DocTab[] {
+	const key = normalizeTabPath(absPath);
+	return prev.map((t) => {
+		if (
+			normalizeTabPath(t.path) === key &&
+			(t.mode === "pdf" || t.mode === "translation") &&
+			!t.texCompiling
+		) {
+			return { ...t, pdfBytes: bytes, loaded: true };
+		}
+		return t;
+	});
+}
+
 /** Keep the seed of the tab(s) owning `path` in sync after a disk write. */
 export function syncTabSeedsForPath(
 	prev: DocTab[],

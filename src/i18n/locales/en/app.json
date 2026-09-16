@@ -129,6 +129,7 @@
 	"errors": {
 		"openVaultDesktopOnly": "Open vault requires the Tauri desktop app (pnpm tauri dev).",
 		"cannotPreview": "Cannot preview this file type: {{name}}",
+		"pdfReadFailed": "Failed to read PDF: {{name}}",
 		"openVaultForLinks": "Open a vault before navigating vault-relative links.",
 		"openVaultForGraph": "Open a vault before navigating graph links.",
 		"openVaultForCreate": "Open a vault before creating wikilink targets.",

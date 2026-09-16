@@ -129,6 +129,7 @@
 	"errors": {
 		"openVaultDesktopOnly": "打开知识库需要 Tauri 桌面应用（pnpm tauri dev）。",
 		"cannotPreview": "无法预览此文件类型：{{name}}",
+		"pdfReadFailed": "读取 PDF 失败：{{name}}",
 		"openVaultForLinks": "请先打开知识库，再导航知识库相对链接。",
 		"openVaultForGraph": "请先打开知识库，再导航图谱链接。",
 		"openVaultForCreate": "请先打开知识库，再创建双链目标。",

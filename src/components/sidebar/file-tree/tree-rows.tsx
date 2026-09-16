@@ -1,4 +1,5 @@
 import {
+	ChevronDown,
 	ChevronRight,
 	Download,
 	Globe,
@@ -8,6 +9,7 @@ import {
 	Trash2,
 	Zap,
 } from "lucide-react";
+import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import {
 	FileTreeActions,
@@ -21,6 +23,11 @@ import {
 import { PLAZA_SOURCE_ICONS } from "@/components/plaza/source-icons";
 import { Button } from "@/components/ui/button";
 import { MathText } from "@/components/ui/math-text";
+import {
+	Popover,
+	PopoverContent,
+	PopoverTrigger,
+} from "@/components/ui/popover";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
 	Tooltip,
@@ -36,6 +43,7 @@ import {
 	plazaSourceLabel,
 } from "@/lib/plaza";
 import type { FileNode } from "@/lib/vault";
+import type { TexCompileActions as TexCompileHookActions } from "./hooks/use-tex-compile";
 import { DOWNLOAD_REASON_KEYS } from "./tree-helpers";
 
 type PaperTreeRowProps = {
@@ -213,6 +221,8 @@ type NodeTreeRowProps = {
 	isCut: boolean;
 	pendingLoad: boolean;
 	expanded: boolean;
+	texCompile?: TexCompileHookActions;
+	vaultPath?: string | null;
 };
 
 export function NodeTreeRow({
@@ -220,6 +230,8 @@ export function NodeTreeRow({
 	isCut,
 	pendingLoad,
 	expanded,
+	texCompile,
+	vaultPath,
 }: NodeTreeRowProps) {
 	if (node.kind === "directory") {
 		return (
@@ -241,14 +253,160 @@ export function NodeTreeRow({
 			</div>
 		);
 	}
+
 	const Icon = contextPathIcon(node.name);
+	const isTex = texCompile?.isTexFile(node.path) ?? false;
+	const isCompiling = texCompile?.compilingPath === node.path;
+
 	return (
 		<FileTreeFile
 			path={node.path}
 			name={node.name}
-			icon={<Icon className="size-4 text-muted-foreground" />}
 			className={cn(isCut && "opacity-50")}
-		/>
+		>
+			<FileTreeIcon>
+				<Icon className="size-4 text-muted-foreground" />
+			</FileTreeIcon>
+			<FileTreeName className="min-w-0 flex-1 truncate" title={node.name}>
+				{node.name}
+			</FileTreeName>
+			{isTex && texCompile ? (
+				<TexCompileActions
+					actions={texCompile}
+					texPath={node.path}
+					vaultPath={vaultPath ?? null}
+					isCompiling={isCompiling}
+				/>
+			) : null}
+		</FileTreeFile>
+	);
+}
+
+/** Renders the compile button + engine selector for a .tex file row. */
+function TexCompileActions({
+	actions,
+	texPath,
+	vaultPath,
+	isCompiling,
+}: {
+	actions: TexCompileHookActions;
+	texPath: string;
+	vaultPath: string | null;
+	isCompiling: boolean;
+}) {
+	const { t } = useTranslation("sidebar");
+	const [pickerOpen, setPickerOpen] = useState(false);
+	const hasEngines = !actions.enginesLoading && actions.engines.length > 0;
+
+	if (isCompiling) {
+		return (
+			<FileTreeActions
+				className="shrink-0"
+				onClick={(e) => e.stopPropagation()}
+				onKeyDown={(e) => e.stopPropagation()}
+			>
+				<Loader2
+					className="size-3.5 animate-spin text-muted-foreground"
+					aria-label={t("fileTree.compileTex")}
+				/>
+			</FileTreeActions>
+		);
+	}
+
+	const runCompile = (e: React.MouseEvent) => {
+		e.stopPropagation();
+		if (vaultPath && hasEngines) {
+			void actions.compileTex(texPath, vaultPath);
+		}
+	};
+
+	return (
+		<FileTreeActions
+			className="shrink-0"
+			onClick={(e) => e.stopPropagation()}
+			onKeyDown={(e) => e.stopPropagation()}
+		>
+			{/*
+			 * Single pill-shaped control: left = "编译" (kicks off compile),
+			 * right = chevron (opens engine picker). Whole thing shares one
+			 * muted background so the row reads as one UI affordance.
+			 */}
+			<Popover open={pickerOpen} onOpenChange={setPickerOpen}>
+				<div
+					className={cn(
+						"inline-flex h-6 items-stretch overflow-hidden rounded-md border bg-muted text-xs",
+						"hover:bg-muted/80",
+					)}
+				>
+					<button
+						type="button"
+						disabled={!hasEngines}
+						className={cn(
+							"flex items-center px-2 font-normal",
+							hasEngines
+								? "text-foreground hover:bg-background/60"
+								: "cursor-not-allowed text-muted-foreground",
+						)}
+						aria-label={t("fileTree.compileTex")}
+						onClick={runCompile}
+					>
+						{t("fileTree.compileTex")}
+					</button>
+					<PopoverTrigger asChild>
+						<button
+							type="button"
+							className={cn(
+								"flex w-5 items-center justify-center border-l border-border/60",
+								"hover:bg-background/60",
+							)}
+							aria-label={t("fileTree.latexEngine")}
+							onClick={(e) => e.stopPropagation()}
+						>
+							<ChevronDown className="size-3" />
+						</button>
+					</PopoverTrigger>
+				</div>
+				<PopoverContent
+					align="end"
+					sideOffset={4}
+					className="w-44 p-1"
+					onClick={(e) => e.stopPropagation()}
+				>
+					{actions.enginesLoading ? (
+						<div className="px-2 py-1.5 text-muted-foreground text-xs">
+							{t("fileTree.detectingEngines")}
+						</div>
+					) : hasEngines ? (
+						<div role="listbox" className="flex flex-col">
+							{actions.engines.map((engine) => (
+								<button
+									key={engine.id}
+									type="button"
+									role="option"
+									aria-selected={actions.selectedEngine === engine.id}
+									className={cn(
+										"flex w-full items-center rounded-sm px-2 py-1.5 text-left text-xs",
+										"hover:bg-accent hover:text-accent-foreground",
+										"focus:bg-accent focus:text-accent-foreground focus:outline-none",
+									)}
+									onClick={(e) => {
+										e.stopPropagation();
+										actions.selectEngine(engine.id);
+										setPickerOpen(false);
+									}}
+								>
+									{engine.label}
+								</button>
+							))}
+						</div>
+					) : (
+						<div className="px-2 py-1.5 text-muted-foreground text-xs">
+							{t("fileTree.noLatexEngine")}
+						</div>
+					)}
+				</PopoverContent>
+			</Popover>
+		</FileTreeActions>
 	);
 }
 

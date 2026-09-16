@@ -1,5 +1,6 @@
 import type { LucideIcon } from "lucide-react";
 import {
+	BookMarked,
 	FileCode2,
 	FileImage,
 	FileJson,
@@ -7,6 +8,7 @@ import {
 	FileType2,
 	Folder,
 	ScrollText,
+	Sigma,
 } from "lucide-react";
 import {
 	formatPaperTreeLabel,
@@ -194,6 +196,8 @@ export function contextPathIcon(
 	const base = normalizeContextPath(path).split("/").pop()?.toLowerCase() ?? "";
 	if (/\.pdf$/i.test(base)) return FileType2;
 	if (/\.(png|jpe?g|gif|webp|bmp|svg|avif|ico)$/i.test(base)) return FileImage;
+	if (/\.tex$/i.test(base)) return Sigma;
+	if (/\.bib$/i.test(base)) return BookMarked;
 	if (/\.json$/i.test(base)) return FileJson;
 	if (/\.(ts|tsx|js|jsx|rs|toml|py|go|java|c|cpp|h|hpp)$/i.test(base)) {
 		return FileCode2;

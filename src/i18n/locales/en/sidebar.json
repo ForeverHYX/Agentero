@@ -69,7 +69,11 @@
 			"newFolder": "New folder",
 			"newFolderHint": "e.g. papers/archive",
 			"invalidFolderPath": "Must be under papers/"
-		}
+		},
+		"compileTex": "Compile",
+		"latexEngine": "LaTeX engine",
+		"detectingEngines": "Detecting engines…",
+		"noLatexEngine": "No LaTeX engine found"
 	},
 	"importLocalPdf": {
 		"dropNoPath": "Could not read the dropped PDF. Try the magic wand → Import PDF, or drop from Finder again."

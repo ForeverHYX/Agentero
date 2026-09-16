@@ -69,7 +69,11 @@
 			"newFolder": "新建文件夹",
 			"newFolderHint": "例如 papers/archive",
 			"invalidFolderPath": "必须位于 papers/ 下"
-		}
+		},
+		"compileTex": "编译",
+		"latexEngine": "LaTeX 引擎",
+		"detectingEngines": "检测引擎中…",
+		"noLatexEngine": "未找到 LaTeX 引擎"
 	},
 	"importLocalPdf": {
 		"dropNoPath": "无法读取拖入的 PDF。请改用魔棒 → 导入 PDF，或从 Finder 再拖一次。"

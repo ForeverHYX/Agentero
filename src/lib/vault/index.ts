@@ -13,6 +13,7 @@ export {
 export {
 	collectDirectoryRelPaths,
 	collectMarkdownRelPaths,
+	isPapersParent,
 	isValidVaultEntryName,
 	joinVaultPath,
 	normalizePathKey,

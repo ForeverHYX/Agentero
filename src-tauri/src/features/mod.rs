@@ -12,6 +12,8 @@ pub mod agent;
 #[path = "agent/install/mod.rs"]
 pub mod cli_install;
 #[cfg(feature = "desktop")]
+pub mod compile;
+#[cfg(feature = "desktop")]
 pub mod host_hooks;
 #[cfg(feature = "desktop")]
 pub mod jobs;

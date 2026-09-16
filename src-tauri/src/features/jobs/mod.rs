@@ -173,6 +173,34 @@ pub struct JobSnapshot {
     pub host: ExecHost,
 }
 
+impl JobSnapshot {
+    pub fn skipped(
+        kind: JobKind,
+        vault_path: String,
+        paper_path: Option<String>,
+        lane: JobLane,
+        phase: impl Into<String>,
+    ) -> Self {
+        Self {
+            id: uuid::Uuid::new_v4().to_string(),
+            kind,
+            lane,
+            state: JobState::Skipped,
+            vault_path,
+            paper_path,
+            fingerprint: kind.fingerprint(false, None),
+            depends_on: Vec::new(),
+            dep_policy: DepPolicy::AllSucceeded,
+            progress: None,
+            phase: Some(phase.into()),
+            error: None,
+            force: false,
+            params: None,
+            host: kind.exec_host(),
+        }
+    }
+}
+
 #[derive(Debug, Clone, Serialize, specta::Type)]
 #[serde(rename_all = "camelCase")]
 pub struct JobChangedPayload {
@@ -1043,6 +1071,19 @@ impl JobCenter {
             }
         }
         cancelled
+    }
+
+    /// Returns true if there is an active (Queued or Running) job of `kind`
+    /// targeting `path` in `vault`.
+    pub async fn has_active_job_of_kind(&self, vault: &Path, path: &str, kind: JobKind) -> bool {
+        let vault = normalize_vault_path(vault.to_path_buf());
+        let inner = self.inner.lock().await;
+        inner.jobs.values().any(|j| {
+            j.vault_path == vault
+                && j.paper_path.as_deref() == Some(path)
+                && j.kind == kind
+                && matches!(j.state, JobState::Queued | JobState::Running)
+        })
     }
 
     /// Current snapshot for a job id, if it exists.
@@ -2892,5 +2933,44 @@ mod tests {
         drop(registration_second);
         assert!(!is_task_cancelled(task_id));
         assert_eq!(center.cancel_token_count_for_test().await, 0);
+    }
+
+    #[tokio::test]
+    async fn has_active_job_of_kind_matches_queued_or_running_only() {
+        let center = JobCenter::new();
+        let vault = vault("active-job");
+        let path = "papers/test-paper";
+
+        assert!(
+            !center
+                .has_active_job_of_kind(&vault, path, JobKind::RecognizeMetadata)
+                .await
+        );
+
+        let snap = center
+            .enqueue_recognize_metadata(vault.clone(), path, JobLane::Normal, false)
+            .await;
+        assert!(
+            center
+                .has_active_job_of_kind(&vault, path, JobKind::RecognizeMetadata)
+                .await
+        );
+        assert!(
+            !center
+                .has_active_job_of_kind(&vault, path, JobKind::LayoutAnalyze)
+                .await
+        );
+        assert!(
+            !center
+                .has_active_job_of_kind(&vault, "papers/other", JobKind::RecognizeMetadata)
+                .await
+        );
+
+        center.cancel(&snap.id).await;
+        assert!(
+            !center
+                .has_active_job_of_kind(&vault, path, JobKind::RecognizeMetadata)
+                .await
+        );
     }
 }

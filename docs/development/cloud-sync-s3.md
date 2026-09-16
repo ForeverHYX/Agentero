@@ -1,6 +1,6 @@
-# 云同步（S3）设计草稿
+# 云同步（S3 / WebDAV）设计草稿
 
-> 状态：Phase 0–2（自动同步部分）已落地（实现说明见 [../backend/sync.md](../backend/sync.md)），Phase 2+ 为草稿。多设备间同步整个 Vault，存储后端只做 S3 兼容对象存储（AWS S3 / Cloudflare R2 / 阿里 OSS / MinIO / B2）。同一套引擎同时服务两种模式：用户自带 bucket（BYO）与将来的官方托管服务。
+> 状态：Phase 0–2（自动同步部分）已落地（实现说明见 [../backend/sync.md](../backend/sync.md)），Phase 2+ 为草稿。多设备间同步整个 Vault，存储后端为 S3 兼容对象存储（AWS S3 / Cloudflare R2 / 阿里 OSS / MinIO / B2）或 WebDAV（坚果云 / Nextcloud / NAS 等），经 `store.rs` 的 `SyncStore` 枚举分发，引擎不感知具体后端。同一套引擎同时服务两种模式：用户自带 bucket（BYO）与将来的官方托管服务。
 
 ## 目标与非目标
 

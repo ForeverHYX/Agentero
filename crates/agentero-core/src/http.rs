@@ -378,9 +378,15 @@ pub fn github_url_candidates(canonical: &str) -> Vec<String> {
 }
 
 /// Whether an HTTP status should trigger trying the next GitHub mirror candidate.
-/// Client errors (4xx except 429) are definitive and must not fall back.
+/// GitHub returns 403 for unauthenticated API quota exhaustion and some edge /
+/// regional blocks, so treat it like 429 here. Other client errors (404, etc.)
+/// are definitive and must not fall back.
 pub fn should_fallback_github_status(status: reqwest::StatusCode) -> bool {
-    status.as_u16() == 429 || status.is_server_error()
+    is_retryable_github_status_code(status.as_u16())
+}
+
+fn is_retryable_github_status_code(code: u16) -> bool {
+    code == 403 || code == 429 || (500..600).contains(&code)
 }
 
 /// Whether a transport / reqwest error should trigger mirror fallback.
@@ -400,7 +406,7 @@ pub fn should_fallback_github_error(err: &AppError) -> bool {
             .split(|c: char| c.is_whitespace() || c == '/')
             .next()
             .and_then(|s| s.parse::<u16>().ok());
-        return matches!(code, Some(c) if c == 429 || (500..600).contains(&c));
+        return matches!(code, Some(c) if is_retryable_github_status_code(c));
     }
     if let Some(rest) = msg.strip_prefix("GitHub repository lookup failed: ") {
         // `StatusCode` Display is like "502 Bad Gateway" or "404 Not Found".
@@ -408,21 +414,21 @@ pub fn should_fallback_github_error(err: &AppError) -> bool {
             .split_whitespace()
             .next()
             .and_then(|s| s.parse::<u16>().ok());
-        return matches!(code, Some(c) if c == 429 || (500..600).contains(&c));
+        return matches!(code, Some(c) if is_retryable_github_status_code(c));
     }
     if let Some(rest) = msg.strip_prefix("GitHub contents request failed: ") {
         let code = rest
             .split_whitespace()
             .next()
             .and_then(|s| s.parse::<u16>().ok());
-        return matches!(code, Some(c) if c == 429 || (500..600).contains(&c));
+        return matches!(code, Some(c) if is_retryable_github_status_code(c));
     }
     if let Some(rest) = msg.strip_prefix("GitHub blob request failed: ") {
         let code = rest
             .split_whitespace()
             .next()
             .and_then(|s| s.parse::<u16>().ok());
-        return matches!(code, Some(c) if c == 429 || (500..600).contains(&c));
+        return matches!(code, Some(c) if is_retryable_github_status_code(c));
     }
     msg.starts_with("download:")
         || msg.starts_with("download body:")
@@ -532,11 +538,11 @@ mod tests {
         assert!(should_fallback_github_status(
             reqwest::StatusCode::BAD_GATEWAY
         ));
-        assert!(!should_fallback_github_status(
-            reqwest::StatusCode::NOT_FOUND
+        assert!(should_fallback_github_status(
+            reqwest::StatusCode::FORBIDDEN
         ));
         assert!(!should_fallback_github_status(
-            reqwest::StatusCode::FORBIDDEN
+            reqwest::StatusCode::NOT_FOUND
         ));
 
         assert!(should_fallback_github_error(&AppError::message(
@@ -545,8 +551,14 @@ mod tests {
         assert!(should_fallback_github_error(&AppError::message(
             "download HTTP 502 Bad Gateway"
         )));
+        assert!(should_fallback_github_error(&AppError::message(
+            "download HTTP 403 Forbidden"
+        )));
         assert!(!should_fallback_github_error(&AppError::message(
             "download HTTP 404 Not Found"
+        )));
+        assert!(should_fallback_github_error(&AppError::message(
+            "GitHub repository lookup failed: 403 Forbidden"
         )));
         assert!(!should_fallback_github_error(&AppError::message(
             "GitHub repository lookup failed: 404 Not Found"

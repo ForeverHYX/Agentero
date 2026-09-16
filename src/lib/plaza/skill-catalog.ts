@@ -1,7 +1,7 @@
 /**
  * Curated research Skill repos for the 广场 → Skill 推荐 panel.
  *
- * Stars are a snapshot (2026-08-14) for display only. Clicking a card feeds
+ * Stars are static snapshots for display only. Clicking a card feeds
  * the GitHub URL into the existing 魔棒 Skill import (`lookupSubmit`).
  *
  * @see docs/development/plaza.md
@@ -12,6 +12,7 @@ export type SkillThemeId =
 	| "reading"
 	| "writing"
 	| "figures"
+	| "ppt"
 	| "reproduce"
 	| "submit";
 
@@ -45,7 +46,7 @@ function github(
 	};
 }
 
-/** Five research-lifecycle groups. No Zotero / literature-library packs. */
+/** Research-lifecycle groups. No Zotero / literature-library packs. */
 export const SKILL_THEMES: readonly SkillTheme[] = [
 	{
 		id: "reading",
@@ -107,6 +108,30 @@ export const SKILL_THEMES: readonly SkillTheme[] = [
 				"academic-figure-generator",
 				2082,
 				"根据论文内容生成学术配图，可在主流 Agent 里当 Skill 用。",
+			),
+		],
+	},
+	{
+		id: "ppt",
+		repos: [
+			github(
+				"hugohe3",
+				"ppt-master",
+				54639,
+				"把文档、主题或模板生成原生 PowerPoint deck，支持图表和演讲稿。",
+			),
+			{
+				owner: "Yuan1z0825",
+				repo: "nature-paper2ppt",
+				url: "https://github.com/Yuan1z0825/nature-skills/tree/main/skills/nature-paper2ppt",
+				stars: 41600,
+				description: "从科研论文生成中文 PPTX 文献汇报，适合组会和论文展示。",
+			},
+			github(
+				"ningzimu",
+				"codex-ppt-skill",
+				5900,
+				"面向 Codex 的图片式 PPT 生成 Skill，可从论文、笔记或提纲制作演示文稿。",
 			),
 		],
 	},

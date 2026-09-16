@@ -52,7 +52,7 @@ Agentero 已是 **local-first 论文工作台**（Library + 文件树 + PDF\|NOT
 
 1. **Cool Papers**（[papers.cool](https://papers.cool/)）— P0：内嵌站点浏览。  
 2. **ModelScope 论文**（[modelscope.cn/papers](https://modelscope.cn/papers)）— 内嵌站点浏览；魔搭每日读论文带中文摘要与评分。  
-3. **Skill 推荐** — 原生面板：按论文阅读 / 写作 / 绘图 / 复现 / 投稿精选 GitHub Skill 仓库；点卡片走魔棒 Skill 导入。  
+3. **Skill 推荐** — 原生面板：按论文阅读 / 写作 / 绘图 / PPT 制作 / 复现 / 投稿精选 GitHub Skill 仓库；点卡片走魔棒 Skill 导入。  
 4. **订阅** — 用户自己的 RSS / Atom / JSON Feed；论文条目入库。见 [`plaza-feeds.md`](plaza-feeds.md)。  
 5. **播客** — 占位，后续。  
 6. **论文推荐** — P0 v0：基于本地库的轻量推荐列表（无云端上传）。
@@ -185,7 +185,7 @@ papers.cool 给几乎所有链接都加了 `target="_blank"`（单个分区页�
 
 ### 3.2.2 Skill 推荐（已实现）
 
-原生面板（不 iframe）。五类：论文阅读 / 论文写作 / 绘图 / 复现 / 投稿。目录写在 `skill-catalog.ts`（静态 star 快照）。点卡片 → `importPlazaSkillRepo` → 魔棒 `lookupSubmit` → 现有 Skill 多选安装框。角上外链单独打开 GitHub。不含 Zotero / 文献库类仓库。
+原生面板（不 iframe）。六类：论文阅读 / 论文写作 / 绘图 / PPT 制作 / 复现 / 投稿。目录写在 `skill-catalog.ts`（静态 star 快照）。点卡片 → `importPlazaSkillRepo` → 魔棒 `lookupSubmit` → 现有 Skill 多选安装框。角上外链单独打开 GitHub。不含 Zotero / 文献库类仓库。
 
 ### 3.3 播客（占位）
 

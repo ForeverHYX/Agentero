@@ -210,9 +210,10 @@ async fn default_branch_once(url: &str) -> Result<String, AppError> {
         .user_agent("Agentero/skill-import")
         .build()
         .map_err(|e| AppError::message(format!("http client: {e}")))?;
-    let response = client
+    let request = client
         .get(url)
-        .header("Accept", "application/vnd.github+json")
+        .header("Accept", "application/vnd.github+json");
+    let response = crate::http::with_github_api_auth(request, url)
         .send()
         .await
         .map_err(|e| AppError::message(format!("skill metadata request: {e}")))?;
@@ -470,9 +471,10 @@ async fn fetch_github_blob_once(url: &str) -> Result<GithubBlob, AppError> {
         .user_agent("Agentero/skill-import")
         .build()
         .map_err(|e| AppError::message(format!("http client: {e}")))?;
-    let response = client
+    let request = client
         .get(url)
-        .header("Accept", "application/vnd.github+json")
+        .header("Accept", "application/vnd.github+json");
+    let response = crate::http::with_github_api_auth(request, url)
         .send()
         .await
         .map_err(|e| AppError::message(format!("skill blob request: {e}")))?;
@@ -520,9 +522,10 @@ async fn fetch_github_json_once(url: &str) -> Result<GithubContentsResponse, App
         .user_agent("Agentero/skill-import")
         .build()
         .map_err(|e| AppError::message(format!("http client: {e}")))?;
-    let response = client
+    let request = client
         .get(url)
-        .header("Accept", "application/vnd.github+json")
+        .header("Accept", "application/vnd.github+json");
+    let response = crate::http::with_github_api_auth(request, url)
         .send()
         .await
         .map_err(|e| AppError::message(format!("skill contents request: {e}")))?;

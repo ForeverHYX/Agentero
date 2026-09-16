@@ -34,6 +34,10 @@ static SHARED_CLIENT: OnceLock<RwLock<Option<CachedClient>>> = OnceLock::new();
 /// `None` = disabled. Value is a trimmed base without a trailing slash, e.g.
 /// `https://gh.llkk.cc` → requests become `{base}/https://codeload.github.com/...`.
 static GITHUB_MIRROR: OnceLock<RwLock<Option<String>>> = OnceLock::new();
+/// Cached GitHub token discovered from environment variables or `gh auth token`.
+/// The token is never logged and is only attached to direct `api.github.com`
+/// requests, never to third-party mirror URLs.
+static GITHUB_AUTH_TOKEN: OnceLock<RwLock<CachedGithubToken>> = OnceLock::new();
 /// (last detected OS system proxy, when it was checked). `None` timestamp =
 /// never checked.
 static SYSTEM_PROXY: OnceLock<RwLock<(Option<String>, Option<Instant>)>> = OnceLock::new();
@@ -41,10 +45,17 @@ static SYSTEM_PROXY: OnceLock<RwLock<(Option<String>, Option<Instant>)>> = OnceL
 /// The OS-level proxy can be toggled at runtime (Clash / V2RayN "system
 /// proxy" mode); re-read it at most this often.
 const SYSTEM_PROXY_TTL: Duration = Duration::from_secs(30);
+const GITHUB_AUTH_TOKEN_TTL: Duration = Duration::from_secs(300);
 
 struct CachedClient {
     proxy: Option<String>,
     client: reqwest::Client,
+}
+
+#[derive(Default)]
+struct CachedGithubToken {
+    token: Option<String>,
+    checked_at: Option<Instant>,
 }
 
 fn proxy_slot() -> &'static RwLock<Option<String>> {
@@ -377,6 +388,79 @@ pub fn github_url_candidates(canonical: &str) -> Vec<String> {
     out
 }
 
+/// Add the local GitHub CLI / env token to direct GitHub REST API requests.
+///
+/// Mirrors deliberately do not receive the token because URL-prefix mirrors are
+/// third-party hosts (`{base}/https://api.github.com/...`).
+pub fn with_github_api_auth(
+    request: reqwest::RequestBuilder,
+    url: &str,
+) -> reqwest::RequestBuilder {
+    if !is_direct_github_api_url(url) {
+        return request;
+    }
+    match github_auth_token() {
+        Some(token) => request.bearer_auth(token),
+        None => request,
+    }
+}
+
+fn is_direct_github_api_url(url: &str) -> bool {
+    url::Url::parse(url)
+        .ok()
+        .and_then(|u| u.host_str().map(str::to_string))
+        .as_deref()
+        == Some("api.github.com")
+}
+
+fn github_auth_token() -> Option<String> {
+    let slot = GITHUB_AUTH_TOKEN.get_or_init(|| RwLock::new(CachedGithubToken::default()));
+    if let Ok(guard) = slot.read() {
+        if guard
+            .checked_at
+            .is_some_and(|t| t.elapsed() < GITHUB_AUTH_TOKEN_TTL)
+        {
+            return guard.token.clone();
+        }
+    }
+
+    let token = discover_github_auth_token();
+    if let Ok(mut guard) = slot.write() {
+        *guard = CachedGithubToken {
+            token: token.clone(),
+            checked_at: Some(Instant::now()),
+        };
+    }
+    token
+}
+
+fn discover_github_auth_token() -> Option<String> {
+    for key in ["GH_TOKEN", "GITHUB_TOKEN"] {
+        if let Ok(token) = std::env::var(key) {
+            let token = token.trim();
+            if !token.is_empty() {
+                return Some(token.to_string());
+            }
+        }
+    }
+
+    let gh = crate::process::resolve_command("gh")?;
+    let output = std::process::Command::new(gh)
+        .args(["auth", "token", "--hostname", "github.com"])
+        .output()
+        .ok()?;
+    if !output.status.success() {
+        return None;
+    }
+    let token = String::from_utf8(output.stdout).ok()?;
+    let token = token.trim();
+    if token.is_empty() {
+        None
+    } else {
+        Some(token.to_string())
+    }
+}
+
 /// Whether an HTTP status should trigger trying the next GitHub mirror candidate.
 /// GitHub returns 403 for unauthenticated API quota exhaustion and some edge /
 /// regional blocks, so treat it like 429 here. Other client errors (404, etc.)
@@ -528,6 +612,17 @@ mod tests {
         // Non-GitHub hosts are never mirrored.
         assert_eq!(github_url_candidates("https://example.com/x").len(), 1);
         configure_github_mirror(false, "").unwrap();
+    }
+
+    #[test]
+    fn github_api_auth_only_targets_direct_api_host() {
+        assert!(is_direct_github_api_url("https://api.github.com/repos/o/r"));
+        assert!(!is_direct_github_api_url(
+            "https://gh.llkk.cc/https://api.github.com/repos/o/r"
+        ));
+        assert!(!is_direct_github_api_url(
+            "https://codeload.github.com/o/r/tar.gz/main"
+        ));
     }
 
     #[test]

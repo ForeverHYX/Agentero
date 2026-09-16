@@ -8,8 +8,12 @@
 import { listen } from "@tauri-apps/api/event";
 import { createStore } from "zustand/vanilla";
 import i18n from "@/i18n";
+import { isBackgroundTaskCancelledError } from "@/lib/core/background-tasks";
 import { commands } from "@/lib/core/bindings";
 import { notifyError, notifySuccess } from "@/lib/core/notify";
+import { enqueueTaskSettled } from "@/lib/core/tasks";
+import { vaultStore } from "@/lib/vault/store";
+import { texPdfPath } from "@/lib/workspace/viewer";
 
 export type LatexEngine = {
 	id: string;
@@ -78,8 +82,9 @@ export function selectTexEngine(id: string): void {
 }
 
 /**
- * Compile with the selected (or first detected) engine. Drives
- * `compilingPath` for the file-tree spinner and notifies success/failure.
+ * Compile with the selected (or first detected) engine. Runs as a background
+ * job: the tasks panel shows live latexmk progress (rule / run milestones)
+ * and a cancel button; `compilingPath` still drives the file-tree spinner.
  * Returns the absolute pdf path on success, else null.
  */
 export async function compileTexFile(texPath: string): Promise<string | null> {
@@ -95,24 +100,25 @@ export async function compileTexFile(texPath: string): Promise<string | null> {
 
 	texCompileStore.setState({ compilingPath: texPath });
 	try {
-		const res = await commands.compileTex(texPath, engine);
-
-		if (!res.ok) {
-			notifyError(
-				res.error?.message ?? i18n.t("sidebar:fileTree.compileFailed"),
-			);
-			return null;
-		}
-
-		const result = res.data;
-		if (result?.ok && result.pdfPath) {
-			notifySuccess(i18n.t("sidebar:fileTree.compileSuccess"));
-			return result.pdfPath;
-		}
-		notifyError(i18n.t("sidebar:fileTree.compileFailed"));
-		return null;
+		await enqueueTaskSettled({
+			kind: "latexCompile",
+			vaultPath: vaultStore.getState().vaultPath ?? "",
+			path: texPath,
+			lane: "focus",
+			force: true,
+			params: { engine },
+		});
+		notifySuccess(i18n.t("sidebar:fileTree.compileSuccess"));
+		// latexmk writes {stem}.pdf next to the source (deterministic path).
+		return texPdfPath(texPath);
 	} catch (e) {
-		notifyError(String(e));
+		if (!isBackgroundTaskCancelledError(e)) {
+			notifyError(
+				e instanceof Error && e.message
+					? e.message
+					: i18n.t("sidebar:fileTree.compileFailed"),
+			);
+		}
 		return null;
 	} finally {
 		texCompileStore.setState({ compilingPath: null });

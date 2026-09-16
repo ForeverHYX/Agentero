@@ -241,6 +241,7 @@
 		"layoutAnalysis": "Parse figures, tables, and text",
 		"pdfParse": "Parse PDF body",
 		"parseRefs": "Parse references",
+		"latexCompile": "Compile LaTeX",
 		"downloadBytes": "{{phase}} · {{downloaded}} / {{total}}",
 		"downloadBytesUnknown": "{{phase}} · {{downloaded}}",
 		"batchProgress": "{{phase}} · {{current}} / {{total}}",

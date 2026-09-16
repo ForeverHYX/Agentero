@@ -9,6 +9,7 @@ import {
 	CheckCircle2,
 	CircleX,
 	Download,
+	FileCode2,
 	FileUp,
 	LayoutGrid,
 	ListOrdered,
@@ -68,6 +69,7 @@ const KIND_ICONS: Partial<Record<BackgroundTaskKind, BackgroundTaskIcon>> = {
 	layoutRun: "layout",
 	connectorSync: "plug",
 	recognizeMetadata: "scan",
+	latexCompile: "fileCode",
 	paperRead: "read",
 };
 
@@ -96,6 +98,8 @@ function iconGlyph(icon: BackgroundTaskIcon) {
 			return <Plug className={cls} aria-hidden />;
 		case "scan":
 			return <ScanSearch className={cls} aria-hidden />;
+		case "fileCode":
+			return <FileCode2 className={cls} aria-hidden />;
 		case "list":
 			return <ListOrdered className={cls} aria-hidden />;
 	}

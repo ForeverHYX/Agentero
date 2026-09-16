@@ -208,7 +208,8 @@ export type TaskSpec = {
 		| "modelDownload"
 		| "citingScan"
 		| "libraryIo"
-		| "metadataRefresh";
+		| "metadataRefresh"
+		| "latexCompile";
 	vaultPath: string;
 	path: string;
 	lane?: JobLane;
@@ -216,8 +217,9 @@ export type TaskSpec = {
 	/** parseBody only: Host-side cooperative-cancel polling id. */
 	taskId?: string | null;
 	/**
-	 * import / connectorSync / libraryIo / metadataRefresh: JSON-serializable
-	 * mode / op / batch payload; feeds the dedupe fingerprint.
+	 * import / connectorSync / libraryIo / metadataRefresh / latexCompile:
+	 * JSON-serializable mode / op / batch / `{ engine }` payload; feeds the
+	 * dedupe fingerprint.
 	 */
 	params?: unknown;
 };
@@ -279,6 +281,18 @@ export async function enqueueTask(spec: TaskSpec): Promise<JobSnapshot> {
 						force: spec.force ?? false,
 						params: (spec.params ?? null) as Json | null,
 					});
+				case "latexCompile": {
+					const engine =
+						(spec.params as { engine?: string } | null | undefined)?.engine ??
+						"pdflatex";
+					return commands.jobLatexCompileEnqueue({
+						vaultPath: spec.vaultPath,
+						texPath: spec.path,
+						engine,
+						lane: spec.lane ?? null,
+						force: spec.force ?? false,
+					});
+				}
 			}
 		},
 		{ fallback: "job enqueue failed" },

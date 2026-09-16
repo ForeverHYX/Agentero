@@ -586,8 +586,7 @@ export const commands = {
 	 *  button stays hidden.
 	 */
 	detectLatexEngines: () => __TAURI_INVOKE<ApiResult<LatexEngine[]>>("detect_latex_engines"),
-	/**  Compile a .tex file to PDF using the specified engine. */
-	compileTex: (texPath: string, engine: string) => __TAURI_INVOKE<ApiResult<CompileResult>>("compile_tex", { texPath, engine }),
+	jobLatexCompileEnqueue: (args: JobLatexCompileEnqueueArgs) => typedError<ApiResult<JobSnapshot>, string>(__TAURI_INVOKE("job_latex_compile_enqueue", { args })),
 };
 
 /** Events */
@@ -2109,13 +2108,6 @@ export type CompileLogEvent = {
 	line: string,
 };
 
-/**  Result of a TeX compilation. */
-export type CompileResult = {
-	ok: boolean,
-	pdfPath: string | null,
-	log: string,
-};
-
 /**
  *  Mirror of the inline `json!({ "message", "sessionId" })` in
  *  `integration::connector::state::emit_error`.
@@ -2789,9 +2781,19 @@ export type JobImportEnqueueArgs = {
 	params?: Json | null,
 };
 
-export type JobKind = "parseRefs" | "parseBody" | "layoutAnalyze" | "layoutTranslate" | "downloadAssets" | "pageCount" | "wikiReindex" | "recognizeMetadata" | "import" | "connectorSync" | "modelDownload" | "citingScan" | "libraryIo" | "metadataRefresh";
+export type JobKind = "parseRefs" | "parseBody" | "layoutAnalyze" | "layoutTranslate" | "downloadAssets" | "pageCount" | "wikiReindex" | "recognizeMetadata" | "import" | "connectorSync" | "modelDownload" | "citingScan" | "libraryIo" | "metadataRefresh" | "latexCompile";
 
 export type JobLane = "focus" | "normal" | "idle";
+
+export type JobLatexCompileEnqueueArgs = {
+	vaultPath: string,
+	/**  Absolute, or vault-relative .tex source path. */
+	texPath: string,
+	/**  Engine id from the picker (pdflatex / xelatex / lualatex). */
+	engine: string,
+	lane?: JobLane | null,
+	force?: boolean,
+};
 
 export type JobListArgs = {
 	vaultPath?: string | null,

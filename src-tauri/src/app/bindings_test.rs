@@ -227,7 +227,7 @@ fn export_typescript_bindings() {
             crate::features::pdf::export::commands::export_system_cjk_font,
             crate::features::web::commands::web_proxy_allow_host,
             crate::features::compile::detect_latex_engines,
-            crate::features::compile::compile_tex,
+            crate::features::jobs::commands::job_latex_compile_enqueue,
         ])
         // Desktop event surface (see `app::events_contract`): emit sites keep
         // using `app.emit("<literal>", payload)`; the wrappers/mirrors there

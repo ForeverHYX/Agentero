@@ -30,6 +30,7 @@ export type BackgroundTaskIcon =
 	| "read"
 	| "plug"
 	| "scan"
+	| "fileCode"
 	| "list";
 
 export type BackgroundTaskStatus =

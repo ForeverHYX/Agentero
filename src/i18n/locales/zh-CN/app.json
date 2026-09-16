@@ -241,6 +241,7 @@
 		"layoutAnalysis": "解析插图、表格、文字",
 		"pdfParse": "解析 PDF 正文",
 		"parseRefs": "解析参考文献",
+		"latexCompile": "编译 LaTeX",
 		"downloadBytes": "{{phase}} · {{downloaded}} / {{total}}",
 		"downloadBytesUnknown": "{{phase}} · {{downloaded}}",
 		"batchProgress": "{{phase}} · {{current}} / {{total}}",

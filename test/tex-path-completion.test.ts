@@ -45,6 +45,28 @@ describe("textLanguageExtensions TeX routing", () => {
 		expect(sources.length).toBeGreaterThanOrEqual(2);
 	});
 
+	it("serves the pack's command completion without enableAutocomplete", async () => {
+		// The pack's latex() unconditionally hangs its command source on the
+		// language data, and basicSetup's autocompletion consults it — so the
+		// switch itself must stay off (its override layer would swallow the
+		// path completion). Typing "\docum" must still offer \documentclass.
+		const extensions = textLanguageExtensions("/vault/plans/a.tex");
+		const state = EditorState.create({
+			doc: "\\docum",
+			extensions: [basicSetup, ...extensions],
+		});
+		const sources = state.languageDataAt("autocomplete", 1);
+		const results = await Promise.all(
+			sources.map((source) =>
+				source(new CompletionContext(state, state.doc.length, false)),
+			),
+		);
+		const labels = results
+			.flatMap((r) => (r ? r.options : []))
+			.map((o) => o.label);
+		expect(labels).toContain("\\documentclass");
+	});
+
 	it("keeps unknown extensions bare", () => {
 		expect(textLanguageExtensions("/vault/plans/a.txt")).toEqual([]);
 	});

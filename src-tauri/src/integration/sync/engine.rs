@@ -811,4 +811,93 @@ mod tests {
 
         let _ = fs::remove_dir_all(&tmp);
     }
+
+    /// Full two-device round trip against a live WebDAV endpoint.
+    ///
+    /// ```sh
+    /// AGENTERO_SYNC_WEBDAV_TEST_URL=https://dav.jianguoyun.com/dav/ \
+    /// AGENTERO_SYNC_WEBDAV_TEST_USERNAME=user@example.com \
+    /// AGENTERO_SYNC_WEBDAV_TEST_PASSWORD=app-password \
+    /// cargo test -p agentero --lib integration::sync::engine -- --ignored
+    /// ```
+    ///
+    /// Uses a fresh `agentero-it-<hex>` directory per run (created via MKCOL;
+    /// Nutstore caps top-level folder name length, so keep it short); clean
+    /// it up afterwards by deleting the directory (Nutstore requires deleting
+    /// files before their parent collection).
+    #[tokio::test]
+    #[ignore = "requires a live WebDAV server (see doc comment)"]
+    async fn two_device_roundtrip_against_webdav() {
+        use crate::integration::sync::config::SyncBackendKind;
+        use uuid::Uuid;
+
+        let base = std::env::var("AGENTERO_SYNC_WEBDAV_TEST_URL")
+            .unwrap_or_else(|_| "http://127.0.0.1:9001".into());
+        let nonce = &Uuid::new_v4().simple().to_string()[..12];
+        let mut cfg = SyncBackendConfig {
+            backend: SyncBackendKind::Webdav,
+            webdav_url: format!("{}/agentero-it-{nonce}", base.trim_end_matches('/')),
+            webdav_username: std::env::var("AGENTERO_SYNC_WEBDAV_TEST_USERNAME")
+                .unwrap_or_default(),
+            webdav_password: std::env::var("AGENTERO_SYNC_WEBDAV_TEST_PASSWORD")
+                .unwrap_or_default(),
+            auto_sync: false,
+            interval_minutes: 30,
+            conditional_writes: true,
+            scope: snapshot::SyncScope::all(),
+            ..SyncBackendConfig::default()
+        };
+        // Mirror sync_configure: reachability (creates the directory) plus
+        // the conditional-write probe that seeds the persisted flag.
+        let probed = test_connection(&cfg).await.expect("webdav test_connection");
+        cfg.conditional_writes = probed;
+        eprintln!("webdav conditional writes: {probed}");
+
+        let noop: &(dyn Fn(&str, usize, usize) + Send + Sync) = &|_, _, _| {};
+
+        let tmp = std::env::temp_dir().join(format!("agentero-sync-it-{}", Uuid::new_v4()));
+        let (a, b) = (tmp.join("a"), tmp.join("b"));
+        fs::create_dir_all(a.join("papers/x")).unwrap();
+        fs::create_dir_all(&b).unwrap();
+        fs::write(a.join("papers/x/NOTES.md"), "# x\n").unwrap();
+        fs::write(a.join("papers/x/metadata.json"), r#"{"id":"x"}"#).unwrap();
+
+        // A publishes, empty B joins and receives everything.
+        let up = sync_vault(&a, &cfg, noop).await.expect("sync A");
+        assert_eq!((up.version, up.uploaded), (1, 2));
+        let down = sync_vault(&b, &cfg, noop).await.expect("sync B");
+        assert_eq!((down.version, down.downloaded), (2, 2));
+        assert_eq!(
+            fs::read_to_string(b.join("papers/x/NOTES.md")).unwrap(),
+            "# x\n"
+        );
+
+        // B edits; A picks it up.
+        fs::write(b.join("papers/x/NOTES.md"), "# x\nedited on B\n").unwrap();
+        sync_vault(&b, &cfg, noop).await.expect("sync B edit");
+        let pull = sync_vault(&a, &cfg, noop).await.expect("sync A pull");
+        assert_eq!(pull.downloaded, 1);
+        assert!(fs::read_to_string(a.join("papers/x/NOTES.md"))
+            .unwrap()
+            .contains("edited on B"));
+
+        // Divergent edits on both → conflict copy, then both converge.
+        fs::write(a.join("papers/x/NOTES.md"), "# x\nA version\n").unwrap();
+        fs::write(b.join("papers/x/NOTES.md"), "# x\nB version\n").unwrap();
+        sync_vault(&a, &cfg, noop).await.expect("sync A divergent");
+        let conflicted = sync_vault(&b, &cfg, noop).await.expect("sync B divergent");
+        assert_eq!(conflicted.conflict_copies.len(), 1);
+        sync_vault(&a, &cfg, noop).await.expect("sync A converge");
+        // Compare content only: mtimes legitimately differ across devices.
+        let hashes = |vault: &Path| -> BTreeMap<String, String> {
+            snapshot::scan_vault(vault, &Manifest::default(), &snapshot::SyncScope::all())
+                .unwrap()
+                .into_iter()
+                .map(|(k, v)| (k, v.hash))
+                .collect()
+        };
+        assert_eq!(hashes(&a), hashes(&b), "both devices converge");
+
+        let _ = fs::remove_dir_all(&tmp);
+    }
 }

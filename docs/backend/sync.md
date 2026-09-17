@@ -53,11 +53,12 @@
 
 - **目录模型**：WebDAV 需显式建目录。PUT 前按需逐级 `MKCOL`（405 = 已存在），已建目录在客户端内缓存，稳态零额外请求；连接测试 `PROPFIND Depth:0` 根目录，404 则连目录一起创建——用户可直接指向一个不存在的目录（如 `https://dav.jianguoyun.com/dav/agentero/`）。
 - **连接测试**：PROPFIND 207 / 创建成功即凭据与目录可用；401/403 报凭证错误，不保存配置。
-- **条件写**：多数 WebDAV 服务器（含坚果云）忽略 PUT 的 `If-Match` / `If-None-Match`。探测方式为行为验证：一次性 key 连续两次 `If-None-Match: *` PUT，第二次应答 412 即真支持，2xx 即降级（与 OSS 共用 `conditionalWrites=false` 与降级语义，见上节）。探测无结论时按支持处理（fail open——被忽略的头无害，漏掉 CAS 才有害）。
+- **条件写**：WebDAV 实现差异大，探测因此针对 `If-Match`（HEAD CAS 的唯一依托）：一次性 key 创建后带过期 etag 再 PUT，412 = 真支持，2xx = 降级为普通 PUT（与 OSS 共用 `conditionalWrites=false` 与降级语义，见上节）；`If-None-Match: *` 不探测——被忽略也无害（blob 内容寻址、manifest key 唯一随机）。实测坚果云忽略 `If-None-Match` 但强制 `If-Match`，即 CAS 原子性完整保留。探测无结论时按支持处理（fail open——被忽略的头无害，漏掉 CAS 才有害）。
 - **无 ETag 的服务器**：`If-Match` 退化为普通 PUT，同降级语义收敛。
 - **重试**：与 S3 客户端一致的传输层 3 次重试（幂等操作）。
 - **安全约束同 S3**：`https://` 强制（仅 loopback 放行 http），密码掩码同 `secretKey`。NAS 场景的明文 http 与自签名证书 https 均不可用。
-- **兼容性**：路径段 percent-encode、请求带尾斜杠集合形式；Apache mod_dav / Nextcloud / ownCloud / 坚果云 / nginx dav module 均按上述策略工作（nginx 与坚果云通常走条件写降级路径）。
+- **兼容性（实测）**：路径段 percent-encode、请求带尾斜杠集合形式。坚果云特性：MKCOL 对根 `/dav` 返回 403 OperationNotAllowed（按「已存在/受保护」容忍）；顶层目录名长度有限制（`sandbox name is too long`）；顶层目录不可经 WebDAV 删除、非空目录删除需先清空子项——`sync_disconnect` 本就不动远端数据，仅测试清理需注意。Nextcloud / Apache mod_dav 按标准实现工作。
+- **集成测试**：`engine.rs` `two_device_roundtrip_against_webdav`（`#[ignore]`，env `AGENTERO_SYNC_WEBDAV_TEST_URL` / `_USERNAME` / `_PASSWORD`，连接测试 + 发布/加入/编辑/分歧冲突/收敛全流程，镜像 MinIO 测试）。
 
 ## 条件写降级（OSS 等后端）
 

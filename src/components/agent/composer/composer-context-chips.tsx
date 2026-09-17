@@ -1,3 +1,4 @@
+import type { TFunction } from "i18next";
 import { Quote, ScanSearch, Sparkles, X } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { ContextPathIcon } from "@/components/agent/context-path-icon";
@@ -57,6 +58,28 @@ function chipShellClass(extra?: string) {
 		"group inline-flex h-7 max-w-full items-center rounded-full border bg-muted/20 px-1.5 text-foreground text-xs transition-colors hover:bg-muted",
 		extra,
 	);
+}
+
+/**
+ * Code-editor selection chip label — `main.tex 75-77行` (single line:
+ * `main.tex 75行`). Null for selections without a line span (PDF page
+ * chips / plain markdown quotes).
+ */
+export function selectionLineChipLabel(
+	t: TFunction<"agent", undefined>,
+	sel: Pick<SelectionContext, "lineFrom" | "lineTo">,
+	title: string,
+): string | null {
+	const { lineFrom, lineTo } = sel;
+	if (lineFrom == null) return null;
+	if (lineTo != null && lineTo > lineFrom) {
+		return t("composer.selectionChipWithLines", {
+			title,
+			from: lineFrom,
+			to: lineTo,
+		});
+	}
+	return t("composer.selectionChipWithLine", { title, from: lineFrom });
 }
 
 export function ComposerContextChips({
@@ -144,18 +167,10 @@ export function ComposerContextChips({
 					basenameOf(sel.sourcePath) || t("composer.selection"),
 					MAX_CHIP_TITLE_CHARS,
 				);
-				// Code-editor selections carry a line span instead of a page.
-				const lineTag =
-					sel.lineFrom != null
-						? sel.lineTo != null && sel.lineTo > sel.lineFrom
-							? `L${sel.lineFrom}-${sel.lineTo}`
-							: `L${sel.lineFrom}`
-						: null;
-				const shortLabel = sel.page
-					? `${name} · p.${sel.page}`
-					: lineTag
-						? `${name} · ${lineTag}`
-						: name;
+				const shortLabel =
+					(sel.page ? `${name} · p.${sel.page}` : null) ??
+					selectionLineChipLabel(t, sel, name) ??
+					name;
 				return (
 					<button
 						key={sel.id}

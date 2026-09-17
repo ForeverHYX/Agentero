@@ -74,6 +74,8 @@
 		"selection": "Selection",
 		"selectionChip": "{{title}}",
 		"selectionChipWithPage": "{{title}}:p.{{page}}",
+		"selectionChipWithLine": "{{title}} line {{from}}",
+		"selectionChipWithLines": "{{title}} lines {{from}}-{{to}}",
 		"removeVisualDraft": "Remove visual annotation from context",
 		"visualAnnotation": "Visual annotation",
 		"visualAnnotationPage": "p.{{page}}",

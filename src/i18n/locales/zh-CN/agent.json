@@ -74,6 +74,8 @@
 		"selection": "选中文本",
 		"selectionChip": "{{title}}",
 		"selectionChipWithPage": "{{title}}:{{page}}页",
+		"selectionChipWithLine": "{{title}} {{from}}行",
+		"selectionChipWithLines": "{{title}} {{from}}-{{to}}行",
 		"removeVisualDraft": "从上下文移除视觉批注",
 		"visualAnnotation": "视觉批注",
 		"visualAnnotationPage": "第{{page}}页",

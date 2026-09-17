@@ -26,6 +26,9 @@ export type SelectionContext = {
 	origin: SelectionOrigin;
 	/** 1-based PDF page number. */
 	page?: number;
+	/** 1-based first/last selected line (code-editor selections). */
+	lineFrom?: number;
+	lineTo?: number;
 	/**
 	 * Page-normalized selection rects (PDF only). Present when the selection
 	 * came from a PDF viewer that knows anchor geometry — used to place a
@@ -58,6 +61,8 @@ export function publishSelection(input: {
 	sourcePath: string;
 	origin: SelectionOrigin;
 	page?: number;
+	lineFrom?: number;
+	lineTo?: number;
 	rects?: PdfVisualNormalizedRect[];
 	paperAbsPath?: string;
 }): void {
@@ -77,6 +82,8 @@ export function publishSelection(input: {
 		),
 		origin: input.origin,
 		page: input.page,
+		lineFrom: input.lineFrom,
+		lineTo: input.lineTo,
 		pinned: false,
 	};
 	if (input.rects?.length) {
@@ -190,7 +197,13 @@ export function selectionsPromptBlock(selections: SelectionContext[]): string {
 		.map((sel) => {
 			const where = sel.page
 				? `${sel.sourcePath} (page ${sel.page})`
-				: sel.sourcePath;
+				: sel.lineFrom != null
+					? `${sel.sourcePath} (lines ${sel.lineFrom}${
+							sel.lineTo != null && sel.lineTo > sel.lineFrom
+								? `-${sel.lineTo}`
+								: ""
+						})`
+					: sel.sourcePath;
 			const quoted = sel.text
 				.split("\n")
 				.map((line) => `> ${line}`)

@@ -13,6 +13,7 @@
  * the editor scrolls.
  */
 
+import type { Text } from "@codemirror/state";
 import { EditorView } from "@codemirror/view";
 import {
 	type RefObject,
@@ -40,7 +41,24 @@ import { openRightTab } from "@/lib/shell/ui-window-actions";
 export type TextEditorSelectionMenu = {
 	text: string;
 	screen: ScreenPoint;
+	/** 1-based selected line span — shown on the Agent context chip. */
+	lineFrom: number;
+	lineTo: number;
 };
+
+/** 1-based selected line span (`to` at a line start excludes that line). */
+function selectionLines(
+	doc: Text,
+	selection: { from: number; to: number },
+): { lineFrom: number; lineTo: number } {
+	const first = doc.lineAt(selection.from).number;
+	const endLine = doc.lineAt(selection.to);
+	const last =
+		endLine.number > first && endLine.from === selection.to
+			? endLine.number - 1
+			: endLine.number;
+	return { lineFrom: first, lineTo: last };
+}
 
 /**
  * Toolbar anchor: top-center of the selection (top line's character center
@@ -122,12 +140,15 @@ export function useTextEditorSelection({
 		// Off-viewport selections cannot be anchored — keep the previous one.
 		const screen = selectionMenuScreen(view);
 		if (!screen) return;
-		setMenu({ text, screen });
+		const { lineFrom, lineTo } = selectionLines(view.state.doc, selection);
+		setMenu({ text, screen, lineFrom, lineTo });
 		publishedRef.current = true;
 		publishSelection({
 			text,
 			sourcePath: pathRef.current,
 			origin: "markdown",
+			lineFrom,
+			lineTo,
 		});
 	};
 
@@ -167,6 +188,8 @@ export function useTextEditorSelection({
 			text: current.text,
 			sourcePath: pathRef.current,
 			origin: "markdown",
+			lineFrom: current.lineFrom,
+			lineTo: current.lineTo,
 		});
 		pinActiveSelection();
 		openRightTab("agent");

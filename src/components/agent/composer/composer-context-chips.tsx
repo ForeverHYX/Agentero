@@ -144,7 +144,18 @@ export function ComposerContextChips({
 					basenameOf(sel.sourcePath) || t("composer.selection"),
 					MAX_CHIP_TITLE_CHARS,
 				);
-				const shortLabel = sel.page ? `${name} · p.${sel.page}` : name;
+				// Code-editor selections carry a line span instead of a page.
+				const lineTag =
+					sel.lineFrom != null
+						? sel.lineTo != null && sel.lineTo > sel.lineFrom
+							? `L${sel.lineFrom}-${sel.lineTo}`
+							: `L${sel.lineFrom}`
+						: null;
+				const shortLabel = sel.page
+					? `${name} · p.${sel.page}`
+					: lineTag
+						? `${name} · ${lineTag}`
+						: name;
 				return (
 					<button
 						key={sel.id}

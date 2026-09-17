@@ -7,6 +7,7 @@ import {
 	pinActiveSelection,
 	publishSelection,
 	selectionStore,
+	selectionsPromptBlock,
 	selectionsWithPdfAnchor,
 } from "@/lib/agent/selection-store";
 
@@ -96,5 +97,27 @@ describe("selection-store PDF anchor", () => {
 		expect(currentSelections()).toEqual([]);
 		expect(pinActiveSelection()).toBe(true);
 		expect(currentSelections()).toHaveLength(1);
+	});
+
+	it("prompt block carries the line span of code-editor selections", () => {
+		publishSelection({
+			text: "\\section{Introduction}",
+			sourcePath: "thesis/main.tex",
+			origin: "markdown",
+			lineFrom: 7,
+			lineTo: 7,
+		});
+		pinActiveSelection();
+		publishSelection({
+			text: "line a\nline b\nline c",
+			sourcePath: "thesis/main.tex",
+			origin: "markdown",
+			lineFrom: 12,
+			lineTo: 14,
+		});
+		pinActiveSelection();
+		const block = selectionsPromptBlock(consumeSelections());
+		expect(block).toContain("from thesis/main.tex (lines 7):");
+		expect(block).toContain("from thesis/main.tex (lines 12-14):");
 	});
 });

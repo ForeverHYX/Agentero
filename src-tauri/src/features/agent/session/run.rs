@@ -195,7 +195,7 @@ async fn prepare_run_turn(params: &RunOnceParams) -> Result<RunTurnPrep, AppErro
         )
     };
     let prompt_images = params.images.clone();
-    let cwd = agent_spawn_cwd(params.remote.as_deref(), params.vault_path.as_deref());
+    let cwd = agent_spawn_cwd(params.remote.as_deref(), params.vault_path.as_deref())?;
     Ok(RunTurnPrep {
         full_prompt,
         prompt_images,

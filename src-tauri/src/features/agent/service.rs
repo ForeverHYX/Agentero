@@ -319,7 +319,7 @@ pub async fn list_sessions(
             return Err(e);
         }
     };
-    let cwd = agent_spawn_cwd(remote_target.as_deref(), vault_path.as_deref());
+    let cwd = agent_spawn_cwd(remote_target.as_deref(), vault_path.as_deref())?;
     match list_acp_sessions(&desc, cwd, cursor, remote_target.as_deref()).await {
         Ok(result) => {
             warm_gate.clear(&desc.id);
@@ -351,6 +351,6 @@ pub async fn load_session(
 ) -> Result<AcpLoadSessionResult, AppError> {
     let desc = registry.resolve_default(agent_id.as_deref())?;
     let remote_target = remote_hosts.resolve_target(vault_path.as_deref()).await?;
-    let cwd = agent_spawn_cwd(remote_target.as_deref(), vault_path.as_deref());
+    let cwd = agent_spawn_cwd(remote_target.as_deref(), vault_path.as_deref())?;
     load_acp_session(&desc, session_id, cwd, remote_target.as_deref()).await
 }

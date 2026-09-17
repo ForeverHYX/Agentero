@@ -44,7 +44,9 @@ ACP stdio 传输没有 cwd 字段：`NewSessionRequest.cwd` 只告诉 Agent 会�
    已先切到自己的工作目录，直接保留原命令与参数，不再套外层 shell。
 2. **无本地 Vault 上下文时用私有目录兜底**：`run` / `warm` / `list` / `load` 与 Unix 探针
    复用 `agent_spawn_cwd()`；本地 Vault 缺失或无效时取 `agent_scratch_dir()`
-   （`…/agentero/agent-cwd`，按需创建），不回落到进程 cwd。远端保留自身 Vault 路径；
+   （`…/agentero/agent-cwd`，按需创建）。数据目录不可写时只尝试系统临时目录下的
+   `agentero/agent-cwd` 专用子目录；两处均无法创建则在启动前返回包含失败路径的错误，
+   不回落到进程 cwd 或整个临时目录。远端保留自身 Vault 路径；
    local-sim 路径失效时在新建连接前明确报错，而非执行后才出现 shell/ACP 错误。
 3. **Windows 不扩大包装范围**：保留 Pi / Custom 会话的旧包装及所有探针的直启行为。
    Windows 没有此 macOS TCC 问题，而 ACP SDK 只强杀直接子进程；新增 CMD 层会妨碍原生
@@ -58,6 +60,9 @@ ACP stdio 传输没有 cwd 字段：`NewSessionRequest.cwd` 只告诉 Agent 会�
    所在卷（如 iCloud / OneDrive）本身仍可能按需请求，属正常。
 4. 检查 `~/Library/Application Support/com.apple.TCC/TCC.db` 的 `access` 表，
    确认 Agentero 不再新增 `kTCCServiceMediaLibrary` / `SystemPolicyDesktopFolder` 等条目。
+
+回归测试通过临时文件阻断目录创建，覆盖数据目录优先及复用、专用临时子目录兜底、
+两处均不可用时返回错误；不依赖修改全局环境变量或真实目录权限。
 
 ## 5. 边界
 

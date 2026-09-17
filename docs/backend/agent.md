@@ -17,7 +17,9 @@ Agentero 作为 **ACP Client**，stdio JSON-RPC 连接用户本机或远端 Agen
   spawn 无 cwd 字段，Finder 启动的 macOS GUI 进程 cwd 是 `/`，不能让 Agent 将其作为启动
   工作区并触发无关 TCC 弹窗（#570）。Dsh 自带切到 launcher 目录的脚本，不加外层包装。
 - 本地 Vault 路径缺失或无效时，`agent_spawn_cwd()` 用 `agent_scratch_dir()`
-  （`…/agentero/agent-cwd`）兜底，不回落到进程 cwd。**Unix 探针**也复用该入口：本地用
+  （`…/agentero/agent-cwd`）兜底；数据目录不可写时改用系统临时目录下的
+  `agentero/agent-cwd` 专用子目录，两处均无法创建则在启动前明确报错，不回落到进程 cwd
+  或整个临时目录。**Unix 探针**也复用该入口：本地用
   scratch，远端沿用目标自己的 Vault；SSH 路径不在本机检查。local-sim 新建连接前验证
   目录存在，失效时明确报错，不悄悄切到 scratch。
 - **Windows 保留既有启动策略**：仅 Pi / Custom 的 run / warm / list / load 使用 `cmd /D /C`

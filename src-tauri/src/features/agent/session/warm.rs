@@ -51,7 +51,19 @@ pub async fn warm_agent(
 ) -> WarmResult {
     let agent_id = desc.id.clone();
     let session_id = Uuid::new_v4().to_string();
-    let cwd = agent_spawn_cwd(remote.as_deref(), vault_path.as_deref());
+    let cwd = match agent_spawn_cwd(remote.as_deref(), vault_path.as_deref()) {
+        Ok(cwd) => cwd,
+        Err(e) => {
+            return WarmResult {
+                agent_id,
+                ok: false,
+                models: None,
+                usage_used: None,
+                usage_size: None,
+                error: Some(e.to_string()),
+            };
+        }
+    };
     let key: PoolKey = pool_key(&agent_id, cwd.clone(), remote.as_ref());
 
     // Healthy pooled slot from an earlier warm: reuse its cached models /

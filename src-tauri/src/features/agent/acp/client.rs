@@ -263,19 +263,20 @@ pub(crate) fn resolve_command_in_agent_env(
 /// Vault, falling back to [`crate::core::paths::agent_scratch_dir`] when the
 /// vault path is missing or invalid. Never Agentero's process cwd: a macOS GUI
 /// app launched by LaunchServices has `/`, so an agent that scans its startup
-/// cwd would walk `$HOME` and trip TCC folder prompts (#570).
+/// cwd would walk `$HOME` and trip TCC folder prompts (#570). If neither scratch
+/// location can be created, fail before spawning instead of broadening the cwd.
 pub(crate) fn agent_spawn_cwd(
     remote: Option<&dyn crate::features::agent::remote_host::RemoteAgentLaunch>,
     vault_path: Option<&str>,
-) -> PathBuf {
+) -> Result<PathBuf, AppError> {
     let raw = match remote {
         Some(remote) => remote.agent_cwd(),
         None => vault_path
             .map(PathBuf::from)
             .filter(|p| p.is_dir())
-            .unwrap_or_else(crate::core::paths::agent_scratch_dir),
+            .map_or_else(crate::core::paths::agent_scratch_dir, Ok)?,
     };
-    simplified_agent_cwd(&raw)
+    Ok(simplified_agent_cwd(&raw))
 }
 
 /// Unix launches change cwd before exec, except Dsh whose own launcher already
@@ -561,7 +562,7 @@ mod cwd_shell_wrap_tests {
             assert!(error.to_string().contains("missing-vault"));
         }
         remote.ssh = true;
-        assert_eq!(agent_spawn_cwd(Some(&remote), None), remote.cwd);
+        assert_eq!(agent_spawn_cwd(Some(&remote), None).unwrap(), remote.cwd);
         assert!(to_acp_agent(&desc, Some(&remote.cwd), Some(&remote)).is_ok());
     }
 
@@ -715,13 +716,13 @@ mod cwd_shell_wrap_tests {
         std::fs::create_dir_all(&vault).unwrap();
 
         assert_eq!(
-            agent_spawn_cwd(None, vault.to_str()),
+            agent_spawn_cwd(None, vault.to_str()).unwrap(),
             simplified_agent_cwd(&vault)
         );
         // Missing/invalid vault -> private scratch dir, never the process cwd.
         assert_eq!(
-            agent_spawn_cwd(None, vault.join("missing").to_str()),
-            simplified_agent_cwd(&crate::core::paths::agent_scratch_dir())
+            agent_spawn_cwd(None, vault.join("missing").to_str()).unwrap(),
+            simplified_agent_cwd(&crate::core::paths::agent_scratch_dir().unwrap())
         );
 
         let _ = std::fs::remove_dir(&vault);

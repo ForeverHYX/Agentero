@@ -65,7 +65,9 @@ cmd /D /C "cd /d %AGENTERO_AGENT_CWD% && %AGENTERO_AGENT_COMMAND%"
 - `load_acp_session` — 加载历史会话
 
 以上入口在 Vault 路径缺失/无效时用 `agent_scratch_dir()`（`…/agentero/agent-cwd`）兜底，
-不再回落到进程 cwd。Unix 的 `probe_agent` 无本地 Vault 上下文，因此使用 scratch；远端沿用
+数据目录不可写时使用系统临时目录下的 `agentero/agent-cwd` 专用子目录，两处均无法创建
+则明确报错，不再回落到进程 cwd 或整个临时目录。Unix 的 `probe_agent` 无本地 Vault
+上下文，因此使用 scratch；远端沿用
 自身 Vault 路径。Windows 探针不传进程 cwd，保持原有直启语义。local-sim 新建连接前验证
 Vault 目录存在，路径失效时明确报错；不在本机检查 SSH 路径。
 

@@ -6,9 +6,9 @@ import type {
 import { json } from "@codemirror/lang-json";
 import { python } from "@codemirror/lang-python";
 import { StreamLanguage } from "@codemirror/language";
-import { stex } from "@codemirror/legacy-modes/mode/stex";
 import { yaml } from "@codemirror/legacy-modes/mode/yaml";
 import type { Extension } from "@codemirror/state";
+import { latex, latexLanguage } from "codemirror-lang-latex";
 import { basenameOf, dirnameOf, joinPath } from "@/lib/core/path";
 import { type FileNode, listVaultDirChildren } from "@/lib/vault";
 import { vaultStore } from "@/lib/vault/store";
@@ -20,7 +20,6 @@ import { textLanguageIdForPath } from "@/lib/workspace/viewer";
  * highlighting — plain text is the fallback viewer, not a gate.
  */
 
-const stexLanguage = StreamLanguage.define(stex);
 const yamlLanguage = StreamLanguage.define(yaml);
 
 /**
@@ -130,48 +129,6 @@ function bibtexCompletion(context: CompletionContext): CompletionResult | null {
 		};
 	}
 	return null;
-}
-
-const LATEX_COMMANDS: Completion[] = (
-	[
-		["\\section{", "Section heading"],
-		["\\subsection{", "Subsection heading"],
-		["\\subsubsection{", "Subsubsection heading"],
-		["\\textbf{", "Bold text"],
-		["\\textit{", "Italic text"],
-		["\\emph{", "Emphasis"],
-		["\\underline{", "Underlined text"],
-		["\\texttt{", "Monospaced text"],
-		["\\cite{", "Citation key"],
-		["\\ref{", "Reference label"],
-		["\\eqref{", "Equation reference"],
-		["\\label{", "Define label"],
-		["\\frac{}{}", "Fraction"],
-		["\\sqrt{", "Square root"],
-		["\\begin{itemize}", "Bulleted list"],
-		["\\begin{enumerate}", "Numbered list"],
-		["\\begin{equation}", "Numbered equation"],
-		["\\begin{align}", "Aligned equations"],
-		["\\begin{figure}", "Figure environment"],
-		["\\begin{table}", "Table environment"],
-		["\\begin{center}", "Centered block"],
-		["\\item", "List item"],
-		["\\documentclass{article}", "Document class"],
-		["\\usepackage{", "Load package"],
-		["\\title{", "Document title"],
-		["\\author{", "Document author"],
-		["\\maketitle", "Render title block"],
-	] as const
-).map(([label, detail]) => ({ label, detail, type: "function" }));
-
-function latexCompletion(context: CompletionContext): CompletionResult | null {
-	const command = context.matchBefore(/\\[a-zA-Z]*/);
-	if (!command) return null;
-	return {
-		from: command.from,
-		options: LATEX_COMMANDS,
-		validFor: /^\\[a-zA-Z]*$/,
-	};
 }
 
 /** What a LaTeX command's `{}` file-path argument may complete to. */
@@ -360,9 +317,21 @@ export function textLanguageExtensions(path: string): Extension[] {
 			return [yamlLanguage];
 		case "tex":
 			return [
-				stexLanguage,
-				stexLanguage.data.of({ autocomplete: latexCompletion }),
-				stexLanguage.data.of({
+				// Overleaf-grammar language pack (highlighting, env auto-close,
+				// indent, folding, its own command/env completion via language
+				// data). The extras are off because they'd fight basicSetup:
+				// enableAutocomplete would install an autocompletion({override})
+				// layer that swallows every other source (the path completion
+				// below), and autoCloseBrackets/bracket matching already ship
+				// with basicSetup. Linting and hover tooltips stay off to keep
+				// the editor quiet while typing.
+				latex({
+					enableAutocomplete: false,
+					enableLinting: false,
+					enableTooltips: false,
+					autoCloseBrackets: false,
+				}),
+				latexLanguage.data.of({
 					autocomplete: texPathCompletionSource(path, listVaultDirForTex),
 				}),
 			];

@@ -2,13 +2,17 @@ import {
 	CompletionContext,
 	type CompletionResult,
 } from "@codemirror/autocomplete";
+import { LanguageSupport } from "@codemirror/language";
 import { EditorState } from "@codemirror/state";
+import { basicSetup } from "codemirror";
+import { latexLanguage } from "codemirror-lang-latex";
 import { describe, expect, it } from "vitest";
 import {
 	parseTexPathContext,
 	TEX_PATH_COMMANDS,
 	texEntryCompletions,
 	texPathCompletionSource,
+	textLanguageExtensions,
 } from "@/components/viewer/text-editor-language";
 import type { FileNode } from "@/lib/vault";
 
@@ -19,6 +23,32 @@ function file(name: string): FileNode {
 function dir(name: string): FileNode {
 	return { id: name, name, path: name, kind: "directory" };
 }
+
+describe("textLanguageExtensions TeX routing", () => {
+	it("wires the latex language pack plus the path completion for .tex", () => {
+		const extensions = textLanguageExtensions("/vault/plans/a.tex");
+		expect(extensions).toHaveLength(2);
+		expect(extensions[0]).toBeInstanceOf(LanguageSupport);
+		expect((extensions[0] as LanguageSupport).language).toBe(latexLanguage);
+	});
+
+	it("registers the pack's command completion alongside the path completion", () => {
+		// Both must surface through the language data — an autocompletion
+		// `override` layer (the pack's default enableAutocomplete) would
+		// swallow one of them.
+		const extensions = textLanguageExtensions("/vault/plans/a.tex");
+		const state = EditorState.create({
+			doc: "\\input{",
+			extensions: [basicSetup, ...extensions],
+		});
+		const sources = state.languageDataAt("autocomplete", 1);
+		expect(sources.length).toBeGreaterThanOrEqual(2);
+	});
+
+	it("keeps unknown extensions bare", () => {
+		expect(textLanguageExtensions("/vault/plans/a.txt")).toEqual([]);
+	});
+});
 
 describe("parseTexPathContext", () => {
 	it("detects path commands after the opening brace", () => {

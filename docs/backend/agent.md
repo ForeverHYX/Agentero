@@ -52,13 +52,16 @@ Agentero 作为 **ACP Client**，stdio JSON-RPC 连接用户本机或远端 Agen
   指定），凭据直接复用 `~/.zcode` 的桌面登录——无需额外 API key。detect/ACP 入口
   均为 `zcode-acp-server`（npm 安装，需 Node 22+），静默 install/update 走 npm，
   Unix 侧装入 `~/.local` 前缀。
-  - spawn 时 Host 注入两个环境变量（注册项 env 可覆盖）：`ZCODE_BUILTIN_PROVIDER_CONFIG_FILE`
+  - spawn 时 Host 注入环境变量（注册项 env 可覆盖）：`ZCODE_BUILTIN_PROVIDER_CONFIG_FILE`
     指向 `~/.zcode/v2/runtime/provider/*/*/endpoint-*/zcode-builtin.json` 中最新一份——
-    缺少它内置 CLI 的 provider 层不启动（backend dead）；`ZCODE_BIN` 指向 remote-assets
+    缺少它内置 CLI 的 provider 层不启动（backend dead）；同时注入
+    `ZCODE_PERSONAL_PROVIDER_CONFIG_FILE`（`~/.zcode/v2/provider_config.json`），两变量
+    齐备 CLI 才原样使用注入表，否则会改道自同步副本并使适配器的 provider 注册作废
+    （zcode-acp#202，0.42.4 起适配器自身注入同组变量）；`ZCODE_BIN` 指向 remote-assets
     cache 中最新一个仍实现 `workspace/updateProviderRegistry` 的 `zcode.cjs`（桌面
     3.12.3 起内置副本移除了该方法，缺失时 prompt 报 `provider_not_configured`），
     均不存在时回落适配器默认发现逻辑。注入仅在**本地** spawn 生效：SSH 远端 Vault 不做
-    该注入（本地发现的路径对远端无意义），远端沿用适配器自身的发现逻辑，上述两个坑在
+    该注入（本地发现的路径对远端无意义），远端沿用适配器自身的发现逻辑，上述坑在
     远端同样存在；Windows 上注入的候选根为 `%LOCALAPPDATA%\Programs\ZCode` 与
     `%APPDATA%\ZCode` 缓存（未实机验证），并在可解析时额外注入 `ZCODE_NODE`（适配器
     在 Windows 上解析 Node 不可靠）。

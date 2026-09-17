@@ -202,6 +202,19 @@ pub fn zcode_runtime_env() -> Vec<(String, String)> {
             "ZCODE_BUILTIN_PROVIDER_CONFIG_FILE".to_string(),
             builtin.display().to_string(),
         ));
+        // Both vars together make the CLI use the injected builtin table
+        // verbatim. With the builtin var alone, the CLI re-syncs it into a
+        // version-keyed runtime copy, rewires configRevision there and
+        // silently voids the adapter's account-config push — every account
+        // model then fails "Provider Registry 中不存在 Model" (zcode-acp
+        // #202, fixed in 0.42.4 whose own injection mirrors this pair).
+        let personal = home.join(".zcode/v2/provider_config.json");
+        if personal.is_file() {
+            env.push((
+                "ZCODE_PERSONAL_PROVIDER_CONFIG_FILE".to_string(),
+                personal.display().to_string(),
+            ));
+        }
     }
 
     // Newest CLI bundle whose backend still supports the registry push.

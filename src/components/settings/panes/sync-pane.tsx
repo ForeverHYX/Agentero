@@ -407,63 +407,71 @@ export function SyncPane({ vaultPath }: { vaultPath: string | null }) {
 				</p>
 			) : null}
 
-			<SettingsGroup className="mb-3">
-				<SettingsRow label={t("sync.backend")} htmlFor="sync-backend-s3">
-					<Tooltip>
-						<TooltipTrigger asChild>
-							<div className="flex gap-1">
-								{BACKEND_OPTIONS.map((option) => (
-									<Button
-										key={option.value}
-										id={`sync-backend-${option.value}`}
-										type="button"
-										size="sm"
-										variant={
-											form.backend === option.value ? "default" : "outline"
-										}
-										disabled={backendLocked}
-										onClick={() => patch({ backend: option.value })}
-									>
-										{t(option.labelKey)}
-									</Button>
-								))}
-							</div>
-						</TooltipTrigger>
-						{backendLocked ? (
-							<TooltipContent side="bottom">
-								{t("sync.backendLocked")}
-							</TooltipContent>
-						) : null}
-					</Tooltip>
-				</SettingsRow>
-			</SettingsGroup>
-
-			<div className="mb-3 flex flex-wrap items-center gap-1.5">
-				{providerLinks.map((provider) => {
-					const Icon = provider.icon;
-					return (
-						<Tooltip key={provider.id}>
-							<TooltipTrigger asChild>
-								<Button
-									type="button"
-									size="icon-lg"
-									variant="outline"
-									className="size-9 bg-background"
-									aria-label={t("sync.providerDocsAria", {
-										name: provider.name,
-									})}
-									onClick={() => openExternalUrl(provider.docsUrl)}
+			<div className="mb-3 flex flex-wrap items-center gap-2">
+				<span id="sync-backend-label" className="text-muted-foreground text-xs">
+					{t("sync.backend")}
+				</span>
+				<Tooltip>
+					<TooltipTrigger asChild>
+						<span className="inline-flex">
+							<Select
+								value={form.backend}
+								onValueChange={(value) =>
+									patch({ backend: value === "webdav" ? "webdav" : "s3" })
+								}
+								disabled={backendLocked}
+							>
+								<SelectTrigger
+									id="sync-backend"
+									size="sm"
+									className="w-36"
+									aria-labelledby="sync-backend-label"
 								>
-									<Icon
-										className={cn("size-5", provider.iconClassName)}
-										aria-hidden
-									/>
-								</Button>
-							</TooltipTrigger>
-							<TooltipContent side="bottom">{provider.name}</TooltipContent>
-						</Tooltip>
-					);
-				})}
+									<SelectValue />
+								</SelectTrigger>
+								<SelectContent>
+									{BACKEND_OPTIONS.map((option) => (
+										<SelectItem key={option.value} value={option.value}>
+											{t(option.labelKey)}
+										</SelectItem>
+									))}
+								</SelectContent>
+							</Select>
+						</span>
+					</TooltipTrigger>
+					{backendLocked ? (
+						<TooltipContent side="bottom">
+							{t("sync.backendLocked")}
+						</TooltipContent>
+					) : null}
+				</Tooltip>
+				<div className="ml-auto flex flex-wrap items-center gap-1.5">
+					{providerLinks.map((provider) => {
+						const Icon = provider.icon;
+						return (
+							<Tooltip key={provider.id}>
+								<TooltipTrigger asChild>
+									<Button
+										type="button"
+										size="icon-lg"
+										variant="outline"
+										className="size-9 bg-background"
+										aria-label={t("sync.providerDocsAria", {
+											name: provider.name,
+										})}
+										onClick={() => openExternalUrl(provider.docsUrl)}
+									>
+										<Icon
+											className={cn("size-5", provider.iconClassName)}
+											aria-hidden
+										/>
+									</Button>
+								</TooltipTrigger>
+								<TooltipContent side="bottom">{provider.name}</TooltipContent>
+							</Tooltip>
+						);
+					})}
+				</div>
 			</div>
 
 			{isWebdav ? (

@@ -74,7 +74,7 @@
     <div data-md-component="skip">
       
         
-        <a href="#s3" class="md-skip">
+        <a href="#s3-webdav" class="md-skip">
           跳转至
         </a>
       
@@ -2526,7 +2526,7 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#s3_1" class="md-nav__link">
+  <a href="#s3" class="md-nav__link">
     <span class="md-ellipsis">
       
         S3 客户端
@@ -3721,7 +3721,7 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#s3_1" class="md-nav__link">
+  <a href="#s3" class="md-nav__link">
     <span class="md-ellipsis">
       
         S3 客户端
@@ -3806,9 +3806,9 @@
   
 
 
-<h1 id="s3">云同步（S3）设计草稿<a class="headerlink" href="#s3" title="Permanent link">&para;</a></h1>
+<h1 id="s3-webdav">云同步（S3 / WebDAV）设计草稿<a class="headerlink" href="#s3-webdav" title="Permanent link">&para;</a></h1>
 <blockquote>
-<p>状态：Phase 0–2（自动同步部分）已落地（实现说明见 <a href="../../backend/sync/">../backend/sync.md</a>），Phase 2+ 为草稿。多设备间同步整个 Vault，存储后端只做 S3 兼容对象存储（AWS S3 / Cloudflare R2 / 阿里 OSS / MinIO / B2）。同一套引擎同时服务两种模式：用户自带 bucket（BYO）与将来的官方托管服务。</p>
+<p>状态：Phase 0–2（自动同步部分）已落地（实现说明见 <a href="../../backend/sync/">../backend/sync.md</a>），Phase 2+ 为草稿。多设备间同步整个 Vault，存储后端为 S3 兼容对象存储（AWS S3 / Cloudflare R2 / 阿里 OSS / MinIO / B2）或 WebDAV（坚果云 / Nextcloud / NAS 等），经 <code>store.rs</code> 的 <code>SyncStore</code> 枚举分发，引擎不感知具体后端。同一套引擎同时服务两种模式：用户自带 bucket（BYO）与将来的官方托管服务。</p>
 </blockquote>
 <h2 id="_1">目标与非目标<a class="headerlink" href="#_1" title="Permanent link">&para;</a></h2>
 <p><strong>目标</strong></p>
@@ -3901,7 +3901,7 @@
 </ul>
 <h3 id="gc">GC<a class="headerlink" href="#gc" title="Permanent link">&para;</a></h3>
 <p>blob 无引用即可删：客户端同步成功后低频（如每周）执行一次「列出最近 N 份 manifest 引用集合，删除孤儿 blob + 更老的 manifest」。托管模式下也可由服务端离线做。</p>
-<h2 id="s3_1">S3 客户端<a class="headerlink" href="#s3_1" title="Permanent link">&para;</a></h2>
+<h2 id="s3">S3 客户端<a class="headerlink" href="#s3" title="Permanent link">&para;</a></h2>
 <p>只需要 6 个操作：<code>GET</code> / <code>PUT</code>（含条件头）/ <code>HEAD</code> / <code>DELETE</code> / <code>ListObjectsV2</code> / （大文件可选 multipart）。不引入 <code>aws-sdk-s3</code>（依赖树过重）；基于现有 <strong>reqwest 0.12 + sha2</strong> 手写 SigV4 签名（新增 <code>hmac</code> 一个小依赖），收敛在 <code>features/sync/s3.rs</code>（约 300 行）。兼容 path-style（MinIO）与 virtual-host style。</p>
 <p>凭据形态设计为枚举，为托管模式预留：</p>
 <div class="codehilite"><pre><span></span><code><span class="k">enum</span><span class="w"> </span><span class="nc">SyncCredentials</span><span class="w"> </span><span class="p">{</span>

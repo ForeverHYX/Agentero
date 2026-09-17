@@ -46,6 +46,9 @@ importers:
       '@codemirror/legacy-modes':
         specifier: ^6.5.4
         version: 6.5.4
+      '@codemirror/lint':
+        specifier: ^6.9.7
+        version: 6.9.7
       '@codemirror/state':
         specifier: ^6.7.4
         version: 6.7.4

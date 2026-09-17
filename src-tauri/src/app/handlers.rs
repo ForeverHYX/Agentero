@@ -223,6 +223,7 @@ pub fn attach_handlers(builder: tauri::Builder<tauri::Wry>) -> tauri::Builder<ta
             crate::features::web::commands::web_proxy_allow_host,
             crate::features::compile::detect_latex_engines,
             crate::features::compile::clean_latex_aux_files,
+            crate::features::compile::chktex_lint,
             crate::features::jobs::commands::job_latex_compile_enqueue,
         ])
     }

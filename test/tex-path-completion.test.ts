@@ -25,9 +25,9 @@ function dir(name: string): FileNode {
 }
 
 describe("textLanguageExtensions TeX routing", () => {
-	it("wires the latex language pack plus the path completion for .tex", () => {
+	it("wires the latex language pack, path completion and chktex linter for .tex", () => {
 		const extensions = textLanguageExtensions("/vault/plans/a.tex");
-		expect(extensions).toHaveLength(2);
+		expect(extensions).toHaveLength(3);
 		expect(extensions[0]).toBeInstanceOf(LanguageSupport);
 		expect((extensions[0] as LanguageSupport).language).toBe(latexLanguage);
 	});

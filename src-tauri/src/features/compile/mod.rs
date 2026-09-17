@@ -8,6 +8,7 @@ use std::path::PathBuf;
 use std::sync::Arc;
 use tauri::Emitter;
 use tokio::io::AsyncBufReadExt;
+use tokio::io::AsyncWriteExt;
 use tokio::io::BufReader;
 
 use crate::core::error::ApiResult;
@@ -199,6 +200,113 @@ pub async fn clean_latex_aux_files(tex_path: String) -> ApiResult<()> {
     } else {
         tail
     }))
+}
+
+/// One chktex finding, mapped to editor coordinates (1-based line/column plus
+/// match length). `code` is chktex's warning number — suppress one inline with
+/// a `%chktex <n>` comment on the offending line.
+#[derive(Debug, Clone, Serialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub struct LatexLintDiagnostic {
+    pub line: u32,
+    pub column: u32,
+    pub length: u32,
+    /// Mapped chktex kind: "error" | "warning" | "info" (its "Message" level).
+    pub severity: String,
+    pub code: u32,
+    pub message: String,
+}
+
+/// Parse chktex output produced with `-f"%l:%c:%d:%k:%n:%m\n"` (the format
+/// string must carry a real newline — chktex does not interpret `\n`).
+/// Unparseable lines (banner, summary, stray output) are skipped.
+fn parse_chktex_output(stdout: &str) -> Vec<LatexLintDiagnostic> {
+    stdout
+        .lines()
+        .filter_map(|line| {
+            let mut fields = line.splitn(6, ':');
+            let line_no = fields.next()?.parse::<u32>().ok()?;
+            let column = fields.next()?.parse::<u32>().ok()?;
+            let length = fields.next()?.parse::<u32>().ok()?;
+            let severity = match fields.next()? {
+                "Error" => "error",
+                "Warning" => "warning",
+                "Message" => "info",
+                _ => return None,
+            };
+            let code = fields.next()?.parse::<u32>().ok()?;
+            let message = fields.next()?.trim();
+            if message.is_empty() {
+                return None;
+            }
+            Some(LatexLintDiagnostic {
+                line: line_no,
+                column,
+                length,
+                severity: severity.to_string(),
+                code,
+                message: message.to_string(),
+            })
+        })
+        .collect()
+}
+
+/// Lint the in-memory TeX buffer with chktex — the rule set Overleaf and VS
+/// Code's LaTeX Workshop run. Content goes in via stdin (`-I0`), so findings
+/// track the live editor buffer rather than the last autosaved snapshot, and
+/// chktex does not follow `\input`s (every open file lints itself). Returns an
+/// empty list when chktex is absent: linting degrades to the language pack's
+/// built-in checks instead of erroring on every keystroke.
+#[tauri::command]
+#[specta::specta]
+pub async fn chktex_lint(tex_path: String, content: String) -> ApiResult<Vec<LatexLintDiagnostic>> {
+    let Some(chktex) = resolve_engine("chktex") else {
+        return ApiResult::ok(Vec::new());
+    };
+    let mut cmd = tokio::process::Command::new(&chktex);
+    cmd.args(["-q", "-I0", "-f%l:%c:%d:%k:%n:%m\n"])
+        // cwd = the .tex parent so a project-local .chktexrc keeps working.
+        .current_dir(Path::new(&tex_path).parent().unwrap_or(Path::new(".")))
+        .stdin(std::process::Stdio::piped())
+        .stdout(std::process::Stdio::piped())
+        // The version banner and the run summary go to stderr; drop them.
+        .stderr(std::process::Stdio::null())
+        .kill_on_drop(true);
+    // Same GUI-PATH fix as latexmk: prepend chktex's own bin dir (TeX Live
+    // keeps kpsewhich etc. next to it, which chktex uses to find its rc file).
+    if let Some(bin_dir) = chktex.parent() {
+        let inherited = std::env::var_os("PATH").unwrap_or_default();
+        let mut path_env = std::ffi::OsString::from(bin_dir);
+        path_env.push(":");
+        path_env.push(inherited);
+        cmd.env("PATH", path_env);
+    }
+
+    let mut child = match cmd.spawn() {
+        Ok(child) => child,
+        Err(e) => return ApiResult::err(AppError::message(format!("failed to run chktex: {e}"))),
+    };
+    // Feed the buffer and close stdin (EOF) from a side task so a large
+    // document cannot deadlock against stdout being drained.
+    if let Some(mut stdin) = child.stdin.take() {
+        tokio::spawn(async move {
+            let _ = stdin.write_all(content.as_bytes()).await;
+        });
+    }
+    // The exit status is meaningless for linting (2 merely means "warnings
+    // found") — parsed stdout is the source of truth.
+    let output =
+        match tokio::time::timeout(std::time::Duration::from_secs(15), child.wait_with_output())
+            .await
+        {
+            Err(_) => return ApiResult::err(AppError::message("chktex timed out")),
+            Ok(Err(e)) => return ApiResult::err(AppError::message(format!("chktex failed: {e}"))),
+            Ok(Ok(output)) => output,
+        };
+
+    ApiResult::ok(parse_chktex_output(&String::from_utf8_lossy(
+        &output.stdout,
+    )))
 }
 
 /// `params` payload of a `LatexCompile` job.
@@ -497,5 +605,41 @@ mod tests {
         assert!(line_milestone("This is pdfTeX, Version 3.141592653").is_none());
         assert!(line_milestone("[1] [2] [3]").is_none());
         assert!(line_milestone("Latexmk: All targets () are up-to-date").is_none());
+    }
+
+    #[test]
+    fn parses_chktex_machine_output() {
+        // Real output shape captured from chktex 1.7.9 with
+        // `-f'%l:%c:%d:%k:%n:%m\n'` (real newline in the format string).
+        let stdout = concat!(
+            "1:15:3:Warning:11:You should use \\ldots to achieve an ellipsis.\n",
+            "2:16:2:Warning:8:Wrong length of dash may have been used.\n",
+            "3:1:1:Warning:2:Non-breaking space (`~') should have been used.\n",
+        );
+        let found = parse_chktex_output(stdout);
+        assert_eq!(found.len(), 3);
+        assert_eq!(
+            (found[0].line, found[0].column, found[0].length),
+            (1, 15, 3)
+        );
+        assert_eq!(found[0].severity, "warning");
+        assert_eq!(found[0].code, 11);
+        assert_eq!(found[2].line, 3);
+    }
+
+    #[test]
+    fn keeps_colons_inside_chktex_messages_and_skips_junk() {
+        let stdout = concat!(
+            "ChkTeX v1.7.9 - Copyright 1995-96 Jens T. Berger Thielemann.\n",
+            "\n",
+            "1:1:1:Message:44:note: with: colons\n",
+            "3:1:1:Error:1:boom\n",
+            "not:enough:fields\n",
+        );
+        let found = parse_chktex_output(stdout);
+        assert_eq!(found.len(), 2);
+        assert_eq!(found[0].message, "note: with: colons");
+        assert_eq!(found[0].severity, "info");
+        assert_eq!(found[1].severity, "error");
     }
 }

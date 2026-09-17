@@ -597,6 +597,15 @@ export const commands = {
 	 *  intermediates resets that database so the next compile is a full run.
 	 */
 	cleanLatexAuxFiles: (texPath: string) => __TAURI_INVOKE<ApiResult<null>>("clean_latex_aux_files", { texPath }),
+	/**
+	 *  Lint the in-memory TeX buffer with chktex — the rule set Overleaf and VS
+	 *  Code's LaTeX Workshop run. Content goes in via stdin (`-I0`), so findings
+	 *  track the live editor buffer rather than the last autosaved snapshot, and
+	 *  chktex does not follow `\input`s (every open file lints itself). Returns an
+	 *  empty list when chktex is absent: linting degrades to the language pack's
+	 *  built-in checks instead of erroring on every keystroke.
+	 */
+	chktexLint: (texPath: string, content: string) => __TAURI_INVOKE<ApiResult<LatexLintDiagnostic[]>>("chktex_lint", { texPath, content }),
 	jobLatexCompileEnqueue: (args: JobLatexCompileEnqueueArgs) => typedError<ApiResult<JobSnapshot>, string>(__TAURI_INVOKE("job_latex_compile_enqueue", { args })),
 };
 
@@ -2957,6 +2966,21 @@ export type LatexEngine = {
 	id: string,
 	label: string,
 	path: string | null,
+};
+
+/**
+ *  One chktex finding, mapped to editor coordinates (1-based line/column plus
+ *  match length). `code` is chktex's warning number — suppress one inline with
+ *  a `%chktex <n>` comment on the offending line.
+ */
+export type LatexLintDiagnostic = {
+	line: number,
+	column: number,
+	length: number,
+	/**  Mapped chktex kind: "error" | "warning" | "info" (its "Message" level). */
+	severity: string,
+	code: number,
+	message: string,
 };
 
 export type LayoutModelStatus = {

@@ -7,8 +7,11 @@ import { json } from "@codemirror/lang-json";
 import { python } from "@codemirror/lang-python";
 import { StreamLanguage } from "@codemirror/language";
 import { yaml } from "@codemirror/legacy-modes/mode/yaml";
-import type { Extension } from "@codemirror/state";
+import { type Diagnostic, linter } from "@codemirror/lint";
+import type { Extension, Text } from "@codemirror/state";
+import type { EditorView } from "@codemirror/view";
 import { latex, latexLanguage } from "codemirror-lang-latex";
+import { commands } from "@/lib/core/bindings";
 import { basenameOf, dirnameOf, joinPath } from "@/lib/core/path";
 import { type FileNode, listVaultDirChildren } from "@/lib/vault";
 import { vaultStore } from "@/lib/vault/store";
@@ -302,6 +305,72 @@ async function listVaultDirForTex(dirAbs: string): Promise<FileNode[]> {
 	return listVaultDirChildren(vaultPath, dirAbs).catch(() => []);
 }
 
+/** One chktex finding as returned by the Rust `chktex_lint` command. */
+export type ChktexFinding = {
+	/** 1-based line in the linted buffer. */
+	line: number;
+	/** 1-based character column within the line. */
+	column: number;
+	/** Length of the offending span in characters. */
+	length: number;
+	/** Mapped chktex kind: "error" | "warning" | "info". */
+	severity: string;
+	/** chktex warning number — suppress inline with a `%chktex <n>` comment. */
+	code: number;
+	message: string;
+};
+
+/**
+ * Map chktex findings (1-based line/column + match length) to editor-span
+ * diagnostics. The coordinates come from the exact buffer we sent, but stay
+ * defensive anyway: out-of-range lines drop, spans clamp to the document.
+ */
+export function chktexDiagnostics(
+	findings: ChktexFinding[],
+	doc: Text,
+): Diagnostic[] {
+	const diagnostics: Diagnostic[] = [];
+	for (const finding of findings) {
+		if (finding.line < 1 || finding.line > doc.lines) continue;
+		const line = doc.line(finding.line);
+		const from = Math.min(line.from + Math.max(finding.column - 1, 0), line.to);
+		const to = Math.min(from + Math.max(finding.length, 0), doc.length);
+		const severity =
+			finding.severity === "error" || finding.severity === "info"
+				? finding.severity
+				: "warning";
+		diagnostics.push({
+			from,
+			to,
+			message: `${finding.message} (chktex ${finding.code})`,
+			severity,
+			source: "chktex",
+		});
+	}
+	return diagnostics;
+}
+
+/**
+ * Async lint source running chktex — the rule catalogue Overleaf and VS Code's
+ * LaTeX Workshop use — through Rust on the live buffer (stdin, so findings
+ * track the editor rather than the last autosaved snapshot). Any failure
+ * degrades to silence: a missing/old chktex must never turn into error
+ * popups while typing.
+ */
+export function texChktexLintSource(
+	path: string,
+): (view: EditorView) => Promise<Diagnostic[]> {
+	return async (view) => {
+		try {
+			const res = await commands.chktexLint(path, view.state.doc.toString());
+			if (!res.ok) return [];
+			return chktexDiagnostics(res.data ?? [], view.state.doc);
+		} catch {
+			return [];
+		}
+	};
+}
+
 /**
  * Extensions for one file: the language plus (for TeX / BibTeX) a custom
  * completion source attached as language data, so `basicSetup`'s
@@ -336,6 +405,11 @@ export function textLanguageExtensions(path: string): Extension[] {
 				latexLanguage.data.of({
 					autocomplete: texPathCompletionSource(path, listVaultDirForTex),
 				}),
+				// chktex rules stack on the pack's built-in linter — the lint
+				// facet merges sources and runs them together. Slightly above
+				// the 750ms default because each run spawns a process (and the
+				// facet's delay max() paces the built-in linter too).
+				linter(texChktexLintSource(path), { delay: 1000 }),
 			];
 		case "bib":
 			return [

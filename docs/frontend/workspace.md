@@ -37,6 +37,7 @@
 | 高亮 | `textLanguageIdForPath`：`json` / `yaml(yml)` / `python(py,pyw)` / `tex(sty,cls)` / `bib`；`.txt` 与未知扩展名为纯文本 |
 | 语言实现 | `@codemirror/lang-json`、`@codemirror/lang-python`；stex / yaml 走 `@codemirror/legacy-modes` StreamLanguage；`.bib` 用内置最小 BibTeX tokenizer（`%{}%` 注释、`@type`、字段、字符串） |
 | 代码提示 | TeX / BibTeX 自定义补全经 `language.data.of({ autocomplete })` 挂进语言数据（`\命令` 列表；`@` 后条目类型、条目内行首字段名）；JSON / Python 用语言包自带补全 |
+| 文件路径补全 | TeX 路径参数命令（`\input` / `\include` / `\includeonly` / `\includegraphics` / `\includepdf` / `\includesvg` / `\bibliography` / `\addbibresource`，含 `*` 变体与 `[可选参数]`）的 `{}` 内按需列目录：路径相对当前文件目录解析（latexmk 以 .tex 父目录为 cwd），目录项带尾 `/` 置顶、按命令过滤扩展名（`\bibliography` 去掉 `.bib` 后缀），经 Host 树命令 / SFTP 逐级列出（同文件树忽略规则），带 10s 目录缓存；`validFor` 检测目录前缀变化后重新查询 |
 | 换行 | `EditorView.lineWrapping` 全局启用 |
 | 主题 | 基础 chrome 走 shadcn CSS 变量（`--foreground` / `--font-mono` / `--muted` …），语法色 light 用默认高亮、dark 用 oneDark，`Compartment` 随 `resolvedTheme` 热切换 |
 | 生命周期 | 与 ExcalidrawViewer 同契约：props 播种 + `reloadKey` 信号，内容 / dirty / 800ms 防抖自动保存由编辑器持有，`persistTextFile` 带磁盘冲突守卫与按路径写队列；外部改盘 `reloadKey` bump 后**原地换 doc**（视图、滚动、撤销历史保留，不重挂载） |

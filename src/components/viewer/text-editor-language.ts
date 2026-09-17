@@ -9,6 +9,9 @@ import { StreamLanguage } from "@codemirror/language";
 import { stex } from "@codemirror/legacy-modes/mode/stex";
 import { yaml } from "@codemirror/legacy-modes/mode/yaml";
 import type { Extension } from "@codemirror/state";
+import { basenameOf, dirnameOf, joinPath } from "@/lib/core/path";
+import { type FileNode, listVaultDirChildren } from "@/lib/vault";
+import { vaultStore } from "@/lib/vault/store";
 import { textLanguageIdForPath } from "@/lib/workspace/viewer";
 
 /**
@@ -171,6 +174,177 @@ function latexCompletion(context: CompletionContext): CompletionResult | null {
 	};
 }
 
+/** What a LaTeX command's `{}` file-path argument may complete to. */
+export type TexPathCommandSpec = {
+	/** Lowercase extensions (with dot) offered for the command. */
+	extensions: string[];
+	/** Also offer extension-less files: `\input{foo}` implicitly reads `foo.tex`. */
+	allowMissingExtension?: boolean;
+	/** `\bibliography{refs}` wants the base name (bibtex appends `.bib`). */
+	stripExtensionFromLabel?: boolean;
+};
+
+export const TEX_PATH_COMMANDS: Record<string, TexPathCommandSpec> = {
+	input: { extensions: [".tex"], allowMissingExtension: true },
+	include: { extensions: [".tex"], allowMissingExtension: true },
+	includeonly: { extensions: [".tex"], allowMissingExtension: true },
+	includegraphics: {
+		extensions: [
+			".pdf",
+			".png",
+			".jpg",
+			".jpeg",
+			".gif",
+			".svg",
+			".eps",
+			".bmp",
+		],
+	},
+	includepdf: { extensions: [".pdf"] },
+	includesvg: { extensions: [".svg"] },
+	bibliography: { extensions: [".bib"], stripExtensionFromLabel: true },
+	addbibresource: { extensions: [".bib"] },
+};
+
+export type TexPathContext = {
+	/** Command name (`input`, `includegraphics`, …). */
+	command: string;
+	/** Typed directory prefix (`figures/`), `./`-stripped; `""` = the file's own dir. */
+	dirPrefix: string;
+	/** Doc offset where the completing segment starts (right after the last `/`). */
+	segmentFrom: number;
+};
+
+/** Characters that end path-completion matching inside the braces. */
+const TEX_PATH_INVALID = /[{}%\\\n]/;
+
+/**
+ * Detect a file-path argument at the cursor: the nearest unclosed `{` whose
+ * preceding command takes a path (`\input{`, `\includegraphics[…]{`, …).
+ * Returns null outside such an argument — prose like `\textbf{…}` never
+ * triggers a path menu.
+ */
+export function parseTexPathContext(before: string): TexPathContext | null {
+	const brace = before.lastIndexOf("{");
+	if (brace === -1) return null;
+	// A `}` after the last `{`: the cursor sits past that group, not inside it.
+	if (before.lastIndexOf("}") > brace) return null;
+	const typed = before.slice(brace + 1);
+	if (TEX_PATH_INVALID.test(typed)) return null;
+	const command = before
+		.slice(0, brace)
+		.match(/\\([a-zA-Z]+)\*?\s*(?:\[[^[\]{}]*]\s*)*$/)?.[1];
+	if (!command || !TEX_PATH_COMMANDS[command]) return null;
+	const slash = typed.lastIndexOf("/");
+	return {
+		command,
+		dirPrefix:
+			slash === -1 ? "" : typed.slice(0, slash + 1).replace(/^\.\//, ""),
+		segmentFrom: brace + slash + 2,
+	};
+}
+
+/**
+ * Map one directory listing to completion options: directories carry a
+ * trailing `/` (selecting one continues completion inside it) and sort first,
+ * then files accepted by the command's spec; the edited file itself is never
+ * offered.
+ */
+export function texEntryCompletions(
+	entries: FileNode[],
+	spec: TexPathCommandSpec,
+	selfBaseName: string,
+): Completion[] {
+	const selfKey = selfBaseName.toLowerCase();
+	const options: Completion[] = [];
+	for (const entry of entries) {
+		if (entry.kind === "directory") {
+			options.push({ label: `${entry.name}/`, boost: 99 });
+			continue;
+		}
+		if (entry.name.toLowerCase() === selfKey) continue;
+		const dot = entry.name.lastIndexOf(".");
+		const ext = dot === -1 ? "" : entry.name.slice(dot).toLowerCase();
+		if (
+			!spec.extensions.includes(ext) &&
+			!(ext === "" && spec.allowMissingExtension)
+		) {
+			continue;
+		}
+		options.push(
+			spec.stripExtensionFromLabel && dot > 0
+				? { label: entry.name.slice(0, dot), detail: entry.name }
+				: { label: entry.name },
+		);
+	}
+	return options;
+}
+
+/** Lists one directory level for path completion; injectable for tests. */
+export type TexDirLister = (dirAbs: string) => Promise<FileNode[]>;
+
+const TEX_DIR_CACHE_TTL_MS = 10_000;
+const TEX_DIR_CACHE_MAX = 32;
+
+/**
+ * Completion source for file-path arguments of LaTeX commands. Paths resolve
+ * against the edited file's directory — `run_latexmk` compiles with the .tex
+ * parent as cwd, so that is what `\input{…}` sees at compile time. Listings
+ * are fetched one level at a time (Host tree command locally, SFTP remotely,
+ * same ignore rules as the file tree) and cached briefly per editor so
+ * backspacing / reopening the menu stays snappy.
+ */
+export function texPathCompletionSource(
+	filePath: string,
+	listDir: TexDirLister,
+): (context: CompletionContext) => Promise<CompletionResult | null> {
+	const fileDir = dirnameOf(filePath);
+	const selfBaseName = basenameOf(filePath);
+	const cache = new Map<string, { at: number; entries: FileNode[] }>();
+	return async (context) => {
+		const parsed = parseTexPathContext(context.state.sliceDoc(0, context.pos));
+		if (!parsed) return null;
+		const dirAbs = joinPath(fileDir, parsed.dirPrefix.replace(/\/+$/, ""));
+		let entries: FileNode[];
+		const hit = cache.get(dirAbs);
+		if (hit && Date.now() - hit.at < TEX_DIR_CACHE_TTL_MS) {
+			entries = hit.entries;
+		} else {
+			entries = await listDir(dirAbs).catch(() => []);
+			if (cache.size >= TEX_DIR_CACHE_MAX) cache.clear();
+			cache.set(dirAbs, { at: Date.now(), entries });
+		}
+		const options = texEntryCompletions(
+			entries,
+			TEX_PATH_COMMANDS[parsed.command],
+			selfBaseName,
+		);
+		if (options.length === 0) return null;
+		const dirAtQuery = parsed.dirPrefix;
+		return {
+			from: parsed.segmentFrom,
+			options,
+			// Re-query when the typed directory prefix changes (another `/`
+			// typed or backspaced) or the cursor leaves the path argument; keep
+			// this listing while typing inside the same segment.
+			validFor: (_text, _from, to, state) => {
+				const next = parseTexPathContext(state.sliceDoc(0, to));
+				return next !== null && next.dirPrefix === dirAtQuery;
+			},
+		};
+	};
+}
+
+/**
+ * Real directory lister: one level under `dirAbs` via the Host tree command
+ * (local) or SFTP (remote), applying the file-tree ignore rules.
+ */
+async function listVaultDirForTex(dirAbs: string): Promise<FileNode[]> {
+	const vaultPath = vaultStore.getState().vaultPath;
+	if (!vaultPath) return [];
+	return listVaultDirChildren(vaultPath, dirAbs).catch(() => []);
+}
+
 /**
  * Extensions for one file: the language plus (for TeX / BibTeX) a custom
  * completion source attached as language data, so `basicSetup`'s
@@ -188,6 +362,9 @@ export function textLanguageExtensions(path: string): Extension[] {
 			return [
 				stexLanguage,
 				stexLanguage.data.of({ autocomplete: latexCompletion }),
+				stexLanguage.data.of({
+					autocomplete: texPathCompletionSource(path, listVaultDirForTex),
+				}),
 			];
 		case "bib":
 			return [

@@ -18,11 +18,11 @@ pub async fn probe_agent(
     remote: Option<&dyn crate::features::agent::remote_host::RemoteAgentLaunch>,
 ) -> ProbeResult {
     let agent_id = desc.id.clone();
-    // Probe has no Vault; still never the process cwd (`/` when launched by
-    // LaunchServices) so an agent that scans its startup cwd cannot trip macOS
-    // folder prompts (#570). A remote target keeps its own vault path.
-    let cwd = agent_spawn_cwd(remote, None);
-    let acp = match to_acp_agent(desc, Some(&cwd), remote) {
+    // Unix probes use scratch (or the remote vault) instead of inheriting `/`
+    // from LaunchServices. Windows probes keep their original direct launch:
+    // an added cmd layer would become the only process the SDK can kill.
+    let cwd = (!cfg!(windows)).then(|| agent_spawn_cwd(remote, None));
+    let acp = match to_acp_agent(desc, cwd.as_deref(), remote) {
         Ok(a) => a,
         Err(e) => {
             return ProbeResult {

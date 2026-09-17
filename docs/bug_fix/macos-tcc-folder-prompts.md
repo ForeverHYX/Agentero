@@ -5,7 +5,7 @@
 **影响面**：macOS 上所有本地 ACP Agent 的启动阶段；首次使用最明显  
 **相关代码**：
 
-- `src-tauri/src/features/agent/acp/client.rs` — `to_acp_agent_local`（本地 spawn 一律 shell `cd` 到 Vault）
+- `src-tauri/src/features/agent/acp/client.rs` — `to_acp_agent_local`（Unix cwd 包装；Dsh 自管 cwd，Windows 保留既有策略）
 - `crates/agentero-core/src/paths.rs` — `agent_scratch_dir`
 - `src-tauri/src/features/agent/session/{run,warm}.rs`、`service.rs`、`acp/probe.rs` — cwd 兜底
 
@@ -39,13 +39,16 @@ ACP stdio 传输没有 cwd 字段：`NewSessionRequest.cwd` 只告诉 Agent 会�
 
 ## 3. 解决方案
 
-1. **本地 Agent 进程一律切到 Vault**：`to_acp_agent_local` 在已知 cwd 时对所有模板做
-   shell `cd` 包装（Unix `/bin/sh -c "cd … && exec …"`，Windows `cmd /D /C` + 环境变量），
-   不再只限 Pi / 自定义。Agent 启动扫描因此被限制在 Vault 内。
-2. **无 Vault 上下文时用私有目录兜底**：`run` / `warm` / `list` / `load` / 探针在 Vault
-   路径缺失或无效时取 `agent_scratch_dir()`（`…/agentero/agent-cwd`，按需创建），
-   **绝不**回落到进程 cwd。
-3. 移除 `AgentTemplate::needs_local_cwd_shell_wrap`（不再有选择分支）。
+1. **Unix 本地 Agent 切到 Vault**：`to_acp_agent_local` 在已知 cwd 时做
+   `/bin/sh -c "cd … && exec …"` 包装，不再只限 Pi / 自定义。Dsh 例外：其内置 launcher
+   已先切到自己的工作目录，直接保留原命令与参数，不再套外层 shell。
+2. **无本地 Vault 上下文时用私有目录兜底**：`run` / `warm` / `list` / `load` 与 Unix 探针
+   复用 `agent_spawn_cwd()`；本地 Vault 缺失或无效时取 `agent_scratch_dir()`
+   （`…/agentero/agent-cwd`，按需创建），不回落到进程 cwd。远端保留自身 Vault 路径；
+   local-sim 路径失效时在新建连接前明确报错，而非执行后才出现 shell/ACP 错误。
+3. **Windows 不扩大包装范围**：保留 Pi / Custom 会话的旧包装及所有探针的直启行为。
+   Windows 没有此 macOS TCC 问题，而 ACP SDK 只强杀直接子进程；新增 CMD 层会妨碍原生
+   Agent 的超时清理，也会让 UNC Vault 被 `cd /d` 拒绝。因此不以该修复引入这些新回归。
 
 ## 4. 验收建议
 
@@ -61,4 +64,7 @@ ACP stdio 传输没有 cwd 字段：`NewSessionRequest.cwd` 只告诉 Agent 会�
 - 该包装只作用于本地 Agent；SSH 远程 Agent 由 `remote_agent_shell_command` 处理。
 - Vault 本身位于云盘（iCloud / OneDrive / CloudStorage）时，读写 Vault 触发
   `kTCCServiceFileProviderDomain` 是预期行为，不在此修复范围。
-- `dsh` 模板外层先 `cd` 到 Vault，其内部再 `cd` 到 launcher 目录，内层覆盖外层。
+- Dsh 不套外层 shell，服务进程仍由自带 launcher 切到管理目录后启动。
+- Windows 既有 Pi / Custom 包装的 UNC 限制，以及自带 launcher 的进程树清理限制，仍未解决。
+  Windows 发布前需检查探针超时后原生 `.exe` 不残留，并单独记录 shim / launcher 的后代进程；
+  不能以 Unix 的进程组测试代替 Windows 实机验收。

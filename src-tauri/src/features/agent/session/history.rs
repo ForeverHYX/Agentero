@@ -2,8 +2,8 @@
 
 use crate::core::error::AppError;
 use crate::features::agent::acp::client::{
-    acp_terminals, agentero_acp_builder, client_initialize_request, simplified_agent_cwd,
-    timed_acp_initialize, timed_acp_request, to_acp_agent,
+    acp_terminals, agentero_acp_builder, client_initialize_request, timed_acp_initialize,
+    timed_acp_request, to_acp_agent,
 };
 use crate::features::agent::acp::interaction::permission_response;
 use crate::features::agent::acp::updates::{
@@ -52,15 +52,13 @@ pub fn list_sessions_page_done(
 
 /// List sessions from an ACP agent via `session/list`.
 /// Returns `supported: false` if the agent does not advertise session.list capability.
+/// `cwd` is already resolved/normalized by `agent_spawn_cwd` at the service boundary.
 pub async fn list_acp_sessions(
     desc: &AgentDescriptor,
-    mut cwd: PathBuf,
+    cwd: PathBuf,
     cursor: Option<String>,
     remote: Option<&dyn crate::features::agent::remote_host::RemoteAgentLaunch>,
 ) -> Result<AcpListSessionsResult, AppError> {
-    if remote.is_none() {
-        cwd = simplified_agent_cwd(&cwd);
-    }
     let acp = to_acp_agent(desc, Some(&cwd), remote)?;
     let terminals = acp_terminals(Some(cwd.clone()));
 
@@ -388,15 +386,13 @@ const REPLAY_SETTLE_CAP: std::time::Duration = std::time::Duration::from_millis(
 const REPLAY_SETTLE_QUIET: std::time::Duration = std::time::Duration::from_millis(200);
 const REPLAY_SETTLE_POLL: std::time::Duration = std::time::Duration::from_millis(50);
 
+/// Load a session using the cwd resolved by `agent_spawn_cwd` at the service boundary.
 pub async fn load_acp_session(
     desc: &AgentDescriptor,
     session_id: String,
-    mut cwd: PathBuf,
+    cwd: PathBuf,
     remote: Option<&dyn crate::features::agent::remote_host::RemoteAgentLaunch>,
 ) -> Result<AcpLoadSessionResult, AppError> {
-    if remote.is_none() {
-        cwd = simplified_agent_cwd(&cwd);
-    }
     let acp = to_acp_agent(desc, Some(&cwd), remote)?;
 
     let builder: Arc<Mutex<ReplayBuilder>> = Arc::new(Mutex::new(ReplayBuilder::default()));

@@ -7,21 +7,27 @@ Agentero 作为 **ACP Client**，stdio JSON-RPC 连接用户本机或远端 Agen
 - Crate：`agent-client-protocol`（及 Codex 的 npm ACP 适配器进程）。
 - ACP `initialize` 在 run / warm / 历史 list / load 四处统一最多等待 30 秒（设置页
   探针同样保留 30 秒总预算），覆盖 BYOA 冷启动；其余 session RPC 保持 15 秒预算。
-- 会话 `cwd` = 当前 Vault 根（远程则为远端 Vault 根），下发给 Agent 前经
-  `simplified_agent_cwd` 归一一次（run / warm / list / load 四处入口）：Windows 把
-  canonicalize 出的 `\?\D:\...` 还原为 `D:\...`，否则 Agent 把该路径转交给 MSYS2
-  shell（Git Bash）时无法 `cd`，POSIX cwd 也会初始化错误，`mktemp`/`cd` 报 ENOENT；
-  扩展 UNC（`\?\UNC\...`）与 POSIX 路径保持不变，远程历史入口不做本地路径转换。详见
+- 会话 `cwd` = 当前 Vault 根（远程则为远端 Vault 根）。run / warm / list / load
+  统一由 `agent_spawn_cwd()` 选择路径，并在内部调用 `simplified_agent_cwd` 归一；history
+  不再二次归一。Windows 把 canonicalize 出的 `\\?\D:\...` 还原为 `D:\...`，避免 Agent
+  转交给 MSYS2 shell（Git Bash）时 `mktemp` / `cd` 报 ENOENT；扩展 UNC
+  （`\\?\UNC\...`）与 SSH 的 POSIX 路径保持不变。详见
   [bug_fix/hermes-terminal-pending-msys2-hang.md](../bug_fix/hermes-terminal-pending-msys2-hang.md)。
-- **本地 Agent 进程一律先经 shell 切到 Vault（或 scratch）目录**再 exec：ACP stdio spawn 无
-  cwd 字段，Finder 启动的 macOS GUI 进程 cwd 是 `/`，Agent 若按进程 cwd 扫描就会遍历整个
-  文件系统并触发 macOS 的 Music / Desktop / Downloads / iCloud 等 TCC 弹窗（#570）。因此不再只
-  给 Pi / 自定义模板加包装，所有模板在已知 cwd 时都包装；其 `cmd.exe` 包装对同一前缀再剥一次
-  （幂等），避免 CMD 把 `\?\D:\...` 误判为 UNC（#458）。
-- 无 Vault 上下文时（initialize 探针、Vault 打开前的 warm、历史列表）cwd 取
-  `agent_scratch_dir()`（`…/agentero/agent-cwd`），**绝不**回落到进程 cwd，避免把 `/` 交给 Agent。
-- Windows 的 cwd 与完整 Agent 命令通过环境变量展开，避免 Rust argv 转义破坏 CMD 内层引号；
-  cwd 环境变量始终携带双引号，防止无空格路径中的括号等 CMD 元字符被当作语法（#458）。
+- **Unix 本地 Agent（Dsh 除外）先经 shell 切到 Vault 或 scratch，再 exec**：ACP stdio
+  spawn 无 cwd 字段，Finder 启动的 macOS GUI 进程 cwd 是 `/`，不能让 Agent 将其作为启动
+  工作区并触发无关 TCC 弹窗（#570）。Dsh 自带切到 launcher 目录的脚本，不加外层包装。
+- 本地 Vault 路径缺失或无效时，`agent_spawn_cwd()` 用 `agent_scratch_dir()`
+  （`…/agentero/agent-cwd`）兜底，不回落到进程 cwd。**Unix 探针**也复用该入口：本地用
+  scratch，远端沿用目标自己的 Vault；SSH 路径不在本机检查。local-sim 新建连接前验证
+  目录存在，失效时明确报错，不悄悄切到 scratch。
+- **Windows 保留既有启动策略**：仅 Pi / Custom 的 run / warm / list / load 使用 `cmd /D /C`
+  包装，探针均直接启动配置的命令，不增加 `cmd` 层。ACP SDK 当前只在 Unix 清理进程组；
+  扩大 Windows 包装范围会让原生 `.exe` 不再是可直接强杀的子进程，并使 UNC Vault 落入
+  CMD 不支持的 `cd /d` 路径。因此 #570 不在 Windows 推广包装；既有 Pi / Custom 以及
+  自带 launcher 的进程树清理限制仍需另行解决。
+- Windows Pi / Custom 包装的 cwd 与完整 Agent 命令通过环境变量展开，cwd 始终携带双引号，
+  防止无空格路径中的括号等 CMD 元字符被当作语法；盘符扩展前缀再幂等剥除一次（#458）。
+  该旧包装仍不支持 UNC cwd，不能将其他模板保持直启等同于所有 Windows Agent 都支持 UNC。
 - **Login-shell 环境注入**：本地 ACP agent 启动时会合并当前进程环境变量、用户 login-shell
   环境变量（`SHELL -lic 'env -0'`）以及 `AgentDescriptor.env`。这样 macOS/Linux 上从
   GUI 启动 Agentero 也能读到 `.zshrc` / `.bashrc` 里 `export` 的 `OPENAI_API_KEY`、

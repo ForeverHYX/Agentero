@@ -1,7 +1,7 @@
 use crate::core::error::AppError;
 pub(crate) use crate::core::process::windows_shell_path as simplified_agent_cwd;
 use crate::features::agent::acp::terminal::AcpTerminalManager;
-use crate::features::agent::models::{AgentDescriptor, AgentResultPayload};
+use crate::features::agent::models::{AgentDescriptor, AgentResultPayload, AgentTemplate};
 
 use crate::features::agent::registry::discovery::{login_shell_env, path_entries};
 use agent_client_protocol::schema::v1::{
@@ -82,7 +82,7 @@ pub(crate) fn wrap_local_command_with_cwd(
 /// Quote a token for a Windows `cmd /C` command. Empty strings, spaces, and
 /// most cmd metacharacters trigger double-quote wrapping; internal double
 /// quotes are backslash-escaped.
-#[cfg(windows)]
+#[cfg(any(windows, test))]
 pub(crate) fn windows_shell_quote(s: &str) -> String {
     if s.is_empty()
         || s.contains(' ')
@@ -114,22 +114,29 @@ pub(crate) fn windows_cmd_cwd_env_value(cwd: &Path) -> String {
     format!("\"{}\"", windows_cmd_cwd(cwd))
 }
 
-/// Windows variant of [`wrap_local_command_with_cwd`]. Uses `cmd /D /C` and an
-/// environment variable for the cwd so spaces in the vault path do not need to
-/// be quoted inside the command string.
-#[cfg(windows)]
-pub(crate) fn wrap_local_command_with_cwd(
-    command: &Path,
-    args: &[String],
+/// Windows launch policy and command construction. Kept available to unit
+/// tests on Unix so changes to the wrapper policy are checked on every CI run.
+#[cfg(any(windows, test))]
+fn windows_launch_command(
+    desc: &AgentDescriptor,
+    command: PathBuf,
     env: &mut HashMap<String, String>,
-    cwd: &Path,
+    cwd: Option<&Path>,
 ) -> (PathBuf, Vec<String>) {
+    // Keep the pre-#570 Windows policy: adding cmd around native launchers
+    // changes quoting, breaks UNC cwd, and prevents the SDK (which only kills
+    // its direct child on Windows) from forcibly reaping the real agent.
+    let Some(cwd) =
+        cwd.filter(|_| matches!(desc.template, AgentTemplate::Pi | AgentTemplate::Custom))
+    else {
+        return (command, desc.args.clone());
+    };
     env.insert(
         "AGENTERO_AGENT_CWD".to_string(),
         windows_cmd_cwd_env_value(cwd),
     );
     let mut agent_command = windows_shell_quote(&command.to_string_lossy());
-    for arg in args {
+    for arg in &desc.args {
         agent_command.push(' ');
         agent_command.push_str(&windows_shell_quote(arg));
     }
@@ -143,6 +150,9 @@ pub(crate) fn wrap_local_command_with_cwd(
         ],
     )
 }
+
+#[cfg(windows)]
+use windows_launch_command as local_launch_command;
 
 /// Summarize an ACP stdio line for debug logs without dumping the full payload.
 fn summarize_acp_line(line: &str) -> String {
@@ -247,7 +257,7 @@ pub(crate) fn resolve_command_in_agent_env(
     crate::core::process::resolve_command_in_paths(command, &paths)
 }
 
-/// OS-level working directory for a local ACP spawn.
+/// Resolve the ACP session cwd, also used by cwd-aware process launchers.
 ///
 /// A remote target advertises its own vault path; a local one uses the open
 /// Vault, falling back to [`crate::core::paths::agent_scratch_dir`] when the
@@ -268,16 +278,16 @@ pub(crate) fn agent_spawn_cwd(
     simplified_agent_cwd(&raw)
 }
 
-/// Local launch command/args: wrapped in a shell that `cd`s to `cwd` first when
-/// a cwd is known, so the agent process (and any relative custom `args` script)
-/// resolves against it instead of Agentero's own cwd.
+/// Unix launches change cwd before exec, except Dsh whose own launcher already
+/// changes to its managed directory before starting the agent.
+#[cfg(not(windows))]
 fn local_launch_command(
     desc: &AgentDescriptor,
     command: PathBuf,
     env: &mut HashMap<String, String>,
     cwd: Option<&Path>,
 ) -> (PathBuf, Vec<String>) {
-    match cwd {
+    match cwd.filter(|_| desc.template != AgentTemplate::Dsh) {
         Some(cwd) => wrap_local_command_with_cwd(&command, &desc.args, env, cwd),
         None => (command, desc.args.clone()),
     }
@@ -291,11 +301,9 @@ pub(crate) fn to_acp_agent_local(
     let command = resolve_command_in_agent_env(&desc.command, &child_env)
         .unwrap_or_else(|| PathBuf::from(&desc.command));
 
-    // Every local agent process is started in the Vault (or scratch) directory,
-    // not Agentero's own cwd. The ACP stdio transport has no cwd field, so a
-    // Finder-launched macOS GUI app would otherwise hand the agent `/` and any
-    // startup scan (Codex/Grok/Pi …) would enumerate `$HOME`, tripping macOS TCC
-    // prompts for Music / Desktop / Downloads / iCloud (#570).
+    // Unix agents must not inherit `/` from a Finder-launched app (#570).
+    // Dsh owns its launcher cwd; Windows retains its existing Pi/Custom-only
+    // wrapping policy until the transport supports native cwd + tree teardown.
     let (command, args) = local_launch_command(desc, command, &mut child_env, cwd);
 
     let env: Vec<EnvVariable> = child_env
@@ -313,7 +321,7 @@ pub(crate) fn to_acp_agent_local(
 }
 
 /// Build ACP agent process. When `remote` is SSH, wrap launch as `ssh … 'cd vault && exec agent'`.
-/// Local-sim remotes use a normal local process with cwd = remote vault path.
+/// Local-sim remotes validate their vault and reuse the local platform launch policy.
 pub(crate) fn to_acp_agent(
     desc: &AgentDescriptor,
     cwd: Option<&Path>,
@@ -328,7 +336,16 @@ pub(crate) fn to_acp_agent(
                 &desc.name,
             ));
         }
-        // local-sim: local binary, cwd set via NewSessionRequest to remote_cwd
+        // A stale local-sim handle must not silently run against scratch (or
+        // fail later with an opaque shell/ACP handshake error). SSH paths were
+        // handled above and must never be checked against the local filesystem.
+        let remote_cwd = r.agent_cwd();
+        if r.is_local_sim() && !remote_cwd.is_dir() {
+            return Err(AppError::message(format!(
+                "local-sim vault directory is unavailable: {}",
+                remote_cwd.display()
+            )));
+        }
     }
     to_acp_agent_local(desc, cwd)
 }
@@ -443,6 +460,110 @@ mod timeout_tests {
 #[cfg(test)]
 mod cwd_shell_wrap_tests {
     use super::*;
+    use crate::features::agent::models::AgentTemplate;
+    use crate::features::agent::remote_host::RemoteAgentLaunch;
+
+    fn descriptor(template: AgentTemplate) -> AgentDescriptor {
+        let info = crate::features::agent::registry::templates::template_info(template.as_str());
+        AgentDescriptor {
+            id: template.as_str().into(),
+            name: template.as_str().into(),
+            command: info
+                .as_ref()
+                .map(|info| info.command.clone())
+                .unwrap_or_else(|| "agent.exe".into()),
+            args: info.map(|info| info.args).unwrap_or_default(),
+            template,
+            env: HashMap::new(),
+            available: true,
+            last_error: None,
+            last_probe_ok: None,
+            last_probe_agent_name: None,
+            last_probe_error: None,
+            last_probed_at: None,
+        }
+    }
+
+    struct RemoteTarget {
+        cwd: PathBuf,
+        ssh: bool,
+    }
+
+    #[async_trait::async_trait]
+    impl RemoteAgentLaunch for RemoteTarget {
+        fn is_ssh(&self) -> bool {
+            self.ssh
+        }
+        fn is_local_sim(&self) -> bool {
+            !self.ssh
+        }
+        fn host(&self) -> &str {
+            "test-host"
+        }
+        fn agent_cwd(&self) -> PathBuf {
+            self.cwd.clone()
+        }
+        fn work_root(&self) -> &Path {
+            &self.cwd
+        }
+        fn ssh_stdio(
+            &self,
+            _command: &str,
+            _args: &[String],
+            _env: &HashMap<String, String>,
+        ) -> Result<(PathBuf, Vec<String>), AppError> {
+            Ok((
+                PathBuf::from("ssh"),
+                vec![self.cwd.to_string_lossy().into_owned()],
+            ))
+        }
+        async fn which(&self, _bin: &str) -> Result<Option<String>, AppError> {
+            unreachable!()
+        }
+        async fn materialize_skills(&self) -> Result<(), AppError> {
+            unreachable!()
+        }
+        async fn ensure_vault_skills(
+            &self,
+            _locale: Option<&str>,
+        ) -> Result<crate::features::vault::CreateVaultResult, AppError> {
+            unreachable!()
+        }
+    }
+
+    #[test]
+    fn dsh_keeps_its_own_launcher_without_an_outer_shell() {
+        let desc = descriptor(AgentTemplate::Dsh);
+        let command = PathBuf::from(&desc.command);
+        let mut env = HashMap::new();
+        let (program, args) =
+            local_launch_command(&desc, command.clone(), &mut env, Some(Path::new("/vault")));
+        assert_eq!(program, command);
+        assert_eq!(args, desc.args);
+        assert!(env.is_empty());
+    }
+
+    #[test]
+    fn stale_local_sim_is_rejected_without_checking_ssh_paths_locally() {
+        let root = tempfile::tempdir().unwrap();
+        let mut remote = RemoteTarget {
+            cwd: root.path().join("missing-vault"),
+            ssh: false,
+        };
+        let desc = descriptor(AgentTemplate::CodexAcp);
+        // None is also the Windows probe path: validation must not depend on
+        // whether the platform needs a cwd shell wrapper.
+        for cwd in [None, Some(remote.cwd.as_path())] {
+            let Err(error) = to_acp_agent(&desc, cwd, Some(&remote)) else {
+                panic!("stale local-sim vault must fail before spawning an agent");
+            };
+            assert!(error.to_string().contains("local-sim"));
+            assert!(error.to_string().contains("missing-vault"));
+        }
+        remote.ssh = true;
+        assert_eq!(agent_spawn_cwd(Some(&remote), None), remote.cwd);
+        assert!(to_acp_agent(&desc, Some(&remote.cwd), Some(&remote)).is_ok());
+    }
 
     #[test]
     #[cfg(not(windows))]
@@ -474,23 +595,9 @@ mod cwd_shell_wrap_tests {
     /// (only `Pi` / `Custom` were), yet it scans its process cwd on startup.
     #[test]
     #[cfg(not(windows))]
-    fn every_local_template_wraps_in_the_spawn_cwd() {
-        use crate::features::agent::models::AgentTemplate;
-
-        let desc = AgentDescriptor {
-            id: "codex-acp".into(),
-            name: "Codex".into(),
-            template: AgentTemplate::CodexAcp,
-            command: "codex-acp".into(),
-            args: vec!["--flag".into()],
-            env: HashMap::new(),
-            available: true,
-            last_error: None,
-            last_probe_ok: None,
-            last_probe_agent_name: None,
-            last_probe_error: None,
-            last_probed_at: None,
-        };
+    fn unix_codex_wraps_in_the_spawn_cwd() {
+        let mut desc = descriptor(AgentTemplate::CodexAcp);
+        desc.args = vec!["--flag".into()];
         let mut env = HashMap::new();
 
         let (cmd, args) = local_launch_command(
@@ -515,6 +622,53 @@ mod cwd_shell_wrap_tests {
     }
 
     #[test]
+    fn windows_preserves_native_launchers_and_unwrapped_probes() {
+        use crate::features::agent::registry::templates::{builtin_templates, template_from_id};
+
+        let mut templates = builtin_templates()
+            .into_iter()
+            .map(|info| template_from_id(&info.id))
+            .collect::<Vec<_>>();
+        templates.push(AgentTemplate::Custom);
+        for template in templates {
+            let desc = descriptor(template);
+            // Probe has no cwd wrapper, including Pi/Custom. A native .exe
+            // remains the SDK's direct child and can still be killed on timeout.
+            let mut env = HashMap::new();
+            let command = PathBuf::from(&desc.command);
+            assert_eq!(
+                windows_launch_command(&desc, command.clone(), &mut env, None),
+                (command.clone(), desc.args.clone())
+            );
+            assert!(env.is_empty());
+
+            if matches!(desc.template, AgentTemplate::Pi | AgentTemplate::Custom) {
+                let (program, _) =
+                    windows_launch_command(&desc, command, &mut env, Some(Path::new(r"C:\Vault")));
+                assert_eq!(program, PathBuf::from("cmd"));
+                assert!(env.contains_key("AGENTERO_AGENT_CWD"));
+                continue;
+            }
+            // Native launchers also remain direct for UNC vaults; they must not
+            // hit CMD's unsupported `cd /d` network path handling.
+            for cwd in [
+                r"C:\My Vault",
+                r"\\server\share\vault",
+                r"\\?\UNC\server\share\vault",
+            ] {
+                let mut env = HashMap::new();
+                assert_eq!(
+                    windows_launch_command(&desc, command.clone(), &mut env, Some(Path::new(cwd))),
+                    (command.clone(), desc.args.clone()),
+                    "{} at {cwd}",
+                    desc.id
+                );
+                assert!(env.is_empty());
+            }
+        }
+    }
+
+    #[test]
     fn agent_spawn_cwd_prefers_the_vault_and_never_the_process_cwd() {
         let vault = std::env::temp_dir().join(format!("agentero-cwd-{}", std::process::id()));
         std::fs::create_dir_all(&vault).unwrap();
@@ -533,7 +687,6 @@ mod cwd_shell_wrap_tests {
     }
 
     #[test]
-    #[cfg(windows)]
     fn windows_shell_quote_wraps_metacharacters() {
         assert_eq!(windows_shell_quote("plain"), "plain");
         assert_eq!(windows_shell_quote("with space"), "\"with space\"");
@@ -558,14 +711,15 @@ mod cwd_shell_wrap_tests {
     }
 
     #[test]
-    #[cfg(windows)]
     fn wrap_windows_builds_cmd_cd_script() {
         let mut env = HashMap::new();
-        let (cmd, args) = wrap_local_command_with_cwd(
-            Path::new(r"C:\Program Files\pi-acp.cmd"),
-            &["--foo".to_string(), "bar baz".to_string()],
+        let mut desc = descriptor(AgentTemplate::Pi);
+        desc.args = vec!["--foo".into(), "bar baz".into()];
+        let (cmd, args) = windows_launch_command(
+            &desc,
+            PathBuf::from(r"C:\Program Files\pi-acp.cmd"),
             &mut env,
-            Path::new(r"\\?\C:\My Vault"),
+            Some(Path::new(r"\\?\C:\My Vault")),
         );
         assert_eq!(cmd, PathBuf::from("cmd"));
         assert_eq!(

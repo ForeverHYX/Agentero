@@ -1,11 +1,14 @@
 # Pi ACP 启动时未使用 Vault 工作目录
 
-**状态**：已修复（最初只包装 Pi；见 #570 后改为**所有本地 Agent** 都注入 OS-level cwd）  
-**Issue**：#441（#570 扩展）  
-**影响面**：使用 Pi Agent 时的工作目录、论文/文件查找；以及所有 Agent 的启动 cwd  
+**状态**：已修复（#570 扩展 Unix 包装；Windows 保留 Pi / Custom 原有策略，Dsh 自管 cwd）
+
+**Issue**：#441（#570 扩展）
+
+**影响面**：使用 Pi Agent 时的工作目录、论文/文件查找；以及 Unix 本地 Agent 的启动 cwd
+
 **相关代码**：
 
-- `src-tauri/src/features/agent/acp/client.rs` — `to_acp_agent_local`、`wrap_local_command_with_cwd`
+- `src-tauri/src/features/agent/acp/client.rs` — `to_acp_agent_local`、`local_launch_command`、`windows_launch_command`
 - `crates/agentero-core/src/paths.rs` — `agent_scratch_dir`（无 Vault 时的安全 cwd）
 
 ## 1. 问题现象
@@ -22,15 +25,17 @@ ACP 的 `NewSessionRequest` 携带 `cwd` 字段，用于告知 Agent 当前会�
 
 ## 3. 解决方案
 
-本地启动一律用一个 shell 包装命令先把 OS-level 工作目录切到 Vault，再 `exec` 真正的 Agent；不再区分适配器（最初只覆盖已知不原生处理 ACP `cwd` 的 Pi）。
+对需要注入进程 cwd 的模板，先由 shell 切到 Vault；Unix 再 `exec` 真正的 Agent。包装范围按平台区分，避免为 macOS TCC 修复引入 Windows 启动回归。
 
 ### 3.1 包装范围
 
 最初只对 `Pi` / `Custom` 做 shell `cd` 包装。但即使 Agent 正确处理 ACP `NewSessionRequest.cwd`，
 它的**进程 cwd** 仍是 Agentero 的 cwd——macOS 上经 LaunchServices 启动的 GUI 进程 cwd 是 `/`，
 Agent 启动阶段按进程 cwd 扫描就会遍历整个文件系统（#570，见
-[macos-tcc-folder-prompts.md](macos-tcc-folder-prompts.md)）。因此现在**所有**本地模板在已知
-cwd 时都包装；`needs_local_cwd_shell_wrap` 已移除。
+[macos-tcc-folder-prompts.md](macos-tcc-folder-prompts.md)）。因此 Unix 本地模板在已知 cwd
+时都包装，**Dsh 除外**（自带 launcher 已先切工作目录）。Windows 仍只包装 Pi / Custom 的
+会话启动，探针维持直接启动；不把其他模板变为 `cmd.exe` 的子进程。策略集中在 ACP client，
+不再由 `AgentTemplate` 模型持有。
 
 ### 3.2 Unix 包装
 
@@ -40,14 +45,15 @@ cwd 时都包装；`needs_local_cwd_shell_wrap` 已移除。
 
 使用单引号包装每个 token，嵌入的单引号用 `'"'"'` 转义。
 
-### 3.3 Windows 包装
+### 3.3 Windows 包装（仅 Pi / Custom 会话启动）
 
 ```text
-cmd /D /C "cd /d "%AGENTERO_AGENT_CWD%" && \"<command>\" \"<arg1>\" ..."
+cmd /D /C "cd /d %AGENTERO_AGENT_CWD% && %AGENTERO_AGENT_COMMAND%"
 ```
 
-- 用 `AGENTERO_AGENT_CWD` 环境变量传递 Vault 路径，避免在命令字符串中直接引用带空格的 Vault 路径。
-- 命令和参数按需用双引号包裹，双引号内部用 `\"` 转义。
+- `AGENTERO_AGENT_CWD` 环境变量携带已加双引号的 Vault 路径，避免 Rust argv 转义破坏内层引号。
+- 完整命令通过 `AGENTERO_AGENT_COMMAND` 传递；保留原有 Pi / Custom 的参数处理，不为 Dsh 再套一层 CMD。
+- CMD 不支持 UNC 工作目录；此历史限制不扩大到其他模板。
 
 ### 3.4 调用点
 
@@ -59,19 +65,22 @@ cmd /D /C "cd /d "%AGENTERO_AGENT_CWD%" && \"<command>\" \"<arg1>\" ..."
 - `load_acp_session` — 加载历史会话
 
 以上入口在 Vault 路径缺失/无效时用 `agent_scratch_dir()`（`…/agentero/agent-cwd`）兜底，
-不再回落到进程 cwd。`probe_agent` 无 Vault 上下文，本地同样传入该 scratch 目录（远端沿用其
-自身 vault 路径，#570）。
+不再回落到进程 cwd。Unix 的 `probe_agent` 无本地 Vault 上下文，因此使用 scratch；远端沿用
+自身 Vault 路径。Windows 探针不传进程 cwd，保持原有直启语义。local-sim 新建连接前验证
+Vault 目录存在，路径失效时明确报错；不在本机检查 SSH 路径。
 
 ## 4. 验收建议
 
 1. 在 Windows 上打开一个 Vault，选择 Pi Agent 发送与论文相关的提问。
 2. 观察 Pi 的查找/读取路径，确认它落在当前 Vault 目录下，而不是 `C:\` 或应用安装目录。
 3. 在 macOS/Linux 上重复，确认 Pi 同样以 Vault 为工作目录。
-4. 其他 ACP Agent（Codex、Claude ACP、Kimi Code、Grok 等）进程 cwd 同样落在 Vault，
-   启动扫描不再跑到 `$HOME`（#570）。
+4. macOS/Linux 上其他 ACP Agent（Codex、Claude ACP、Kimi Code、Grok 等）进程 cwd 同样落在
+   Vault；Dsh 仍在 launcher 目录启动。Windows 检查其他模板与探针没有新增外层 CMD。
 
 ## 5. 边界
 
 - 该包装只作用于本地 Agent；SSH 远程 Agent 已在 `remote_agent_shell_command` 中通过 `cd` 处理工作目录。
-- `dsh` 模板自己管理 launcher 目录：外层 Vault 包装后再由其自身 `cd` 进 launcher，内层覆盖外层，行为不变。
-- 若 `pi-acp` 未来原生支持 ACP `cwd`，也只影响会话目录；进程 cwd 的 shell 包装对所有本地模板保留（#570）。
+- Dsh 自己管理 launcher 目录，直接保留原命令与参数；不依赖 Windows 双层 CMD 的嵌套引号或变量展开。
+- Windows ACP SDK 只强杀直接子进程；现有 Pi / Custom / npm shim / Dsh 自带 launcher 的后代进程
+  清理不在本次补齐。统一原生 cwd 与进程树清理前，不扩大 shell 包装范围。
+- 若 `pi-acp` 未来原生支持 ACP `cwd`，仍需分别验证会话目录与启动时进程目录。

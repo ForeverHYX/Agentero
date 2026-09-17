@@ -380,6 +380,9 @@ cargo test -p agentero-cli
 | 11.1.9 | 右栏·Agent | 看回答中的 Sources（若 Agent 返回） | 展示读过的本地路径 | ☐ |
 | 11.1.10 | 右栏·Agent（支持 Client terminal 的 Agent） | 依次执行 `pwd`、`echo AGENTERO_SMOKE`，再启动长命令，发送 `wait_for_exit` 并在等待期间读取 output、kill、release | 前两条及时返回；wait 挂起时同连接仍能处理 output / kill / release，卡片最终 completed / failed | ☐ |
 | 11.1.11 | 右栏·Agent | 在工具卡 pending 时结束或取消回合，再依次接收迟到 progress、completion、progress | 回合结束后不保留永久 spinner；内容与终态按同一 toolCallId 修正原卡片，迟到 progress 不恢复 spinner，也不新增重复卡片 | ☐ |
+| 11.1.12 | Windows · 设置 → Agent | 原生 `.exe` 探针模拟 initialize 阻塞，等待 30 秒超时并重复探测；查看父子进程 | 探针没有新增外层 CMD；超时后目标 `.exe` 被回收。Pi / Custom / npm shim / Dsh 自带 launcher 的后代清理单独记录，见 [cwd 边界](../bug_fix/pi-acp-vault-cwd.md#5-边界) | ☐ |
+| 11.1.13 | Windows · Dsh | 在含空格的用户路径与 Vault 下探测、发送一轮消息 | 仅使用 Dsh 自带 launcher，不新增双层 CMD；launcher 配置与认证可读取 | ☐ |
+| 11.1.14 | macOS · Finder 启动 | 打开本地 Vault，用 Codex 精读论文；无 Vault 时执行探针 | 会话进程 cwd 为 Vault，探针为 scratch；不因继承 `/` 触发 Music / Desktop / Downloads 等无关 TCC 弹窗 | ☐ |
 
 ### 11.2 权限
 

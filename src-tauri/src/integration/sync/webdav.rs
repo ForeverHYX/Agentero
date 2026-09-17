@@ -3,10 +3,12 @@
 //! app passwords, Nextcloud app tokens and NAS deployments alike).
 //!
 //! No XML parsing: the connection test only needs PROPFIND's status code and
-//! every object key is our own ASCII-safe layout. Most WebDAV servers ignore
-//! `If-Match` / `If-None-Match` on PUT, which maps onto the same degraded
-//! mode as Aliyun OSS: content-addressed blobs make plain PUTs idempotent,
-//! and the HEAD CAS degrades to GET → PUT, converging via merge retries.
+//! every object key is our own ASCII-safe layout. Conditional-write support
+//! varies: Nutstore ignores `If-None-Match` but enforces `If-Match` (the
+//! probe targets `If-Match`, so the HEAD CAS stays atomic there); servers
+//! that ignore `If-Match` too degrade to plain PUTs like Aliyun OSS —
+//! content-addressed blobs make that idempotent, and convergence comes from
+//! the engine's merge retries.
 
 use crate::core::error::AppError;
 use crate::core::http;
@@ -151,14 +153,19 @@ impl WebdavClient {
         check(resp, "DELETE", key).await.map(|_| ())
     }
 
-    /// Probe conditional-write support with a throwaway key: PUT it twice
-    /// with `If-None-Match: *`. A real 412 on the second PUT means the
-    /// server enforces conditional headers; a plain 2xx means they are
-    /// ignored and sync must degrade to plain PUTs. Inconclusive probes
-    /// fail open — an ignored header is harmless, a missed CAS is not.
+    /// Probe conditional-write support with a throwaway key: create it, then
+    /// PUT it again with `If-Match` pointing at a stale etag. A real 412
+    /// means the server enforces `If-Match` — the one conditional that backs
+    /// the HEAD CAS. `If-None-Match: *` is deliberately not probed: servers
+    /// like Nutstore ignore it, and an ignored create-only header is harmless
+    /// for content-addressed blobs and unique manifest keys. Inconclusive
+    /// probes fail open — an ignored header is harmless, a missed CAS is not.
     pub async fn probe_conditional_writes(&self) -> Result<bool, AppError> {
         let key = format!(".sync-probe-{}", uuid::Uuid::new_v4().simple());
-        match self.put(&key, Vec::new(), PutCondition::IfNoneMatch).await {
+        match self
+            .put(&key, b"probe".to_vec(), PutCondition::IfNoneMatch)
+            .await
+        {
             Ok(PutOutcome::Ok) => {}
             outcome => {
                 log::warn!(
@@ -168,7 +175,14 @@ impl WebdavClient {
                 return Ok(true);
             }
         }
-        let supported = match self.put(&key, Vec::new(), PutCondition::IfNoneMatch).await {
+        let supported = match self
+            .put(
+                &key,
+                b"probe2".to_vec(),
+                PutCondition::IfMatch("\"00000000deadbeef\"".into()),
+            )
+            .await
+        {
             Ok(PutOutcome::PreconditionFailed) => true,
             Ok(PutOutcome::Ok) => false,
             Err(e) => {
@@ -209,7 +223,13 @@ impl WebdavClient {
             let url = format!("{}/", self.url_for_dir(dir));
             let resp = self.send(mkcol.clone(), &url, &[], Vec::new()).await?;
             let status = resp.status();
-            if status.is_success() || status == reqwest::StatusCode::METHOD_NOT_ALLOWED {
+            if status.is_success()
+                || status == reqwest::StatusCode::METHOD_NOT_ALLOWED
+                || status == reqwest::StatusCode::FORBIDDEN
+            {
+                // 405 = exists. 403 = exists but protected (Nutstore answers
+                // MKCOL on its `/dav` root with OperationNotAllowed); a truly
+                // read-only location fails loudly on the next PUT instead.
                 if let Ok(mut set) = self.known_dirs.lock() {
                     set.insert(dir.clone());
                 }

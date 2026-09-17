@@ -3,16 +3,22 @@ import { oneDark } from "@codemirror/theme-one-dark";
 import { EditorView, keymap } from "@codemirror/view";
 import { basicSetup } from "codemirror";
 import { useTheme } from "next-themes";
-import { useCallback, useEffect, useMemo, useRef } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useTextEditorFontSize } from "@/components/viewer/hooks/use-text-editor-font-size";
 import { AskPopover } from "@/components/viewer/pdf/cards/ask-popover";
 import { SelectionMenu } from "@/components/viewer/pdf/cards/selection-menu";
 import { textLanguageExtensions } from "@/components/viewer/text-editor-language";
+import {
+	type EditorDiagnostic,
+	lintDiagnosticsWatcher,
+	TextEditorLintFooter,
+} from "@/components/viewer/text-editor-lint-footer";
 import { TextEditorToolbar } from "@/components/viewer/text-editor-toolbar";
 import { useTextEditorSelection } from "@/components/viewer/use-text-editor-selection";
 import { basenameOf } from "@/lib/core/path";
 import { registerTextEditorFlusher } from "@/lib/workspace/text-editor-flush";
+import { textLanguageIdForPath } from "@/lib/workspace/viewer";
 
 interface TextEditorProps {
 	seed: string;
@@ -176,6 +182,27 @@ export function TextEditor({
 	// routes through refs inside the hook.
 	const selection = useTextEditorSelection({ viewRef, path, active });
 
+	// Lint diagnostics for the status-bar footer (TeX only — the only mode
+	// with lint sources). The watcher extension registers once at mount and
+	// pushes the merged findings after every lint run.
+	const [diagnostics, setDiagnostics] = useState<EditorDiagnostic[]>([]);
+	const handleDiagnostics = useCallback((next: EditorDiagnostic[]) => {
+		setDiagnostics(next);
+	}, []);
+	const hasLintSources = useMemo(
+		() => textLanguageIdForPath(path) === "tex",
+		[path],
+	);
+	const jumpToDiagnostic = useCallback((diagnostic: EditorDiagnostic) => {
+		const view = viewRef.current;
+		if (!view) return;
+		view.dispatch({
+			selection: { anchor: diagnostic.from, head: diagnostic.to },
+			scrollIntoView: true,
+		});
+		view.focus();
+	}, []);
+
 	// Expose the flush to lib actions: the compile button builds disk bytes,
 	// so it must first land this editor's debounced autosave.
 	useEffect(() => registerTextEditorFlusher(path, flush), [path, flush]);
@@ -190,6 +217,7 @@ export function TextEditor({
 			EditorView.lineWrapping,
 			keymap.of(manualSaveKeymap),
 			selection.selectionListener,
+			lintDiagnosticsWatcher(handleDiagnostics),
 			languageCompartment.current.of(language),
 			themeCompartment.current.of(themeRef.current === "dark" ? oneDark : []),
 			fontSizeCompartment.current.of(
@@ -215,9 +243,9 @@ export function TextEditor({
 			viewRef.current = null;
 		};
 		// Mount-once; seed/path/theme changes are handled by the effects below
-		// (`manualSaveKeymap` / `selection.selectionListener` are stable
-		// useMemos — never re-mount the editor).
-	}, [manualSaveKeymap, selection.selectionListener]);
+		// (`manualSaveKeymap` / `selection.selectionListener` /
+		// `handleDiagnostics` are stable — never re-mount the editor).
+	}, [manualSaveKeymap, selection.selectionListener, handleDiagnostics]);
 
 	// Follow theme switches without rebuilding the editor.
 	useEffect(() => {
@@ -293,12 +321,17 @@ export function TextEditor({
 	// Ask popover escape the panel's overflow/stacking context (same as the
 	// PDF card stack); inactive keep-alive panes render no chrome.
 	return (
-		<div className="group relative h-full w-full overflow-hidden">
+		<div
+			className={`group relative flex h-full w-full flex-col overflow-hidden ${className ?? ""}`}
+		>
 			<TextEditorToolbar fontSize={fontSize} onFontSizeChange={setFontSize} />
-			<div
-				ref={hostRef}
-				className={`h-full w-full overflow-hidden ${className ?? ""}`}
-			/>
+			<div ref={hostRef} className="min-h-0 w-full flex-1 overflow-hidden" />
+			{hasLintSources ? (
+				<TextEditorLintFooter
+					diagnostics={diagnostics}
+					onJump={jumpToDiagnostic}
+				/>
+			) : null}
 			{active
 				? createPortal(
 						<>

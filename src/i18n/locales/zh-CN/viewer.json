@@ -264,5 +264,10 @@
 	},
 	"excalidraw": {
 		"empty": "暂无可用绘图。"
+	},
+	"textEditor": {
+		"errorCount": "{{count}} 个错误",
+		"warningCount": "{{count}} 个警告",
+		"infoCount": "{{count}} 个提示"
 	}
 }

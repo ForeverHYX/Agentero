@@ -264,5 +264,10 @@
 	},
 	"excalidraw": {
 		"empty": "No drawing available."
+	},
+	"textEditor": {
+		"errorCount": "{{count}} errors",
+		"warningCount": "{{count}} warnings",
+		"infoCount": "{{count}} info"
 	}
 }

@@ -38,6 +38,7 @@
 | 语言实现 | `@codemirror/lang-json`、`@codemirror/lang-python`；TeX 走 `codemirror-lang-latex`（Overleaf Lezer 语法的社区包：精确高亮、环境自动闭合 / 缩进、preamble / 注释 / 小节折叠；`enableAutocomplete` 关闭——它默认装的 `autocompletion({override})` 层会吞掉其他补全源，补全统一经 `basicSetup` 的 autocompletion 调度语言数据；**lint 开启**——波浪线标未闭合环境 / 括号、重复 label、缺失引用等，悬停命令弹文档，`fileName` 让 linter 在 .sty/.cls 上放宽 document-env 规则）；yaml 走 `@codemirror/legacy-modes` StreamLanguage；`.bib` 用内置最小 BibTeX tokenizer（`%{}%` 注释、`@type`、字段、字符串） |
 | 代码提示 | TeX / BibTeX 自定义补全经 `language.data.of({ autocomplete })` 挂进语言数据（TeX 为语言包的命令 / 环境 / 数学符号补全 + 文件路径补全；BibTeX 为 `@` 后条目类型、条目内行首字段名）；JSON / Python 用语言包自带补全 |
 | 代码检查 | TeX 双层：语言包内建 lint（未闭合环境 / 括号、悬空 `\ref`、重复 label 等，语法树级）+ **chktex** 外部规则集（Overleaf / VS Code LaTeX Workshop 同源，47 条编号警告）——Rust `chktex_lint` 把活动缓冲区经 stdin 喂给本机 chktex（TeX Live 自带，`-I0` 不跟随 `\input`，缺席时返回空、静默降级为仅内建规则），行 / 列 / 命中长度映射回编辑器坐标，消息尾注 `chktex <编号>` 便于行内 `%chktex <n>` 抑制；两层经 lint facet 合并，1s 防抖（facet 取 max，两层同节奏） |
+| lint 状态栏 | 编辑器底部（仅 TeX——唯一带 lint 源的模式）按严重度计数：错误（红 `CircleAlert`）/ 警告（amber `TriangleAlert`）/ 提示（sky `Info`）icon + 数字，零计数淡化；计数区即悬停目标，纯 CSS hover/focus 弹出问题卡列表（文档序，icon + 消息 + `L行:C列`，点击选中该 span、滚动并聚焦编辑器）。刷新经 `setDiagnosticsEffect` 监听（lint state 对外私有，该 effect 是公开信号；两源每次 run 合并为单事务）；实现 `text-editor-lint-footer.tsx` |
 | 文件路径补全 | TeX 路径参数命令（`\input` / `\include` / `\includeonly` / `\includegraphics` / `\includepdf` / `\includesvg` / `\bibliography` / `\addbibresource`，含 `*` 变体与 `[可选参数]`）的 `{}` 内按需列目录：路径相对当前文件目录解析（latexmk 以 .tex 父目录为 cwd），目录项带尾 `/` 置顶、按命令过滤扩展名（`\bibliography` 去掉 `.bib` 后缀），经 Host 树命令 / SFTP 逐级列出（同文件树忽略规则），带 10s 目录缓存；`validFor` 检测目录前缀变化后重新查询 |
 | 换行 | `EditorView.lineWrapping` 全局启用 |
 | 主题 | 基础 chrome 走 shadcn CSS 变量（`--foreground` / `--font-mono` / `--muted` …），语法色 light 用默认高亮、dark 用 oneDark，`Compartment` 随 `resolvedTheme` 热切换 |
@@ -60,6 +61,7 @@ Library · Trash · PDF · HTML · 图片 · Markdown · 论文 NOTES · 纯文�
 | `src/lib/shell/doc-window.ts` | `doc_window_open` 前端封装 |
 | `src/components/shell/doc-window-root.tsx` | 文档弹出窗根 |
 | `src/components/viewer/text-editor.tsx` | CodeMirror 纯文本编辑器（`text` 兜底模式） |
+| `src/components/viewer/text-editor-lint-footer.tsx` | TeX 编辑器 lint 状态栏（严重度计数 + 悬停问题卡 + 点击跳转） |
 | `src/components/viewer/use-text-editor-selection.ts` | CodeMirror 选区 → 划词工具栏（快速对话 / 加入对话） |
 | `src/components/viewer/text-editor-language.ts` | 扩展名 → 语言 / 自定义补全映射 |
 | `src/lib/workspace/text-editor-flush.ts` | 编辑器防抖自动保存的 flush 注册表（编译按钮编译前落盘） |

@@ -103,8 +103,11 @@ const SEVERITY_ORDER: LintSeverity[] = ["error", "warning", "info"];
 /**
  * The counts double as the hover target: resting on them reveals the problem
  * list as cards (document order, severity icon + message + L{line}:C{col});
- * clicking a card selects and scrolls to the span. Pure CSS hover/focus — no
- * popover state to fight the editor's focus.
+ * clicking a card selects and scrolls to the span. Pure CSS hover — no
+ * popover state to fight the editor's focus. The group is NAMED: the editor
+ * wrapper also carries a bare `group` (toolbar hover chrome), and a bare
+ * `group-hover` here would match it and pop the card from anywhere in the
+ * editor.
  */
 export function TextEditorLintFooter({
 	diagnostics,
@@ -123,7 +126,7 @@ export function TextEditorLintFooter({
 
 	return (
 		<div className="flex h-7 shrink-0 items-center border-t bg-muted/30 px-3">
-			<div className="group relative flex items-center gap-3">
+			<div className="group/lint relative flex items-center gap-3">
 				{SEVERITY_ORDER.map((severity) => {
 					const { Icon, iconClasses, countKey } = SEVERITY_META[severity];
 					const count = counts[severity];
@@ -142,7 +145,7 @@ export function TextEditorLintFooter({
 					);
 				})}
 				{diagnostics.length > 0 ? (
-					<div className="pointer-events-none invisible absolute bottom-full left-0 z-20 mb-1.5 max-h-72 w-[28rem] overflow-y-auto rounded-md border bg-popover p-1 text-foreground opacity-0 shadow-lg transition-opacity group-focus-within:pointer-events-auto group-focus-within:visible group-focus-within:opacity-100 group-hover:pointer-events-auto group-hover:visible group-hover:opacity-100">
+					<div className="pointer-events-none invisible absolute bottom-full left-0 z-20 mb-1.5 max-h-72 w-[28rem] overflow-y-auto rounded-md border bg-popover p-1 text-foreground opacity-0 shadow-lg transition-opacity group-hover/lint:pointer-events-auto group-hover/lint:visible group-hover/lint:opacity-100">
 						{diagnostics.map((diagnostic) => {
 							const { Icon, iconClasses } = SEVERITY_META[diagnostic.severity];
 							return (

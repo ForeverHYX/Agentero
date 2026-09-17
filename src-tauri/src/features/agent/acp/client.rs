@@ -591,6 +591,47 @@ mod cwd_shell_wrap_tests {
         assert!(env.is_empty());
     }
 
+    /// #570 policy guard: on Unix every local template is wrapped except Dsh,
+    /// whose own launcher already `cd`s before starting the agent. Mirrors the
+    /// Windows test below so a future per-template exemption cannot slip in
+    /// unnoticed.
+    #[test]
+    #[cfg(not(windows))]
+    fn unix_wraps_every_local_template_except_dsh() {
+        use crate::features::agent::registry::templates::{builtin_templates, template_from_id};
+
+        let mut templates = builtin_templates()
+            .into_iter()
+            .map(|info| template_from_id(&info.id))
+            .collect::<Vec<_>>();
+        templates.push(AgentTemplate::Custom);
+
+        for template in templates {
+            let is_dsh = template == AgentTemplate::Dsh;
+            let desc = descriptor(template);
+            let command = PathBuf::from(&desc.command);
+            let mut env = HashMap::new();
+            let (program, args) =
+                local_launch_command(&desc, command.clone(), &mut env, Some(Path::new("/vault")));
+
+            if is_dsh {
+                assert_eq!((program, args), (command, desc.args.clone()), "{}", desc.id);
+                assert!(env.is_empty(), "{}", desc.id);
+                continue;
+            }
+            assert_eq!(program, PathBuf::from("/bin/sh"), "{}", desc.id);
+            assert!(
+                args.first().map(String::as_str) == Some("-c")
+                    && args
+                        .get(1)
+                        .is_some_and(|s| s.contains("cd '/vault' && exec ")),
+                "{} not wrapped: {args:?}",
+                desc.id
+            );
+            assert!(env.is_empty(), "{}", desc.id);
+        }
+    }
+
     /// #570 regression guard: Codex used to be excluded from the shell wrap
     /// (only `Pi` / `Custom` were), yet it scans its process cwd on startup.
     #[test]

@@ -163,7 +163,11 @@ fn zcode_cached_cli_candidates(releases_root: std::path::PathBuf) -> Vec<std::pa
 /// bundle that still supports the registry push over the app's built-in copy.
 /// User-set env in the registered agent always wins.
 pub fn zcode_runtime_env() -> Vec<(String, String)> {
-    let Some(home) = std::env::var_os("HOME").map(std::path::PathBuf::from) else {
+    // Windows has no guaranteed `HOME`; the desktop app uses USERPROFILE there.
+    let home = std::env::var_os("HOME")
+        .or_else(|| std::env::var_os("USERPROFILE"))
+        .map(std::path::PathBuf::from);
+    let Some(home) = home else {
         return Vec::new();
     };
     let mut env = Vec::new();
@@ -201,16 +205,35 @@ pub fn zcode_runtime_env() -> Vec<(String, String)> {
     }
 
     // Newest CLI bundle whose backend still supports the registry push.
-    let mut candidates = zcode_cached_cli_candidates(
-        home.join("Library/Application Support/ZCode/remote-assets-cache/releases"),
-    );
+    let mut candidates = Vec::new();
     if cfg!(target_os = "macos") {
+        candidates.extend(zcode_cached_cli_candidates(
+            home.join("Library/Application Support/ZCode/remote-assets-cache/releases"),
+        ));
+        // Machine-wide and per-user install locations (adapter discovers both).
         candidates.push(std::path::PathBuf::from(
             "/Applications/ZCode.app/Contents/Resources/glm/zcode.cjs",
         ));
+        candidates.push(home.join("Applications/ZCode.app/Contents/Resources/glm/zcode.cjs"));
     }
-    if let Some(app_dir) = std::env::var_os("LOCALAPPDATA").map(std::path::PathBuf::from) {
-        candidates.push(app_dir.join("Programs/ZCode/resources/glm/zcode.cjs"));
+    if cfg!(target_os = "linux") {
+        candidates.extend(zcode_cached_cli_candidates(
+            home.join(".config/ZCode/remote-assets-cache/releases"),
+        ));
+        candidates.push(std::path::PathBuf::from(
+            "/opt/ZCode/resources/glm/zcode.cjs",
+        ));
+        candidates.push(std::path::PathBuf::from(
+            "/usr/share/zcode/resources/glm/zcode.cjs",
+        ));
+    }
+    if cfg!(target_os = "windows") {
+        candidates.extend(zcode_cached_cli_candidates(
+            home.join("AppData/Roaming/ZCode/remote-assets-cache/releases"),
+        ));
+        if let Some(app_dir) = std::env::var_os("LOCALAPPDATA").map(std::path::PathBuf::from) {
+            candidates.push(app_dir.join("Programs/ZCode/resources/glm/zcode.cjs"));
+        }
     }
     if let Some(cli) = candidates.into_iter().find(|cjs| {
         std::fs::read_to_string(cjs)
@@ -218,6 +241,14 @@ pub fn zcode_runtime_env() -> Vec<(String, String)> {
             .unwrap_or(false)
     }) {
         env.push(("ZCODE_BIN".to_string(), cli.display().to_string()));
+        // The adapter's Node resolution relies on Unix `which` and falls back
+        // to executing the `.cjs` directly — not a valid Windows entrypoint.
+        // Hand it an explicit runtime when we can resolve one.
+        if cfg!(target_os = "windows") {
+            if let Some(node) = crate::core::process::discover::resolve_command("node") {
+                env.push(("ZCODE_NODE".to_string(), node.display().to_string()));
+            }
+        }
     }
     env
 }

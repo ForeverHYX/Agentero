@@ -253,13 +253,12 @@ pub(crate) fn to_acp_agent_local(
 ) -> Result<AcpAgent, AppError> {
     let mut child_env = effective_local_agent_env(desc);
     // ZCode's adapter needs the desktop app's runtime provider table and a
-    // backend CLI that still supports the provider-registry push; user-set
-    // env in the registered agent takes precedence.
+    // backend CLI that still supports the provider-registry push. Skip keys
+    // already present (descriptor env and any user shell export), so explicit
+    // user settings always win over auto-discovery.
     if desc.template == AgentTemplate::Zcode {
         for (key, value) in crate::features::agent::registry::templates::zcode_runtime_env() {
-            if !desc.env.contains_key(&key) {
-                child_env.insert(key, value);
-            }
+            child_env.entry(key).or_insert(value);
         }
     }
     let command = resolve_command_in_agent_env(&desc.command, &child_env)

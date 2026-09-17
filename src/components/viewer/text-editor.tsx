@@ -4,9 +4,14 @@ import { EditorView, keymap } from "@codemirror/view";
 import { basicSetup } from "codemirror";
 import { useTheme } from "next-themes";
 import { useCallback, useEffect, useMemo, useRef } from "react";
+import { createPortal } from "react-dom";
 import { useTextEditorFontSize } from "@/components/viewer/hooks/use-text-editor-font-size";
+import { AskPopover } from "@/components/viewer/pdf/cards/ask-popover";
+import { SelectionMenu } from "@/components/viewer/pdf/cards/selection-menu";
 import { textLanguageExtensions } from "@/components/viewer/text-editor-language";
 import { TextEditorToolbar } from "@/components/viewer/text-editor-toolbar";
+import { useTextEditorSelection } from "@/components/viewer/use-text-editor-selection";
+import { basenameOf } from "@/lib/core/path";
 import { registerTextEditorFlusher } from "@/lib/workspace/text-editor-flush";
 
 interface TextEditorProps {
@@ -21,6 +26,8 @@ interface TextEditorProps {
 	onDirtyChange: (dirty: boolean) => void;
 	/** Manual save (⌘S) after the flush landed — TeX compiles here. */
 	onManualSave?: (path: string) => void;
+	/** Whether the owning tab is the active panel — gates the selection toolbar. */
+	active?: boolean;
 	className?: string;
 }
 
@@ -71,6 +78,7 @@ export function TextEditor({
 	onPersist,
 	onDirtyChange,
 	onManualSave,
+	active = true,
 	className,
 }: TextEditorProps) {
 	// Font size managed by hook with process-wide persistence (like PDF paper tone).
@@ -163,6 +171,11 @@ export function TextEditor({
 		[],
 	);
 
+	// Selection → floating Quick chat / Add to chat toolbar (same chrome the
+	// PDF surfaces have). The listener extension registers once at mount and
+	// routes through refs inside the hook.
+	const selection = useTextEditorSelection({ viewRef, path, active });
+
 	// Expose the flush to lib actions: the compile button builds disk bytes,
 	// so it must first land this editor's debounced autosave.
 	useEffect(() => registerTextEditorFlusher(path, flush), [path, flush]);
@@ -176,6 +189,7 @@ export function TextEditor({
 			basicSetup,
 			EditorView.lineWrapping,
 			keymap.of(manualSaveKeymap),
+			selection.selectionListener,
 			languageCompartment.current.of(language),
 			themeCompartment.current.of(themeRef.current === "dark" ? oneDark : []),
 			fontSizeCompartment.current.of(
@@ -201,8 +215,9 @@ export function TextEditor({
 			viewRef.current = null;
 		};
 		// Mount-once; seed/path/theme changes are handled by the effects below
-		// (`manualSaveKeymap` is a stable useMemo — never re-mounts the editor).
-	}, [manualSaveKeymap]);
+		// (`manualSaveKeymap` / `selection.selectionListener` are stable
+		// useMemos — never re-mount the editor).
+	}, [manualSaveKeymap, selection.selectionListener]);
 
 	// Follow theme switches without rebuilding the editor.
 	useEffect(() => {
@@ -274,6 +289,9 @@ export function TextEditor({
 
 	// An unreadable file still opens an empty buffer — the next autosave
 	// creates/repairs the file on disk.
+	// The selection chrome portals to body so the fixed-position toolbar and
+	// Ask popover escape the panel's overflow/stacking context (same as the
+	// PDF card stack); inactive keep-alive panes render no chrome.
 	return (
 		<div className="group relative h-full w-full overflow-hidden">
 			<TextEditorToolbar fontSize={fontSize} onFontSizeChange={setFontSize} />
@@ -281,6 +299,38 @@ export function TextEditor({
 				ref={hostRef}
 				className={`h-full w-full overflow-hidden ${className ?? ""}`}
 			/>
+			{active
+				? createPortal(
+						<>
+							{selection.menu && !selection.ask ? (
+								<SelectionMenu
+									screen={selection.menu.screen}
+									onHighlight={() => undefined}
+									onAsk={selection.handleAsk}
+									onAddToChat={selection.handleAddToChat}
+									onTranslate={() => undefined}
+									showHighlight={false}
+									showTranslate={false}
+								/>
+							) : null}
+							{selection.ask ? (
+								<AskPopover
+									thread={selection.ask.thread}
+									paperTitle={basenameOf(path)}
+									screen={selection.ask.screen}
+									streaming={selection.streaming}
+									error={selection.askError}
+									onSend={selection.sendAskQuestion}
+									onResend={selection.resendAskQuestion}
+									onHide={selection.hideAsk}
+									onDelete={selection.deleteAsk}
+									onStop={selection.stopAskStreaming}
+								/>
+							) : null}
+						</>,
+						document.body,
+					)
+				: null}
 		</div>
 	);
 }

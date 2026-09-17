@@ -1,5 +1,6 @@
 /**
- * Ephemeral selection-ask prompt for Plaza surfaces (RSS feed detail, etc.).
+ * Ephemeral selection-ask prompt for text surfaces (plaza feed detail,
+ * proxied web papers, plain-text editor selections).
  * Parallel to PDF ask (`buildPdfAskPrompt`) but without page geometry.
  */
 
@@ -7,12 +8,18 @@ import type { PdfAskThread } from "@/lib/pdf/ask/types";
 
 /**
  * Build a single-turn prompt for a text-surface selection ask (plaza feed
- * detail, proxied web papers, …).
+ * detail, proxied web papers, plain-text editor selections).
  */
 export function buildPlazaAskPrompt(
 	thread: PdfAskThread,
 	latestUserQuestion: string,
-	opts?: { title?: string; url?: string | null; surface?: "feed" | "web" },
+	opts?: {
+		title?: string;
+		url?: string | null;
+		surface?: "feed" | "web" | "text";
+		/** Vault file path (`surface: "text"`). */
+		path?: string | null;
+	},
 ): string {
 	const quote = thread.anchor.quote?.trim();
 	const history = thread.messages
@@ -24,14 +31,25 @@ export function buildPlazaAskPrompt(
 	const parts = [
 		opts?.surface === "web"
 			? "You are helping the user read a web page in Agentero."
-			: "You are helping the user read a research feed item in Agentero.",
+			: opts?.surface === "text"
+				? "You are helping the user with a file in Agentero."
+				: "You are helping the user read a research feed item in Agentero.",
 	];
 	const title = opts?.title?.trim();
-	if (title) parts.push(`Item title: ${title}`);
+	if (title) {
+		parts.push(`${opts?.surface === "text" ? "File" : "Item title"}: ${title}`);
+	}
+	const path = opts?.path?.trim();
+	if (path) parts.push(`File path: ${path}`);
 	const url = opts?.url?.trim();
 	if (url) parts.push(`Item URL: ${url}`);
 	if (quote) {
-		parts.push("Quoted text from the item:", `> ${quote}`);
+		parts.push(
+			opts?.surface === "text"
+				? "Quoted text from the file:"
+				: "Quoted text from the item:",
+			`> ${quote}`,
+		);
 	}
 	if (history) {
 		parts.push("Earlier turns in this selection thread:", history);

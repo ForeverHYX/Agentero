@@ -472,6 +472,7 @@ export const DocView = memo(function DocView({
 						seed={tab.textSeed}
 						path={tab.path}
 						reloadKey={tab.textKey}
+						active={active}
 						onPersist={text.onPersistFile}
 						onManualSave={text.onManualSave}
 						onDirtyChange={(d) => text.onTabPatch(tab.id, { textDirty: d })}

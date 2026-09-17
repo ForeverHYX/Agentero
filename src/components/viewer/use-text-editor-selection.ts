@@ -1,0 +1,264 @@
+/**
+ * CodeMirror selection → floating chat toolbar for the plain-text editor.
+ *
+ * Same selection chrome the PDF / web-paper surfaces have, sourced from a
+ * CodeMirror update-listener extension instead of a DOM selection: a
+ * non-empty selection arms the shared `SelectionMenu` with Quick chat /
+ * Add to chat only (text files have no marks/ sidecar, and no auto-copy —
+ * silently replacing the clipboard mid-edit in a code buffer would destroy
+ * the paste the selection is usually a prelude to). ⌘K opens the in-page
+ * Ask popover; Add to chat / ⌘L pin the selection as an Agent composer
+ * chip. Drag selections arm on mouse release (same as the PDF viewer);
+ * keyboard selections arm immediately, and the toolbar re-anchors while
+ * the editor scrolls.
+ */
+
+import { EditorView } from "@codemirror/view";
+import {
+	type RefObject,
+	useCallback,
+	useEffect,
+	useMemo,
+	useRef,
+	useState,
+} from "react";
+import {
+	createSelectionAskThread,
+	useSelectionAsk,
+} from "@/components/selection/use-selection-ask";
+import type { ScreenPoint } from "@/components/viewer/pdf/types";
+import { registerSelectionQuickChat } from "@/lib/agent/selection-quick-chat";
+import {
+	clearActiveSelection,
+	pinActiveSelection,
+	publishSelection,
+} from "@/lib/agent/selection-store";
+import { basenameOf } from "@/lib/core/path";
+import { buildPlazaAskPrompt } from "@/lib/plaza/ask-prompt";
+import { openRightTab } from "@/lib/shell/ui-window-actions";
+
+export type TextEditorSelectionMenu = {
+	text: string;
+	screen: ScreenPoint;
+};
+
+/**
+ * Toolbar anchor: top-center of the selection (top line's character center
+ * for multi-line selections). `coordsAtPos` returns client coordinates —
+ * exactly what the fixed-position `SelectionMenu` places by. Null when the
+ * position is not rendered (scrolled out of the editor viewport).
+ */
+function selectionMenuScreen(view: EditorView): ScreenPoint | null {
+	const selection = view.state.selection.main;
+	if (selection.empty) return null;
+	const start = view.coordsAtPos(selection.from, -1);
+	const end = view.coordsAtPos(selection.to, 1);
+	if (!start) return null;
+	const sameLine = end != null && Math.abs(end.top - start.top) < 1;
+	const x =
+		sameLine && end != null
+			? (start.left + end.right) / 2
+			: (start.left + start.right) / 2;
+	return { x, y: Math.min(start.top, end?.top ?? start.top) };
+}
+
+export function useTextEditorSelection({
+	viewRef,
+	path,
+	active,
+}: {
+	/** CodeMirror view owned by TextEditor's mount effect. */
+	viewRef: RefObject<EditorView | null>;
+	/** Vault file path — provenance for ask threads and Agent chips. */
+	path: string;
+	/** Only the active tab may arm the toolbar (inactive panes stay mounted). */
+	active: boolean;
+}) {
+	const [menu, setMenu] = useState<TextEditorSelectionMenu | null>(null);
+	const menuRef = useRef(menu);
+	menuRef.current = menu;
+	const activeRef = useRef(active);
+	activeRef.current = active;
+	const pathRef = useRef(path);
+	pathRef.current = path;
+
+	// Single in-flight agent run per editor, owned here for the ask cluster.
+	const activeSessionRef = useRef<string | null>(null);
+
+	const askCtl = useSelectionAsk<ScreenPoint>({
+		buildPrompt: (thread, question) =>
+			buildPlazaAskPrompt(thread, question, {
+				title: basenameOf(pathRef.current),
+				path: pathRef.current,
+				surface: "text",
+			}),
+		activeSessionRef,
+	});
+	const { ask, setAsk } = askCtl;
+
+	// True while this surface owns the store's live "markdown" chip. Cleared
+	// selectively so our empty-selection updates never drop a chip another
+	// surface (Plate editor) published.
+	const publishedRef = useRef(false);
+
+	const hideMenu = useCallback(() => {
+		setMenu(null);
+		if (publishedRef.current) {
+			publishedRef.current = false;
+			clearActiveSelection("markdown");
+		}
+	}, []);
+
+	const armRef = useRef<(view: EditorView) => void>(() => undefined);
+	armRef.current = (view: EditorView) => {
+		const selection = view.state.selection.main;
+		const text = selection.empty
+			? ""
+			: view.state.sliceDoc(selection.from, selection.to);
+		if (!text.trim()) {
+			hideMenu();
+			return;
+		}
+		// Off-viewport selections cannot be anchored — keep the previous one.
+		const screen = selectionMenuScreen(view);
+		if (!screen) return;
+		setMenu({ text, screen });
+		publishedRef.current = true;
+		publishSelection({
+			text,
+			sourcePath: pathRef.current,
+			origin: "markdown",
+		});
+	};
+
+	const mouseDownRef = useRef(false);
+
+	/** Stable extension (registered once at TextEditor mount). */
+	const selectionListener = useMemo(
+		() =>
+			EditorView.updateListener.of((update) => {
+				if (!update.selectionSet) return;
+				// Mid-drag sweeps wait for mouseup (the PDF arm point); keyboard
+				// selections (⇧+arrows, double-click, ⌘A) arm right away.
+				if (mouseDownRef.current || !activeRef.current) return;
+				armRef.current(update.view);
+			}),
+		[],
+	);
+
+	const handleAsk = useCallback(() => {
+		const current = menuRef.current;
+		if (!current) return;
+		const { text, screen } = current;
+		setMenu(null);
+		// Keep the editor selection + live chip armed while asking, mirroring
+		// the PDF surface (⌘L still pins the quote mid-ask).
+		setAsk({
+			thread: createSelectionAskThread(pathRef.current, text),
+			screen,
+		});
+	}, [setAsk]);
+
+	const handleAddToChat = useCallback(() => {
+		const current = menuRef.current;
+		if (!current) return;
+		setMenu(null);
+		publishSelection({
+			text: current.text,
+			sourcePath: pathRef.current,
+			origin: "markdown",
+		});
+		pinActiveSelection();
+		openRightTab("agent");
+		// Collapse the selection so the toolbar does not re-arm when the editor
+		// regains focus; the update listener then drops the live chip (the pin
+		// above survives in `pinned`).
+		const view = viewRef.current;
+		const selection = view?.state.selection.main;
+		if (view && selection && !selection.empty) {
+			view.dispatch({ selection: { anchor: selection.head } });
+		}
+	}, [viewRef]);
+
+	// ⌘K Quick chat — while this editor's selection toolbar is armed.
+	const handleAskRef = useRef(handleAsk);
+	handleAskRef.current = handleAsk;
+	useEffect(
+		() =>
+			registerSelectionQuickChat(() => {
+				if (!menuRef.current) return false;
+				handleAskRef.current();
+				return true;
+			}),
+		[],
+	);
+
+	// Drag arm point + collapse dismissal: mousedown/mouseup pairs anywhere
+	// (capture), arming only when the release lands inside this editor.
+	useEffect(() => {
+		const onDown = () => {
+			mouseDownRef.current = true;
+		};
+		const onUp = (event: MouseEvent) => {
+			mouseDownRef.current = false;
+			const view = viewRef.current;
+			if (!view || !activeRef.current) return;
+			if (!(event.target instanceof Node) || !view.dom.contains(event.target))
+				return;
+			armRef.current(view);
+		};
+		document.addEventListener("mousedown", onDown, true);
+		document.addEventListener("mouseup", onUp, true);
+		return () => {
+			document.removeEventListener("mousedown", onDown, true);
+			document.removeEventListener("mouseup", onUp, true);
+		};
+	}, [viewRef]);
+
+	// Keep the toolbar glued to the selection while the editor scrolls.
+	// Scroll events don't bubble, but capture still reaches window.
+	// biome-ignore lint/correctness/useExhaustiveDependencies: viewRef is a stable ref; listener reads .current at event time
+	useEffect(() => {
+		const onScroll = () => {
+			const current = menuRef.current;
+			const view = viewRef.current;
+			if (!current || !view || view.state.selection.main.empty) return;
+			const screen = selectionMenuScreen(view);
+			if (!screen) return; // off-viewport: SelectionMenu clamps + dims
+			if (screen.x === current.screen.x && screen.y === current.screen.y)
+				return;
+			setMenu({ ...current, screen });
+		};
+		window.addEventListener("scroll", onScroll, true);
+		return () => window.removeEventListener("scroll", onScroll, true);
+	}, []);
+
+	// Leaving the tab dismisses the toolbar (the panel may be resized while
+	// hidden, stranding the anchor); the Ask thread keeps streaming.
+	useEffect(() => {
+		if (!active) hideMenu();
+	}, [active, hideMenu]);
+
+	// Tab close / LRU eviction: drop the live chip this surface published.
+	useEffect(() => {
+		return () => {
+			if (publishedRef.current) clearActiveSelection("markdown");
+		};
+	}, []);
+
+	return {
+		/** Add to TextEditor's mount-once extension array. */
+		selectionListener,
+		menu,
+		handleAsk,
+		handleAddToChat,
+		ask,
+		streaming: askCtl.streaming,
+		askError: askCtl.askError,
+		sendAskQuestion: askCtl.sendAskQuestion,
+		resendAskQuestion: askCtl.resendAskQuestion,
+		hideAsk: askCtl.hideAsk,
+		deleteAsk: askCtl.deleteAsk,
+		stopAskStreaming: askCtl.stopAskStreaming,
+	};
+}

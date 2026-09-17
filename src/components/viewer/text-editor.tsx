@@ -4,7 +4,9 @@ import { EditorView } from "@codemirror/view";
 import { basicSetup } from "codemirror";
 import { useTheme } from "next-themes";
 import { useCallback, useEffect, useMemo, useRef } from "react";
+import { useTextEditorFontSize } from "@/components/viewer/hooks/use-text-editor-font-size";
 import { textLanguageExtensions } from "@/components/viewer/text-editor-language";
+import { TextEditorToolbar } from "@/components/viewer/text-editor-toolbar";
 
 interface TextEditorProps {
 	seed: string;
@@ -30,7 +32,6 @@ const baseTheme = EditorView.theme({
 		height: "100%",
 		backgroundColor: "transparent",
 		color: "var(--foreground)",
-		fontSize: "0.875rem",
 	},
 	".cm-scroller": {
 		fontFamily: "var(--font-mono)",
@@ -68,12 +69,16 @@ export function TextEditor({
 	onDirtyChange,
 	className,
 }: TextEditorProps) {
+	// Font size managed by hook with process-wide persistence (like PDF paper tone).
+	const { fontSize, setFontSize } = useTextEditorFontSize();
+
 	// Follow the app theme (system / light / dark preference via next-themes).
 	const { resolvedTheme } = useTheme();
 	const hostRef = useRef<HTMLDivElement | null>(null);
 	const viewRef = useRef<EditorView | null>(null);
 	const themeCompartment = useRef(new Compartment());
 	const languageCompartment = useRef(new Compartment());
+	const fontSizeCompartment = useRef(new Compartment());
 	const lastSavedRef = useRef(seed);
 	const pendingContentRef = useRef<string | null>(null);
 	const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -88,6 +93,8 @@ export function TextEditor({
 	pathRef.current = path;
 	const themeRef = useRef(resolvedTheme);
 	themeRef.current = resolvedTheme;
+	const fontSizeRef = useRef(fontSize);
+	fontSizeRef.current = fontSize;
 
 	// Keep callbacks stable across parent re-renders (doc-view passes inline
 	// arrows for `onDirtyChange`).
@@ -133,6 +140,9 @@ export function TextEditor({
 			EditorView.lineWrapping,
 			languageCompartment.current.of(language),
 			themeCompartment.current.of(themeRef.current === "dark" ? oneDark : []),
+			fontSizeCompartment.current.of(
+				EditorView.theme({ "&": { fontSize: `${fontSizeRef.current}px` } }),
+			),
 			baseTheme,
 			EditorView.updateListener.of((update) => {
 				if (!update.docChanged) return;
@@ -163,6 +173,15 @@ export function TextEditor({
 			),
 		});
 	}, [resolvedTheme]);
+
+	// Follow fontSize changes without rebuilding the editor.
+	useEffect(() => {
+		viewRef.current?.dispatch({
+			effects: fontSizeCompartment.current.reconfigure(
+				EditorView.theme({ "&": { fontSize: `${fontSize}px` } }),
+			),
+		});
+	}, [fontSize]);
 
 	// A renamed path only swaps the language support.
 	const language = useMemo(() => textLanguageExtensions(path), [path]);
@@ -217,9 +236,12 @@ export function TextEditor({
 	// An unreadable file still opens an empty buffer — the next autosave
 	// creates/repairs the file on disk.
 	return (
-		<div
-			ref={hostRef}
-			className={`h-full w-full overflow-hidden ${className ?? ""}`}
-		/>
+		<div className="group relative h-full w-full overflow-hidden">
+			<TextEditorToolbar fontSize={fontSize} onFontSizeChange={setFontSize} />
+			<div
+				ref={hostRef}
+				className={`h-full w-full overflow-hidden ${className ?? ""}`}
+			/>
+		</div>
 	);
 }

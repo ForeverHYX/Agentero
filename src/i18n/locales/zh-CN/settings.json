@@ -203,7 +203,10 @@
 		},
 		"fontSize": {
 			"label": "编辑器字号",
-			"value": "{{size}} px"
+			"value": "{{size}} px",
+			"increase": "增大字号",
+			"decrease": "减小字号",
+			"select": "选择字号"
 		},
 		"fontFamily": {
 			"default": "默认（系统）",

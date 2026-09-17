@@ -103,6 +103,7 @@ import {
 	takeClosedTab,
 	updateTab,
 } from "@/lib/workspace/store";
+import { flushTextEditorFor } from "@/lib/workspace/text-editor-flush";
 import {
 	type PdfViewerHandle,
 	pdfHandleFor,
@@ -599,8 +600,13 @@ export async function openTexPdf(
 		}
 	}
 
-	// Compile-first flow: show the PDF pane immediately as a shimmer
-	// placeholder, then fill it once the compile lands.
+	// Compile-first flow: flush the editor's debounced autosave first so
+	// latexmk reads the just-typed bytes, not the pre-autosave disk snapshot
+	// (saves no longer auto-compile, nothing else would close that gap).
+	await flushTextEditorFor(texPath);
+
+	// Show the PDF pane immediately as a shimmer placeholder, then fill it
+	// once the compile lands.
 	const paneAlreadyOpen = getTabs().some((t) => t.id === pdfId);
 	if (paneAlreadyOpen) {
 		updateTab(pdfId, { texCompiling: true });
@@ -659,19 +665,20 @@ export async function openTexPdf(
 let pendingSaveCompilePath: string | null = null;
 
 /**
- * Save-triggered TeX compile: after a .tex autosave lands on disk, recompile
- * and refresh the open PDF pane — the compile-button flow without the focus
- * steal, pane auto-open and success toast. The pane's shimmer (`texCompiling`)
- * stays up while latexmk runs so partial watcher writes never flash through;
- * saves landing mid-compile queue a single trailing run with the latest path.
+ * Quiet TeX compile + in-place refresh of the open PDF pane: the compile-button
+ * flow without the focus steal, pane auto-open and success toast. Called after
+ * a manual ⌘S save lands (`compileTexOnManualSave`). The pane's shimmer
+ * (`texCompiling`) stays up while latexmk runs so partial watcher writes never
+ * flash through; triggers landing mid-compile queue a single trailing run with
+ * the latest path.
  */
-async function compileTexOnSave(texPath: string): Promise<void> {
+export async function compileTexOnSave(texPath: string): Promise<void> {
 	// Right after a window reload the detection scan may still be in flight:
-	// wait for it instead of silently dropping this save.
+	// wait for it instead of silently dropping this trigger.
 	await ensureTexEngines();
 	const { engines, selectedEngine, compilingPath } = texCompileStore.getState();
-	// No engine available: the compile button surfaces this explicitly — stay
-	// silent on the autosave path.
+	// No engine available: explicit triggers surface this via
+	// `compileTexOnManualSave`; programmatic callers stay silent.
 	if (!selectedEngine && engines.length === 0) return;
 	if (compilingPath) {
 		pendingSaveCompilePath = texPath;
@@ -708,6 +715,23 @@ async function compileTexOnSave(texPath: string): Promise<void> {
 			void compileTexOnSave(next);
 		}
 	}
+}
+
+/**
+ * ⌘S manual-save trigger for text tabs: compile the .tex once its save landed
+ * (the editor flushes before calling this). Unlike the quiet path this
+ * surfaces a missing engine — the user explicitly asked to build. Non-TeX
+ * paths are a no-op (⌘S on them just saved).
+ */
+export async function compileTexOnManualSave(path: string): Promise<void> {
+	if (!isTexPath(path)) return;
+	await ensureTexEngines();
+	const { engines, selectedEngine } = texCompileStore.getState();
+	if (!selectedEngine && engines.length === 0) {
+		notifyError(i18n.t("sidebar:fileTree.selectEngineFirst"));
+		return;
+	}
+	await compileTexOnSave(path);
 }
 
 /** Obsidian-style Split pane: add a right pane and keep columns evenly sized. */
@@ -1674,10 +1698,8 @@ export function persistTextFile(
 				await writeVaultFile(path, content);
 				trackSelfWrittenPath(path);
 				setTabs((prev) => reseedTextTab(prev, path, content));
-				// A landed .tex save recompiles (Overleaf-style) and refreshes
-				// the open PDF pane: the write is on disk, so latexmk reads the
-				// just-saved bytes — never the pre-edit version.
-				if (isTexPath(path)) void compileTexOnSave(path);
+				// NOTE: autosave only writes — .tex compiles are manual now
+				// (⌘S / compile button); see compileTexOnManualSave.
 				return true;
 			} catch (e) {
 				notifyError(errorText(e));

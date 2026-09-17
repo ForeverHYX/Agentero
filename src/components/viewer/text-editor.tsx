@@ -1,12 +1,13 @@
 import { Compartment, EditorState, type Extension } from "@codemirror/state";
 import { oneDark } from "@codemirror/theme-one-dark";
-import { EditorView } from "@codemirror/view";
+import { EditorView, keymap } from "@codemirror/view";
 import { basicSetup } from "codemirror";
 import { useTheme } from "next-themes";
 import { useCallback, useEffect, useMemo, useRef } from "react";
 import { useTextEditorFontSize } from "@/components/viewer/hooks/use-text-editor-font-size";
 import { textLanguageExtensions } from "@/components/viewer/text-editor-language";
 import { TextEditorToolbar } from "@/components/viewer/text-editor-toolbar";
+import { registerTextEditorFlusher } from "@/lib/workspace/text-editor-flush";
 
 interface TextEditorProps {
 	seed: string;
@@ -18,6 +19,8 @@ interface TextEditorProps {
 		lastSaved: string,
 	) => Promise<boolean>;
 	onDirtyChange: (dirty: boolean) => void;
+	/** Manual save (⌘S) after the flush landed — TeX compiles here. */
+	onManualSave?: (path: string) => void;
 	className?: string;
 }
 
@@ -67,6 +70,7 @@ export function TextEditor({
 	reloadKey,
 	onPersist,
 	onDirtyChange,
+	onManualSave,
 	className,
 }: TextEditorProps) {
 	// Font size managed by hook with process-wide persistence (like PDF paper tone).
@@ -101,9 +105,11 @@ export function TextEditor({
 	const onDirtyChangeRef = useRef(onDirtyChange);
 	onDirtyChangeRef.current = onDirtyChange;
 
-	const flush = useCallback(async () => {
+	// True when disk is current after the flush (nothing pending, or the save
+	// landed); false when the save was refused (conflict guard / write error).
+	const flush = useCallback(async (): Promise<boolean> => {
 		const content = pendingContentRef.current;
-		if (content == null) return;
+		if (content == null) return true;
 		pendingContentRef.current = null;
 		const ok = await onPersist(path, content, lastSavedRef.current);
 		if (ok) {
@@ -111,6 +117,7 @@ export function TextEditor({
 			dirtyRef.current = false;
 			onDirtyChangeRef.current(false);
 		}
+		return ok;
 	}, [onPersist, path]);
 
 	const schedulePersist = useCallback(
@@ -130,6 +137,36 @@ export function TextEditor({
 	const schedulePersistRef = useRef(schedulePersist);
 	schedulePersistRef.current = schedulePersist;
 
+	// Manual save (⌘S / Ctrl+S) rides the CodeMirror keymap (only when the
+	// editor is focused, same as its other bindings): flush immediately,
+	// skipping the debounce, then fire the hook — the TeX path compiles there.
+	// A clean buffer still fires it (explicit rebuild, Overleaf-style); a
+	// refused save (conflict guard) does not — compiling the disk copy would
+	// mislead. Routed through refs since the keymap registers once at mount.
+	const flushRef = useRef(flush);
+	flushRef.current = flush;
+	const onManualSaveRef = useRef(onManualSave);
+	onManualSaveRef.current = onManualSave;
+	const manualSaveKeymap = useMemo(
+		() => [
+			{
+				key: "Mod-s",
+				preventDefault: true,
+				run: () => {
+					void flushRef.current().then((ok) => {
+						if (ok) onManualSaveRef.current?.(pathRef.current);
+					});
+					return true;
+				},
+			},
+		],
+		[],
+	);
+
+	// Expose the flush to lib actions: the compile button builds disk bytes,
+	// so it must first land this editor's debounced autosave.
+	useEffect(() => registerTextEditorFlusher(path, flush), [path, flush]);
+
 	// Editor owns its state: mount once, reconfigure language/theme in place.
 	useEffect(() => {
 		const host = hostRef.current;
@@ -138,6 +175,7 @@ export function TextEditor({
 		const extensions: Extension[] = [
 			basicSetup,
 			EditorView.lineWrapping,
+			keymap.of(manualSaveKeymap),
 			languageCompartment.current.of(language),
 			themeCompartment.current.of(themeRef.current === "dark" ? oneDark : []),
 			fontSizeCompartment.current.of(
@@ -162,8 +200,9 @@ export function TextEditor({
 			view.destroy();
 			viewRef.current = null;
 		};
-		// Mount-once; seed/path/theme changes are handled by the effects below.
-	}, []);
+		// Mount-once; seed/path/theme changes are handled by the effects below
+		// (`manualSaveKeymap` is a stable useMemo — never re-mounts the editor).
+	}, [manualSaveKeymap]);
 
 	// Follow theme switches without rebuilding the editor.
 	useEffect(() => {

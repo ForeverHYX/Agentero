@@ -42,6 +42,7 @@ import { renameWikiHeadingAction } from "@/lib/wiki/actions";
 import {
 	closePlazaTabs,
 	closeTab,
+	compileTexOnManualSave,
 	ensureLibraryTabPresent,
 	handleActivePanelChange,
 	hydratePlaceholderTabs,
@@ -331,6 +332,8 @@ export function WorkspaceHost() {
 	const textProps = useMemo(
 		() => ({
 			onPersistFile: persistTextFile,
+			// ⌘S: save landed — TeX compiles, everything else no-ops inside.
+			onManualSave: (path: string) => void compileTexOnManualSave(path),
 			onTabPatch: updateTab,
 		}),
 		[],

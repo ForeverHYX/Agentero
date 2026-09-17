@@ -42,9 +42,10 @@ vi.mock("@/lib/workspace/tex-compile", async (importOriginal) => {
 	};
 });
 
+import { notifyError } from "@/lib/core/notify";
 import { vaultStore } from "@/lib/vault/store";
-// Import after the mocks: persistTextFile saves through the mocked barrels.
-import { persistTextFile } from "@/lib/workspace/actions";
+// Import after the mocks: the actions under test save through mocked barrels.
+import { compileTexOnSave, persistTextFile } from "@/lib/workspace/actions";
 import { workspaceStore } from "@/lib/workspace/store";
 import { createPlaceholderTab, tabIdForPath } from "@/lib/workspace/tabs";
 import { texCompileStore } from "@/lib/workspace/tex-compile";
@@ -79,6 +80,7 @@ function pdfTab() {
 }
 
 beforeEach(() => {
+	vi.mocked(notifyError).mockClear();
 	readVaultFileMock.mockReset().mockResolvedValue(SEED);
 	writeVaultFileMock.mockReset().mockResolvedValue(undefined);
 	localFileToArrayBufferMock.mockReset().mockResolvedValue(null);
@@ -94,34 +96,34 @@ beforeEach(() => {
 	vaultStore.setState({ vaultPath: VAULT });
 });
 
-describe("persistTextFile → save-triggered compile", () => {
-	it("compiles after a .tex save lands on disk (quiet success)", async () => {
+describe("persistTextFile (autosave) never compiles", () => {
+	it("writes a .tex save without triggering a compile", async () => {
 		await persistTextFile(TEX_PATH, "\\documentclass", SEED);
 
-		expect(await persistTexCompileScheduled()).toBe(true);
-		expect(compileTexFileMock).toHaveBeenCalledWith(TEX_PATH, {
-			quietSuccess: true,
-		});
-	});
-
-	it("ignores saves of non-TeX files", async () => {
-		await persistTextFile(`${VAULT}/plans/a.txt`, "hello", SEED);
+		expect(writeVaultFileMock).toHaveBeenCalledWith(
+			TEX_PATH,
+			"\\documentclass",
+		);
 		await flushMicrotasks();
-
 		expect(compileTexFileMock).not.toHaveBeenCalled();
 	});
+});
 
-	it("refreshes the open PDF pane in place when the compile lands", async () => {
+describe("compileTexOnSave (manual ⌘S trigger)", () => {
+	it("compiles quietly and refreshes the open PDF pane in place", async () => {
 		seedPdfPane();
 		const bytes = new ArrayBuffer(64);
 		compileTexFileMock.mockResolvedValue(PDF_PATH);
 		localFileToArrayBufferMock.mockResolvedValue(bytes);
 
-		await persistTextFile(TEX_PATH, "\\documentclass", SEED);
+		await compileTexOnSave(TEX_PATH);
 		await vi.waitFor(() => {
 			expect(pdfTab()?.pdfBytes).toBe(bytes);
 		});
 
+		expect(compileTexFileMock).toHaveBeenCalledWith(TEX_PATH, {
+			quietSuccess: true,
+		});
 		const tab = pdfTab();
 		expect(tab?.loaded).toBe(true);
 		expect(tab?.texCompiling).toBeFalsy();
@@ -133,7 +135,7 @@ describe("persistTextFile → save-triggered compile", () => {
 		const oldBytes = seedPdfPane();
 		compileTexFileMock.mockResolvedValue(null);
 
-		await persistTextFile(TEX_PATH, "\\documentclass", SEED);
+		await compileTexOnSave(TEX_PATH);
 		await vi.waitFor(() => {
 			expect(pdfTab()?.texCompiling).toBeFalsy();
 		});
@@ -142,7 +144,7 @@ describe("persistTextFile → save-triggered compile", () => {
 		expect(localFileToArrayBufferMock).not.toHaveBeenCalled();
 	});
 
-	it("queues one trailing compile for saves landing mid-compile", async () => {
+	it("queues one trailing compile for triggers landing mid-compile", async () => {
 		seedPdfPane();
 		let resolveFirst!: (value: string | null) => void;
 		compileTexFileMock.mockImplementationOnce(() => {
@@ -156,13 +158,17 @@ describe("persistTextFile → save-triggered compile", () => {
 		// Trailing run: fail quietly (asserted via the second call).
 		compileTexFileMock.mockResolvedValue(null);
 
-		await persistTextFile(TEX_PATH, "v1", SEED);
-		expect(compileTexFileMock).toHaveBeenCalledTimes(1);
+		// ⌘S fires the compile detached (the workspace layer calls it void).
+		void compileTexOnSave(TEX_PATH);
+		await vi.waitFor(() => {
+			expect(compileTexFileMock).toHaveBeenCalledTimes(1);
+		});
 		// Shimmer gates partial watcher writes while latexmk runs.
 		expect(pdfTab()?.texCompiling).toBe(true);
 
-		// Second autosave lands while the first compile is in flight.
-		await persistTextFile(TEX_PATH, "v2", SEED);
+		// A second ⌘S lands while the first compile is in flight.
+		void compileTexOnSave(TEX_PATH);
+		await flushMicrotasks();
 		expect(compileTexFileMock).toHaveBeenCalledTimes(1);
 
 		resolveFirst(PDF_PATH);
@@ -181,13 +187,13 @@ describe("persistTextFile → save-triggered compile", () => {
 			compilingPath: null,
 		});
 
-		await persistTextFile(TEX_PATH, "\\documentclass", SEED);
+		await compileTexOnSave(TEX_PATH);
 		await flushMicrotasks();
 
 		expect(compileTexFileMock).not.toHaveBeenCalled();
 	});
 
-	it("waits for the in-flight engine scan instead of dropping the save", async () => {
+	it("waits for the in-flight engine scan instead of dropping the trigger", async () => {
 		seedPdfPane();
 		const bytes = new ArrayBuffer(32);
 		compileTexFileMock.mockResolvedValue(PDF_PATH);
@@ -205,7 +211,7 @@ describe("persistTextFile → save-triggered compile", () => {
 			});
 		});
 
-		await persistTextFile(TEX_PATH, "\\documentclass", SEED);
+		await compileTexOnSave(TEX_PATH);
 		await vi.waitFor(() => {
 			expect(compileTexFileMock).toHaveBeenCalledTimes(1);
 		});
@@ -215,13 +221,35 @@ describe("persistTextFile → save-triggered compile", () => {
 	});
 });
 
-/** persistTextFile fires the compile as a detached async — flush the trigger. */
-async function persistTexCompileScheduled(): Promise<boolean> {
-	await vi.waitFor(() => {
-		expect(compileTexFileMock).toHaveBeenCalledTimes(1);
+describe("manual save surfaces a missing engine", () => {
+	it("notifies instead of staying silent when ⌘S has no engine", async () => {
+		texCompileStore.setState({
+			engines: [],
+			selectedEngine: null,
+			compilingPath: null,
+		});
+
+		const { compileTexOnManualSave } = await import("@/lib/workspace/actions");
+		await compileTexOnManualSave(TEX_PATH);
+		await flushMicrotasks();
+
+		expect(compileTexFileMock).not.toHaveBeenCalled();
+		expect(notifyError).toHaveBeenCalledTimes(1);
 	});
-	return true;
-}
+
+	it("compiles .tex after ⌘S and ignores other extensions", async () => {
+		const { compileTexOnManualSave } = await import("@/lib/workspace/actions");
+		await compileTexOnManualSave(TEX_PATH);
+		await vi.waitFor(() => {
+			expect(compileTexFileMock).toHaveBeenCalledTimes(1);
+		});
+
+		await compileTexOnManualSave(`${VAULT}/plans/a.txt`);
+		await flushMicrotasks();
+		expect(compileTexFileMock).toHaveBeenCalledTimes(1);
+		expect(notifyError).not.toHaveBeenCalled();
+	});
+});
 
 async function flushMicrotasks(): Promise<void> {
 	await new Promise<void>((resolve) => setTimeout(resolve, 0));

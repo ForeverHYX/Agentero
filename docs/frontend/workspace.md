@@ -41,7 +41,8 @@
 | 换行 | `EditorView.lineWrapping` 全局启用 |
 | 主题 | 基础 chrome 走 shadcn CSS 变量（`--foreground` / `--font-mono` / `--muted` …），语法色 light 用默认高亮、dark 用 oneDark，`Compartment` 随 `resolvedTheme` 热切换 |
 | 生命周期 | 与 ExcalidrawViewer 同契约：props 播种 + `reloadKey` 信号，内容 / dirty / 800ms 防抖自动保存由编辑器持有，`persistTextFile` 带磁盘冲突守卫与按路径写队列；外部改盘 `reloadKey` bump 后**原地换 doc**（视图、滚动、撤销历史保留，不重挂载） |
-| TeX | `.tex` 保存成功落盘后静默触发一次 LaTeX 编译；若同名 PDF pane 已打开，编译期间显示 shimmer，完成后以最新 PDF 字节原地刷新；保存连发时合并为一个尾随编译 |
+| 手动保存 | ⌘S / Ctrl+S：立即 flush 防抖自动保存（跳过等待），成功后触发 `onManualSave`；内容干净时按 ⌘S 仍触发（显式重建），保存被冲突守卫拒绝则不触发。编辑器挂载时经 `registerTextEditorFlusher`（`lib/workspace/text-editor-flush.ts`，lib 层注册表，避免 actions 反向依赖 lazy chunk）注册 flush，卸载自动注销 |
+| TeX | 编译**仅手动触发**：⌘S → 保存落盘后 `compileTexOnManualSave` 静默编译（无引擎显式报错、非 `.tex` no-op）；编译按钮 / ⌘\（`openTexPdf`）编译前先 `flushTextEditorFor` 把编辑器防抖内容落盘，防止编译到自动保存前的旧盘快照。自动保存（防抖 / 卸载 flush）只写盘**不编译**。若同名 PDF pane 已打开，编译期间显示 shimmer，完成后以最新 PDF 字节原地刷新；编译中再触发合并为一个尾随编译 |
 | 接入 | 懒加载 chunk（`doc-view.tsx` 分支）；dockview `renderer: 'always'` + 编辑器 LRU 保活；弹出窗 watcher / 会话恢复 / `applyDiskChange` 均已覆盖 `text` 模式 |
 
 ## 面板类型
@@ -58,6 +59,7 @@ Library · Trash · PDF · HTML · 图片 · Markdown · 论文 NOTES · 纯文�
 | `src/components/shell/doc-window-root.tsx` | 文档弹出窗根 |
 | `src/components/viewer/text-editor.tsx` | CodeMirror 纯文本编辑器（`text` 兜底模式） |
 | `src/components/viewer/text-editor-language.ts` | 扩展名 → 语言 / 自定义补全映射 |
+| `src/lib/workspace/text-editor-flush.ts` | 编辑器防抖自动保存的 flush 注册表（编译按钮编译前落盘） |
 | `src/lib/workspace/store.ts` | tabs / active / dockLayout |
 | `src/lib/workspace/tabs/` | DocTab 模型、NOTES 分屏、持久化 |
 | `src/lib/workspace/dock-registry.ts` | 命令式 dockview 句柄 |

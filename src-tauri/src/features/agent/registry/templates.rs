@@ -103,6 +103,169 @@ pub fn dsh_entrypoint_exists() -> bool {
         || dsh_home_entrypoint().is_some()
 }
 
+/// Community `zcode-acp-server` adapter — bridges the headless `zcode
+/// app-server --stdio` and reuses the ZCode desktop app login. Same prefix
+/// reasoning as the Claude adapter above.
+pub const ZCODE_ACP_INSTALL_COMMAND: &str = if cfg!(windows) {
+    "npm i -g zcode-acp-server@latest"
+} else {
+    "npm i -g zcode-acp-server@latest --prefix \"$HOME/.local\""
+};
+
+/// Newest `zcode.cjs` under the given dir, deepest-glob `*/*/glm/*/[arch]`.
+/// Returns candidates newest-mtime first; the cjs is platform-agnostic JS.
+fn zcode_cached_cli_candidates(releases_root: std::path::PathBuf) -> Vec<std::path::PathBuf> {
+    let mut candidates = Vec::new();
+    let Ok(releases) = std::fs::read_dir(&releases_root) else {
+        return candidates;
+    };
+    for ver in releases.flatten() {
+        let Ok(plats) = std::fs::read_dir(ver.path()) else {
+            continue;
+        };
+        for plat in plats.flatten() {
+            let Ok(contents) = std::fs::read_dir(plat.path().join("glm-content")) else {
+                continue;
+            };
+            for hash in contents.flatten() {
+                let Ok(arches) = std::fs::read_dir(hash.path().join("glm")) else {
+                    continue;
+                };
+                for arch in arches.flatten() {
+                    let cjs = arch.path().join("zcode.cjs");
+                    if cjs.is_file() {
+                        candidates.push(cjs);
+                    }
+                }
+            }
+        }
+    }
+    candidates.sort_by_key(|path| {
+        std::fs::metadata(path)
+            .and_then(|m| m.modified())
+            .ok()
+            .unwrap_or(std::time::UNIX_EPOCH)
+    });
+    candidates.reverse();
+    candidates
+}
+
+/// Env the ZCode adapter needs to drive the desktop app's embedded CLI.
+///
+/// The bundled `zcode.cjs` only boots its provider layer when
+/// `ZCODE_BUILTIN_PROVIDER_CONFIG_FILE` points at the app's runtime builtin
+/// table; without it the backend process dies ("backend dead") and every ACP
+/// call fails. Turns additionally require a backend that implements
+/// `workspace/updateProviderRegistry` (adapter 0.42 pushes it to register the
+/// user's config.json providers; desktop 3.12.3's bundle dropped the method,
+/// so turns fail `provider_not_configured`). The desktop app keeps
+/// per-release CLI bundles in its remote-assets cache — prefer the newest
+/// bundle that still supports the registry push over the app's built-in copy.
+/// User-set env in the registered agent always wins.
+pub fn zcode_runtime_env() -> Vec<(String, String)> {
+    // Windows has no guaranteed `HOME`; the desktop app uses USERPROFILE there.
+    let home = std::env::var_os("HOME")
+        .or_else(|| std::env::var_os("USERPROFILE"))
+        .map(std::path::PathBuf::from);
+    let Some(home) = home else {
+        return Vec::new();
+    };
+    let mut env = Vec::new();
+
+    // Newest runtime builtin provider table written by the desktop app.
+    let runtime_root = home.join(".zcode/v2/runtime/provider");
+    let mut builtin_candidates = Vec::new();
+    if let Ok(plats) = std::fs::read_dir(&runtime_root) {
+        for plat in plats.flatten() {
+            if let Ok(versions) = std::fs::read_dir(plat.path()) {
+                for version in versions.flatten() {
+                    if let Ok(endpoints) = std::fs::read_dir(version.path()) {
+                        for endpoint in endpoints.flatten() {
+                            let candidate = endpoint.path().join("zcode-builtin.json");
+                            if candidate.is_file() {
+                                builtin_candidates.push(candidate);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+    builtin_candidates.sort_by_key(|path| {
+        std::fs::metadata(path)
+            .and_then(|m| m.modified())
+            .ok()
+            .unwrap_or(std::time::UNIX_EPOCH)
+    });
+    if let Some(builtin) = builtin_candidates.last() {
+        env.push((
+            "ZCODE_BUILTIN_PROVIDER_CONFIG_FILE".to_string(),
+            builtin.display().to_string(),
+        ));
+        // Both vars together make the CLI use the injected builtin table
+        // verbatim. With the builtin var alone, the CLI re-syncs it into a
+        // version-keyed runtime copy, rewires configRevision there and
+        // silently voids the adapter's account-config push — every account
+        // model then fails "Provider Registry 中不存在 Model" (zcode-acp
+        // #202, fixed in 0.42.4 whose own injection mirrors this pair).
+        let personal = home.join(".zcode/v2/provider_config.json");
+        if personal.is_file() {
+            env.push((
+                "ZCODE_PERSONAL_PROVIDER_CONFIG_FILE".to_string(),
+                personal.display().to_string(),
+            ));
+        }
+    }
+
+    // Newest CLI bundle whose backend still supports the registry push.
+    let mut candidates = Vec::new();
+    if cfg!(target_os = "macos") {
+        candidates.extend(zcode_cached_cli_candidates(
+            home.join("Library/Application Support/ZCode/remote-assets-cache/releases"),
+        ));
+        // Machine-wide and per-user install locations (adapter discovers both).
+        candidates.push(std::path::PathBuf::from(
+            "/Applications/ZCode.app/Contents/Resources/glm/zcode.cjs",
+        ));
+        candidates.push(home.join("Applications/ZCode.app/Contents/Resources/glm/zcode.cjs"));
+    }
+    if cfg!(target_os = "linux") {
+        candidates.extend(zcode_cached_cli_candidates(
+            home.join(".config/ZCode/remote-assets-cache/releases"),
+        ));
+        candidates.push(std::path::PathBuf::from(
+            "/opt/ZCode/resources/glm/zcode.cjs",
+        ));
+        candidates.push(std::path::PathBuf::from(
+            "/usr/share/zcode/resources/glm/zcode.cjs",
+        ));
+    }
+    if cfg!(target_os = "windows") {
+        candidates.extend(zcode_cached_cli_candidates(
+            home.join("AppData/Roaming/ZCode/remote-assets-cache/releases"),
+        ));
+        if let Some(app_dir) = std::env::var_os("LOCALAPPDATA").map(std::path::PathBuf::from) {
+            candidates.push(app_dir.join("Programs/ZCode/resources/glm/zcode.cjs"));
+        }
+    }
+    if let Some(cli) = candidates.into_iter().find(|cjs| {
+        std::fs::read_to_string(cjs)
+            .map(|src| src.contains("workspace/updateProviderRegistry"))
+            .unwrap_or(false)
+    }) {
+        env.push(("ZCODE_BIN".to_string(), cli.display().to_string()));
+        // The adapter's Node resolution relies on Unix `which` and falls back
+        // to executing the `.cjs` directly — not a valid Windows entrypoint.
+        // Hand it an explicit runtime when we can resolve one.
+        if cfg!(target_os = "windows") {
+            if let Some(node) = crate::core::process::discover::resolve_command("node") {
+                env.push(("ZCODE_NODE".to_string(), node.display().to_string()));
+            }
+        }
+    }
+    env
+}
+
 pub fn builtin_templates() -> Vec<AgentTemplateInfo> {
     vec![
         AgentTemplateInfo {
@@ -271,6 +434,26 @@ pub fn builtin_templates() -> Vec<AgentTemplateInfo> {
             login_command: None,
         },
         AgentTemplateInfo {
+            id: AgentTemplate::Zcode.as_str().to_string(),
+            name: "ZCode".to_string(),
+            description:
+                "ZCode (GLM) via the zcode-acp-server adapter bridging `zcode app-server --stdio`. \
+                 Reuses the ZCode desktop app login in ~/.zcode; the adapter auto-discovers the \
+                 app-bundled CLI (or set ZCODE_BIN)."
+                    .to_string(),
+            // ACP entrypoint is the adapter; it discovers the desktop app's
+            // zcode.cjs itself, so the "installed" badge tracks the adapter.
+            command: "zcode-acp-server".to_string(),
+            args: vec![],
+            detect_command: Some("zcode-acp-server".to_string()),
+            install_hint: format!(
+                "{ZCODE_ACP_INSTALL_COMMAND}  (needs Node 22+ and a logged-in ZCode App)  ·  \
+                 https://github.com/william0wang/zcode-acp"
+            ),
+            install_command: Some(ZCODE_ACP_INSTALL_COMMAND.to_string()),
+            login_command: None,
+        },
+        AgentTemplateInfo {
             id: AgentTemplate::Custom.as_str().to_string(),
             name: "Custom".to_string(),
             description: "Any ACP-compatible command + args.".to_string(),
@@ -304,6 +487,7 @@ pub fn template_from_id(id: &str) -> AgentTemplate {
         "pi" => AgentTemplate::Pi,
         "dsh" => AgentTemplate::Dsh,
         "kimi-code" => AgentTemplate::KimiCode,
+        "zcode" => AgentTemplate::Zcode,
         _ => AgentTemplate::Custom,
     }
 }

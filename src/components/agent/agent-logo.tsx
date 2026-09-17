@@ -15,6 +15,7 @@ export type AgentLogoKey =
 	| "pi"
 	| "dsh"
 	| "kimi-code"
+	| "zcode"
 	| "custom";
 
 export function agentLogoKeyForTemplate(
@@ -31,6 +32,7 @@ export function agentLogoKeyForTemplate(
 		case "pi":
 		case "dsh":
 		case "kimi-code":
+		case "zcode":
 			return template;
 		default:
 			return "custom";
@@ -98,6 +100,9 @@ export function AgentLogo({
 			break;
 		case "kimi-code":
 			icon = <KimiMark className={iconClass} />;
+			break;
+		case "zcode":
+			icon = <ZcodeMark className={iconClass} />;
 			break;
 		case "qodercli":
 			icon = <QoderMark className={neutralIconClass} />;
@@ -238,6 +243,22 @@ function KimiMark(props: ComponentProps<"svg">) {
 				strokeLinejoin="round"
 			/>
 			<circle cx="16.9" cy="5.1" r="1.7" fill="#1783FF" />
+		</svg>
+	);
+}
+
+/** ZCode logo: near-black rounded square, white italic "Z" with a split diagonal. */
+function ZcodeMark(props: ComponentProps<"svg">) {
+	return (
+		<svg viewBox="0 0 24 24" fill="none" aria-hidden {...props}>
+			<title>ZCode</title>
+			<rect x="1" y="1" width="22" height="22" rx="5.5" fill="#0A0A0A" />
+			<g fill="#FFFFFF" transform="translate(2.6 0) skewX(-12)">
+				<rect x="6" y="5.6" width="12" height="2.7" />
+				<polygon points="15.2,5.6 18,5.6 8.8,18.4 6,18.4" />
+				<rect x="6" y="15.7" width="12" height="2.7" />
+			</g>
+			<path d="M11.07 12.69L13.03 11.31" stroke="#0A0A0A" strokeWidth="1.2" />
 		</svg>
 	);
 }

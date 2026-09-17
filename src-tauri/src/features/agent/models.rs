@@ -29,6 +29,11 @@ pub enum AgentTemplate {
     /// Moonshot Kimi Code CLI with native ACP (`kimi acp`).
     /// Docs: https://moonshotai.github.io/kimi-code/en/
     KimiCode,
+    /// ZCode CLI via the community `zcode-acp-server` adapter, which bridges the
+    /// headless `zcode app-server --stdio`. Reuses the ZCode desktop app login
+    /// (`~/.zcode`); the adapter auto-discovers the app-bundled CLI.
+    /// Docs: https://github.com/william0wang/zcode-acp
+    Zcode,
     Custom,
 }
 
@@ -49,6 +54,7 @@ impl<'de> serde::Deserialize<'de> for AgentTemplate {
             "pi" => Self::Pi,
             "dsh" => Self::Dsh,
             "kimi-code" => Self::KimiCode,
+            "zcode" => Self::Zcode,
             "custom" => Self::Custom,
             other => {
                 return Err(serde::de::Error::custom(format!(
@@ -72,6 +78,7 @@ impl AgentTemplate {
             Self::Pi => "pi",
             Self::Dsh => "dsh",
             Self::KimiCode => "kimi-code",
+            Self::Zcode => "zcode",
             Self::Custom => "custom",
         }
     }

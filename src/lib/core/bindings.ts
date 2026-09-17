@@ -1254,7 +1254,14 @@ export type AgentTemplate = "opencode" |
  *  Moonshot Kimi Code CLI with native ACP (`kimi acp`).
  *  Docs: https://moonshotai.github.io/kimi-code/en/
  */
-"kimi-code" | "custom";
+"kimi-code" | 
+/**
+ *  ZCode CLI via the community `zcode-acp-server` adapter, which bridges the
+ *  headless `zcode app-server --stdio`. Reuses the ZCode desktop app login
+ *  (`~/.zcode`); the adapter auto-discovers the app-bundled CLI.
+ *  Docs: https://github.com/william0wang/zcode-acp
+ */
+"zcode" | "custom";
 
 /**  ACP tool call create/update for UI (`Tool` element). */
 export type AgentToolEvent = AgentToolEvent_Serialize | AgentToolEvent_Deserialize;

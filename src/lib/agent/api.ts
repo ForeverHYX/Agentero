@@ -29,6 +29,7 @@ export type AgentTemplate =
 	| "pi"
 	| "dsh"
 	| "kimi-code"
+	| "zcode"
 	| "custom";
 
 export type AgentDescriptor = {

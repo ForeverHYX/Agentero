@@ -10,6 +10,7 @@ use crate::features::agent::registry::discovery::resolve_command;
 use crate::features::agent::registry::templates::{
     dsh_entrypoint_exists, dsh_launcher_dir, kimi_launcher_dir, template_info,
     CLAUDE_ACP_INSTALL_COMMAND, PI_ACP_INSTALL_COMMAND, PI_HOST_INSTALL_COMMAND,
+    ZCODE_ACP_INSTALL_COMMAND,
 };
 use serde::Serialize;
 use std::collections::HashSet;
@@ -84,6 +85,7 @@ pub const LIFECYCLE_TEMPLATES: &[&str] = &[
     "pi",
     "dsh",
     "kimi-code",
+    "zcode",
 ];
 
 /// dsh ACP demo + plugin stack, published together on npm. Pinning the full set
@@ -367,6 +369,10 @@ pub fn uninstall_info(template_id: &str) -> Option<UninstallInfo> {
     let pi_acp = "npm uninstall -g pi-acp".to_string();
     #[cfg(not(target_os = "windows"))]
     let pi_acp = "npm uninstall -g pi-acp --prefix \"$HOME/.local\"".to_string();
+    #[cfg(target_os = "windows")]
+    let zcode_acp = "npm uninstall -g zcode-acp-server".to_string();
+    #[cfg(not(target_os = "windows"))]
+    let zcode_acp = "npm uninstall -g zcode-acp-server --prefix \"$HOME/.local\"".to_string();
 
     let (agent_commands, acp_commands): (Vec<String>, Vec<String>) = match template_id {
         // Single-package agents: host CLI and ACP are the same binary.
@@ -393,6 +399,9 @@ pub fn uninstall_info(template_id: &str) -> Option<UninstallInfo> {
             vec!["npm uninstall -g @moonshot-ai/kimi-code".to_string()],
             Vec::new(),
         ),
+        // Single-package adapter: the ACP bridge is the only npm artifact
+        // (the zcode CLI itself ships inside the ZCode desktop app).
+        "zcode" => (vec![zcode_acp], Vec::new()),
         // hermes: official-script-only install, nothing we can reverse.
         _ => return None,
     };
@@ -654,6 +663,7 @@ fn host_install_command(template_id: &str) -> Result<String, String> {
                 &grok_install_windows_command(),
                 "npm i -g @xai-official/grok@latest",
             )),
+            "zcode" => Ok("npm i -g zcode-acp-server@latest".to_string()),
             _ => Err(format!("no host install for {template_id}")),
         }
     }
@@ -678,6 +688,7 @@ fn host_install_command(template_id: &str) -> Result<String, String> {
                 GROK_INSTALL_UNIX,
                 "npm i -g @xai-official/grok@latest",
             )),
+            "zcode" => Ok(ZCODE_ACP_INSTALL_COMMAND.to_string()),
             _ => Err(format!("no host install for {template_id}")),
         }
     }

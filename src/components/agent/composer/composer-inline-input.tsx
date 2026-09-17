@@ -15,7 +15,6 @@ import {
 	useRef,
 } from "react";
 import { useTranslation } from "react-i18next";
-import { selectionLineChipLabel } from "@/components/agent/composer/composer-context-chips";
 import { useImeGuard } from "@/hooks/use-ime-guard";
 import { AGENT_COMPOSER_INPUT_ATTR } from "@/lib/agent/composer-focus";
 import {
@@ -483,15 +482,9 @@ function renderChip(
 			labelForPath(selection.sourcePath),
 			MAX_CHIP_TITLE_CHARS,
 		);
-		label.textContent =
-			(selection.page
-				? t("composer.selectionChipWithPage", {
-						title,
-						page: selection.page,
-					})
-				: null) ??
-			selectionLineChipLabel(t, selection, title) ??
-			t("composer.selectionChip", { title });
+		label.textContent = selection.page
+			? t("composer.selectionChipWithPage", { title, page: selection.page })
+			: t("composer.selectionChip", { title });
 		label.title = selection.text.slice(0, 200);
 		chip.appendChild(label);
 

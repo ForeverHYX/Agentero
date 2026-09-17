@@ -63,9 +63,10 @@ function chipShellClass(extra?: string) {
 /**
  * Code-editor selection chip label — `main.tex 75-77行` (single line:
  * `main.tex 75行`). Null for selections without a line span (PDF page
- * chips / plain markdown quotes).
+ * chips / plain markdown quotes). Composer context chips only — the
+ * inline-input quote chip stays filename-only.
  */
-export function selectionLineChipLabel(
+function selectionLineChipLabel(
 	t: TFunction<"agent", undefined>,
 	sel: Pick<SelectionContext, "lineFrom" | "lineTo">,
 	title: string,

@@ -336,6 +336,11 @@ async fn run_latexmk(
         .arg(engine_flag)
         .arg("-interaction=nonstopmode")
         .arg("-halt-on-error")
+        // Manual triggers mean "rebuild now": -g skips latexmk's up-to-date
+        // check. Without it, a failed run followed by an unchanged source
+        // leaves latexmk reporting "Nothing to do" plus the previous error
+        // summary without ever rerunning pdflatex.
+        .arg("-g")
         .arg(format!("-outdir={}", cwd.to_string_lossy()))
         .arg(&basename)
         .kill_on_drop(true)

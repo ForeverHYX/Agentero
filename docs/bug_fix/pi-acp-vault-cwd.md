@@ -22,7 +22,7 @@ ACP 的 `NewSessionRequest` 携带 `cwd` 字段，用于告知 Agent 当前会�
 
 ## 3. 解决方案
 
-对于已知不原生处理 ACP `cwd` 的适配器（目前仅 Pi），在本地启动时用一个 shell 包装命令先把 OS-level 工作目录切到 Vault，再 `exec` 真正的 Agent。
+本地启动一律用一个 shell 包装命令先把 OS-level 工作目录切到 Vault，再 `exec` 真正的 Agent；不再区分适配器（最初只覆盖已知不原生处理 ACP `cwd` 的 Pi）。
 
 ### 3.1 包装范围
 
@@ -51,7 +51,7 @@ cmd /D /C "cd /d "%AGENTERO_AGENT_CWD%" && \"<command>\" \"<arg1>\" ..."
 
 ### 3.4 调用点
 
-所有已知 Vault cwd 的本地启动路径都传入 `cwd`：
+所有已知 Vault cwd 的本地启动路径都传入 `cwd`（统一由 `agent_spawn_cwd()` 决定）：
 
 - `run_once` — 用户发送 prompt 时
 - `warm_agent` — 聊天面板预热
@@ -59,7 +59,8 @@ cmd /D /C "cd /d "%AGENTERO_AGENT_CWD%" && \"<command>\" \"<arg1>\" ..."
 - `load_acp_session` — 加载历史会话
 
 以上入口在 Vault 路径缺失/无效时用 `agent_scratch_dir()`（`…/agentero/agent-cwd`）兜底，
-不再回落到进程 cwd。`probe_agent` 无 Vault 上下文，同样传入该 scratch 目录（#570）。
+不再回落到进程 cwd。`probe_agent` 无 Vault 上下文，本地同样传入该 scratch 目录（远端沿用其
+自身 vault 路径，#570）。
 
 ## 4. 验收建议
 
@@ -73,4 +74,4 @@ cmd /D /C "cd /d "%AGENTERO_AGENT_CWD%" && \"<command>\" \"<arg1>\" ..."
 
 - 该包装只作用于本地 Agent；SSH 远程 Agent 已在 `remote_agent_shell_command` 中通过 `cd` 处理工作目录。
 - `dsh` 模板自己管理 launcher 目录：外层 Vault 包装后再由其自身 `cd` 进 launcher，内层覆盖外层，行为不变。
-- 若 `pi-acp` 未来原生支持 ACP `cwd`，可移除 `Pi` 的包装标记。
+- 若 `pi-acp` 未来原生支持 ACP `cwd`，也只影响会话目录；进程 cwd 的 shell 包装对所有本地模板保留（#570）。

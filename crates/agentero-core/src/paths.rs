@@ -118,8 +118,10 @@ pub fn bridge_config_dir() -> PathBuf {
 /// by LaunchServices has `/` as its cwd, so an agent that inspects its process
 /// cwd treats the whole filesystem as its workspace and enumerates `$HOME`.
 /// That trips macOS TCC prompts for Music / Desktop / Downloads / iCloud Drive
-/// / other apps' data (#570). Keeping the fallback inside Agentero's own data
-/// dir confines any such scan. Created on demand; falls back to the temp dir.
+/// / other apps' data (#570).
+///
+/// Created on demand; if the data dir is not writable it falls back to the OS
+/// temp dir — still never the process cwd.
 pub fn agent_scratch_dir() -> PathBuf {
     let dir = agentero_data_dir().join("agent-cwd");
     match std::fs::create_dir_all(&dir) {
@@ -232,7 +234,14 @@ mod tests {
     fn agent_scratch_dir_is_private_and_never_the_process_cwd() {
         let p = agent_scratch_dir();
         assert!(p.is_dir(), "scratch dir must exist to be usable as a cwd");
-        assert_eq!(p.file_name().and_then(|s| s.to_str()), Some("agent-cwd"));
+        assert!(p.is_absolute());
+        // Inside Agentero's data dir, or the documented temp fallback — never a
+        // bare/relative path or an ancestor such as `/`.
+        assert!(
+            p.starts_with(agentero_data_dir()) || p == std::env::temp_dir(),
+            "unexpected scratch dir: {}",
+            p.display()
+        );
         // Regression guard for #570: a Finder-launched GUI app's cwd is `/`.
         assert_ne!(p, std::env::current_dir().unwrap());
     }

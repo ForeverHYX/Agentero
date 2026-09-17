@@ -1,6 +1,6 @@
 use crate::features::agent::acp::client::{
-    acp_err, acp_terminals, agentero_acp_builder, client_initialize_request, to_acp_agent,
-    ACP_INITIALIZE_TIMEOUT,
+    acp_err, acp_terminals, agent_spawn_cwd, agentero_acp_builder, client_initialize_request,
+    to_acp_agent, ACP_INITIALIZE_TIMEOUT,
 };
 use crate::features::agent::acp::interaction::permission_response;
 use crate::features::agent::doctor::{diagnose_claude_auth, diagnose_codex_auth, CodexAuthStatus};
@@ -18,11 +18,11 @@ pub async fn probe_agent(
     remote: Option<&dyn crate::features::agent::remote_host::RemoteAgentLaunch>,
 ) -> ProbeResult {
     let agent_id = desc.id.clone();
-    // Probe has no Vault; still avoid the process cwd (`/` when launched by
-    // LaunchServices) so an agent that scans its cwd on startup cannot trip
-    // macOS folder prompts (#570).
-    let scratch = crate::core::paths::agent_scratch_dir();
-    let acp = match to_acp_agent(desc, Some(&scratch), remote) {
+    // Probe has no Vault; still never the process cwd (`/` when launched by
+    // LaunchServices) so an agent that scans its startup cwd cannot trip macOS
+    // folder prompts (#570). A remote target keeps its own vault path.
+    let cwd = agent_spawn_cwd(remote, None);
+    let acp = match to_acp_agent(desc, Some(&cwd), remote) {
         Ok(a) => a,
         Err(e) => {
             return ProbeResult {

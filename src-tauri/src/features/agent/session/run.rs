@@ -2,7 +2,7 @@
 
 use crate::core::error::AppError;
 use crate::features::agent::acp::client::{
-    acp_err, acp_terminals, cancelled_payload, client_initialize_request, simplified_agent_cwd,
+    acp_err, acp_terminals, agent_spawn_cwd, cancelled_payload, client_initialize_request,
     timed_acp_initialize, timed_acp_request, to_acp_agent, wait_for_cancellation,
 };
 use crate::features::agent::acp::interaction::PermissionPolicy;
@@ -195,16 +195,7 @@ async fn prepare_run_turn(params: &RunOnceParams) -> Result<RunTurnPrep, AppErro
         )
     };
     let prompt_images = params.images.clone();
-    let cwd = simplified_agent_cwd(&if let Some(ref r) = params.remote {
-        r.agent_cwd()
-    } else {
-        params
-            .vault_path
-            .as_ref()
-            .map(PathBuf::from)
-            .filter(|p| p.is_dir())
-            .unwrap_or_else(crate::core::paths::agent_scratch_dir)
-    });
+    let cwd = agent_spawn_cwd(params.remote.as_deref(), params.vault_path.as_deref());
     Ok(RunTurnPrep {
         full_prompt,
         prompt_images,

@@ -247,6 +247,42 @@ pub(crate) fn resolve_command_in_agent_env(
     crate::core::process::resolve_command_in_paths(command, &paths)
 }
 
+/// OS-level working directory for a local ACP spawn.
+///
+/// A remote target advertises its own vault path; a local one uses the open
+/// Vault, falling back to [`crate::core::paths::agent_scratch_dir`] when the
+/// vault path is missing or invalid. Never Agentero's process cwd: a macOS GUI
+/// app launched by LaunchServices has `/`, so an agent that scans its startup
+/// cwd would walk `$HOME` and trip TCC folder prompts (#570).
+pub(crate) fn agent_spawn_cwd(
+    remote: Option<&dyn crate::features::agent::remote_host::RemoteAgentLaunch>,
+    vault_path: Option<&str>,
+) -> PathBuf {
+    let raw = match remote {
+        Some(remote) => remote.agent_cwd(),
+        None => vault_path
+            .map(PathBuf::from)
+            .filter(|p| p.is_dir())
+            .unwrap_or_else(crate::core::paths::agent_scratch_dir),
+    };
+    simplified_agent_cwd(&raw)
+}
+
+/// Local launch command/args: wrapped in a shell that `cd`s to `cwd` first when
+/// a cwd is known, so the agent process (and any relative custom `args` script)
+/// resolves against it instead of Agentero's own cwd.
+fn local_launch_command(
+    desc: &AgentDescriptor,
+    command: PathBuf,
+    env: &mut HashMap<String, String>,
+    cwd: Option<&Path>,
+) -> (PathBuf, Vec<String>) {
+    match cwd {
+        Some(cwd) => wrap_local_command_with_cwd(&command, &desc.args, env, cwd),
+        None => (command, desc.args.clone()),
+    }
+}
+
 pub(crate) fn to_acp_agent_local(
     desc: &AgentDescriptor,
     cwd: Option<&Path>,
@@ -259,12 +295,8 @@ pub(crate) fn to_acp_agent_local(
     // not Agentero's own cwd. The ACP stdio transport has no cwd field, so a
     // Finder-launched macOS GUI app would otherwise hand the agent `/` and any
     // startup scan (Codex/Grok/Pi …) would enumerate `$HOME`, tripping macOS TCC
-    // prompts for Music / Desktop / Downloads / iCloud (#570). Wrapping a
-    // relative custom `args` script also resolves against that directory.
-    let (command, args) = match cwd {
-        Some(cwd) => wrap_local_command_with_cwd(&command, &desc.args, &mut child_env, cwd),
-        None => (command, desc.args.clone()),
-    };
+    // prompts for Music / Desktop / Downloads / iCloud (#570).
+    let (command, args) = local_launch_command(desc, command, &mut child_env, cwd);
 
     let env: Vec<EnvVariable> = child_env
         .into_iter()
@@ -436,6 +468,68 @@ mod cwd_shell_wrap_tests {
         assert!(args[1]
             .starts_with("cd '/path/with spaces' && exec '/usr/bin/pi-acp' '--foo' 'bar baz'"));
         assert!(env.is_empty());
+    }
+
+    /// #570 regression guard: Codex used to be excluded from the shell wrap
+    /// (only `Pi` / `Custom` were), yet it scans its process cwd on startup.
+    #[test]
+    #[cfg(not(windows))]
+    fn every_local_template_wraps_in_the_spawn_cwd() {
+        use crate::features::agent::models::AgentTemplate;
+
+        let desc = AgentDescriptor {
+            id: "codex-acp".into(),
+            name: "Codex".into(),
+            template: AgentTemplate::CodexAcp,
+            command: "codex-acp".into(),
+            args: vec!["--flag".into()],
+            env: HashMap::new(),
+            available: true,
+            last_error: None,
+            last_probe_ok: None,
+            last_probe_agent_name: None,
+            last_probe_error: None,
+            last_probed_at: None,
+        };
+        let mut env = HashMap::new();
+
+        let (cmd, args) = local_launch_command(
+            &desc,
+            PathBuf::from("codex-acp"),
+            &mut env,
+            Some(Path::new("/vault")),
+        );
+        assert_eq!(cmd, PathBuf::from("/bin/sh"));
+        assert_eq!(
+            args,
+            vec![
+                "-c".to_string(),
+                "cd '/vault' && exec 'codex-acp' '--flag'".to_string()
+            ]
+        );
+
+        // No cwd known: the bare command is kept.
+        let (cmd, args) = local_launch_command(&desc, PathBuf::from("codex-acp"), &mut env, None);
+        assert_eq!(cmd, PathBuf::from("codex-acp"));
+        assert_eq!(args, vec!["--flag".to_string()]);
+    }
+
+    #[test]
+    fn agent_spawn_cwd_prefers_the_vault_and_never_the_process_cwd() {
+        let vault = std::env::temp_dir().join(format!("agentero-cwd-{}", std::process::id()));
+        std::fs::create_dir_all(&vault).unwrap();
+
+        assert_eq!(
+            agent_spawn_cwd(None, vault.to_str()),
+            simplified_agent_cwd(&vault)
+        );
+        // Missing/invalid vault -> private scratch dir, never the process cwd.
+        assert_eq!(
+            agent_spawn_cwd(None, vault.join("missing").to_str()),
+            simplified_agent_cwd(&crate::core::paths::agent_scratch_dir())
+        );
+
+        let _ = std::fs::remove_dir(&vault);
     }
 
     #[test]

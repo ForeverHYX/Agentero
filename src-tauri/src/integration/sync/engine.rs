@@ -18,7 +18,7 @@ use crate::core::error::AppError;
 use crate::integration::sync::config::SyncBackendConfig;
 use crate::integration::sync::local::{self, SyncMeta};
 use crate::integration::sync::snapshot::{self, FileEntry, Manifest};
-use crate::integration::sync::store::{PutCondition, PutOutcome, SyncStore};
+use crate::integration::sync::store::{PutCondition, PutOutcome, RemoteStore, SyncStore};
 use flate2::read::GzDecoder;
 use flate2::write::GzEncoder;
 use serde::{Deserialize, Serialize};
@@ -80,7 +80,18 @@ pub async fn sync_vault(
     progress: Progress<'_>,
 ) -> Result<SyncOutcome, AppError> {
     let client = SyncStore::new(cfg)?;
-    ensure_remote_identity(vault, &client).await?;
+    run_sync(vault, cfg, &client, progress).await
+}
+
+/// Engine core, generic over the storage contract: `sync_vault` plugs in the
+/// configured backend; tests can plug in an in-memory store instead.
+async fn run_sync<S: RemoteStore>(
+    vault: &Path,
+    cfg: &SyncBackendConfig,
+    client: &S,
+    progress: Progress<'_>,
+) -> Result<SyncOutcome, AppError> {
+    ensure_remote_identity(vault, client).await?;
 
     progress("scan", 0, 0);
     let base = local::read_base(vault);
@@ -128,7 +139,7 @@ pub async fn sync_vault(
             &cfg.scope,
             &remote_scope,
         );
-        apply_local(vault, &client, &plan, &mut outcome, progress).await?;
+        apply_local(vault, client, &plan, &mut outcome, progress).await?;
         let merged = plan.merged;
 
         // Upload blobs the remote has never referenced. `If-None-Match: *`
@@ -222,7 +233,10 @@ pub async fn sync_vault(
 /// First contact: create or verify the remote store identity.
 /// A vault that never synced adopts an existing remote id (joining a store);
 /// a vault with sync history refuses a foreign store.
-async fn ensure_remote_identity(vault: &Path, client: &SyncStore) -> Result<String, AppError> {
+async fn ensure_remote_identity<S: RemoteStore>(
+    vault: &Path,
+    client: &S,
+) -> Result<String, AppError> {
     let vault_id = local::ensure_vault_id(vault)?;
     match client.get(VAULT_KEY).await? {
         Some((bytes, _)) => {
@@ -422,9 +436,9 @@ fn merge(
     plan
 }
 
-async fn apply_local(
+async fn apply_local<S: RemoteStore>(
     vault: &Path,
-    client: &SyncStore,
+    client: &S,
     plan: &MergePlan,
     outcome: &mut SyncOutcome,
     progress: Progress<'_>,

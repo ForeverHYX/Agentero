@@ -1,6 +1,8 @@
 //! Minimal WebDAV client — exactly what sync needs and nothing more: GET /
 //! conditional PUT / DELETE / MKCOL, over Basic auth (works with Nutstore
 //! app passwords, Nextcloud app tokens and NAS deployments alike).
+//! Implements the [`RemoteStore`] contract; retry/error plumbing is shared
+//! in `store.rs`.
 //!
 //! No XML parsing: the connection test only needs PROPFIND's status code and
 //! every object key is our own ASCII-safe layout. Conditional-write support
@@ -13,7 +15,9 @@
 use crate::core::error::AppError;
 use crate::core::http;
 use crate::integration::sync::config::SyncBackendConfig;
-use crate::integration::sync::store::{PutCondition, PutOutcome};
+use crate::integration::sync::store::{
+    check, etag_of, send_with_retries, PutCondition, PutOutcome, RemoteStore,
+};
 use std::collections::HashSet;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Mutex;
@@ -68,82 +72,8 @@ impl WebdavClient {
         self.conditional_writes.load(Ordering::Relaxed)
     }
 
-    /// Connection test: PROPFIND the configured directory, creating it (and
-    /// its parents) when missing so users can point at one that does not
-    /// exist yet. Auth failures surface as errors from `check`.
-    pub async fn ensure_root(&self) -> Result<(), AppError> {
-        let resp = self
-            .send(
-                method("PROPFIND")?,
-                &self.dir_url(),
-                &[("Depth", "0".to_string())],
-                PROPFIND_BODY.to_vec(),
-            )
-            .await?;
-        match resp.status() {
-            reqwest::StatusCode::MULTI_STATUS => {
-                self.remember_dirs(&self.dir_paths());
-                Ok(())
-            }
-            reqwest::StatusCode::NOT_FOUND => self.mkcol_dirs(&self.dir_paths()).await,
-            _ => check(resp, "PROPFIND", &self.dir.join("/"))
-                .await
-                .map(|_| ()),
-        }
-    }
-
-    /// GET an object. `None` on 404; otherwise `(body, etag)`.
-    pub async fn get(&self, key: &str) -> Result<Option<(Vec<u8>, String)>, AppError> {
-        let resp = self
-            .send(method("GET")?, &self.url_for(key), &[], Vec::new())
-            .await?;
-        if resp.status() == reqwest::StatusCode::NOT_FOUND {
-            return Ok(None);
-        }
-        let resp = check(resp, "GET", key).await?;
-        let etag = etag_of(&resp);
-        let body = resp
-            .bytes()
-            .await
-            .map_err(|e| AppError::message(format!("GET {key}: {e}")))?;
-        Ok(Some((body.to_vec(), etag)))
-    }
-
-    pub async fn put(
-        &self,
-        key: &str,
-        body: Vec<u8>,
-        condition: PutCondition,
-    ) -> Result<PutOutcome, AppError> {
-        self.ensure_parent_dirs(key).await?;
-        let cond = if self.supports_conditional_writes() {
-            match &condition {
-                PutCondition::IfNoneMatch => Some(("If-None-Match", "*".to_string())),
-                // A server that returns no ETag cannot back If-Match; fall
-                // back to a plain PUT (same degraded-CAS semantics).
-                PutCondition::IfMatch(etag) if !etag.is_empty() => Some(("If-Match", etag.clone())),
-                PutCondition::IfMatch(_) => None,
-            }
-        } else {
-            None
-        };
-        let headers: Vec<(&str, String)> = cond.into_iter().collect();
-        let resp = self
-            .send(method("PUT")?, &self.url_for(key), &headers, body)
-            .await?;
-        // With parents ensured, a 409 is a quirky server rejecting the
-        // conditional header — treat it like the standard 412.
-        if resp.status() == reqwest::StatusCode::PRECONDITION_FAILED
-            || resp.status() == reqwest::StatusCode::CONFLICT
-        {
-            return Ok(PutOutcome::PreconditionFailed);
-        }
-        check(resp, "PUT", key).await?;
-        Ok(PutOutcome::Ok)
-    }
-
     /// DELETE an object. 404 counts as success (idempotent cleanup).
-    pub async fn delete(&self, key: &str) -> Result<(), AppError> {
+    async fn delete(&self, key: &str) -> Result<(), AppError> {
         let resp = self
             .send(method("DELETE")?, &self.url_for(key), &[], Vec::new())
             .await?;
@@ -151,51 +81,6 @@ impl WebdavClient {
             return Ok(());
         }
         check(resp, "DELETE", key).await.map(|_| ())
-    }
-
-    /// Probe conditional-write support with a throwaway key: create it, then
-    /// PUT it again with `If-Match` pointing at a stale etag. A real 412
-    /// means the server enforces `If-Match` — the one conditional that backs
-    /// the HEAD CAS. `If-None-Match: *` is deliberately not probed: servers
-    /// like Nutstore ignore it, and an ignored create-only header is harmless
-    /// for content-addressed blobs and unique manifest keys. Inconclusive
-    /// probes fail open — an ignored header is harmless, a missed CAS is not.
-    pub async fn probe_conditional_writes(&self) -> Result<bool, AppError> {
-        let key = format!(".sync-probe-{}", uuid::Uuid::new_v4().simple());
-        match self
-            .put(&key, b"probe".to_vec(), PutCondition::IfNoneMatch)
-            .await
-        {
-            Ok(PutOutcome::Ok) => {}
-            outcome => {
-                log::warn!(
-                    target: "agentero::sync",
-                    "WebDAV conditional-write probe inconclusive ({outcome:?}); assuming supported"
-                );
-                return Ok(true);
-            }
-        }
-        let supported = match self
-            .put(
-                &key,
-                b"probe2".to_vec(),
-                PutCondition::IfMatch("\"00000000deadbeef\"".into()),
-            )
-            .await
-        {
-            Ok(PutOutcome::PreconditionFailed) => true,
-            Ok(PutOutcome::Ok) => false,
-            Err(e) => {
-                if let Err(e) = self.delete(&key).await {
-                    log::warn!(target: "agentero::sync", "probe cleanup {key}: {e}");
-                }
-                return Err(e);
-            }
-        };
-        if let Err(e) = self.delete(&key).await {
-            log::warn!(target: "agentero::sync", "probe cleanup {key}: {e}");
-        }
-        Ok(supported)
     }
 
     /// Decoded directory paths from the origin down to the configured dir.
@@ -297,9 +182,8 @@ impl WebdavClient {
         url
     }
 
-    /// Send one authenticated request. Sync operations are idempotent
-    /// (content-addressed blobs, CAS'd HEAD, 404-tolerant DELETE), so
-    /// transient transport errors are retried like the S3 client does.
+    /// Send one authenticated request; transport-level retries live in
+    /// `send_with_retries`.
     async fn send(
         &self,
         method: reqwest::Method,
@@ -307,11 +191,7 @@ impl WebdavClient {
         headers: &[(&str, String)],
         body: Vec<u8>,
     ) -> Result<reqwest::Response, AppError> {
-        let mut last_err = None;
-        for attempt in 0..3u32 {
-            if attempt > 0 {
-                tokio::time::sleep(std::time::Duration::from_millis(200 * attempt as u64)).await;
-            }
+        send_with_retries(&method, url, || {
             let mut req = self
                 .http
                 .request(method.clone(), url)
@@ -322,29 +202,130 @@ impl WebdavClient {
             if !body.is_empty() || method == reqwest::Method::PUT {
                 req = req.body(body.clone());
             }
-            match req.send().await {
-                Ok(resp) => return Ok(resp),
-                Err(e) if e.is_connect() || e.is_request() => {
-                    log::warn!(
-                        target: "agentero::sync",
-                        "{method} {url} attempt {}: {e}",
-                        attempt + 1
-                    );
-                    last_err = Some(e);
-                }
-                Err(e) => {
-                    return Err(AppError::message(format!(
-                        "{method} {url}: {}",
-                        error_chain(&e)
-                    )))
-                }
+            req
+        })
+        .await
+    }
+}
+
+impl RemoteStore for WebdavClient {
+    /// Connection test: PROPFIND the configured directory, creating it (and
+    /// its parents) when missing so users can point at one that does not
+    /// exist yet. Auth failures surface as errors from `check`.
+    async fn ensure_root(&self) -> Result<(), AppError> {
+        let resp = self
+            .send(
+                method("PROPFIND")?,
+                &self.dir_url(),
+                &[("Depth", "0".to_string())],
+                PROPFIND_BODY.to_vec(),
+            )
+            .await?;
+        match resp.status() {
+            reqwest::StatusCode::MULTI_STATUS => {
+                self.remember_dirs(&self.dir_paths());
+                Ok(())
+            }
+            reqwest::StatusCode::NOT_FOUND => self.mkcol_dirs(&self.dir_paths()).await,
+            _ => check(resp, "PROPFIND", &self.dir.join("/"))
+                .await
+                .map(|_| ()),
+        }
+    }
+
+    /// GET an object. `None` on 404; otherwise `(body, etag)`.
+    async fn get(&self, key: &str) -> Result<Option<(Vec<u8>, String)>, AppError> {
+        let resp = self
+            .send(method("GET")?, &self.url_for(key), &[], Vec::new())
+            .await?;
+        if resp.status() == reqwest::StatusCode::NOT_FOUND {
+            return Ok(None);
+        }
+        let resp = check(resp, "GET", key).await?;
+        let etag = etag_of(&resp);
+        let body = resp
+            .bytes()
+            .await
+            .map_err(|e| AppError::message(format!("GET {key}: {e}")))?;
+        Ok(Some((body.to_vec(), etag)))
+    }
+
+    async fn put(
+        &self,
+        key: &str,
+        body: Vec<u8>,
+        condition: PutCondition,
+    ) -> Result<PutOutcome, AppError> {
+        self.ensure_parent_dirs(key).await?;
+        let cond = if self.supports_conditional_writes() {
+            match &condition {
+                PutCondition::IfNoneMatch => Some(("If-None-Match", "*".to_string())),
+                // A server that returns no ETag cannot back If-Match; fall
+                // back to a plain PUT (same degraded-CAS semantics).
+                PutCondition::IfMatch(etag) if !etag.is_empty() => Some(("If-Match", etag.clone())),
+                PutCondition::IfMatch(_) => None,
+            }
+        } else {
+            None
+        };
+        let headers: Vec<(&str, String)> = cond.into_iter().collect();
+        let resp = self
+            .send(method("PUT")?, &self.url_for(key), &headers, body)
+            .await?;
+        // With parents ensured, a 409 is a quirky server rejecting the
+        // conditional header — treat it like the standard 412.
+        if resp.status() == reqwest::StatusCode::PRECONDITION_FAILED
+            || resp.status() == reqwest::StatusCode::CONFLICT
+        {
+            return Ok(PutOutcome::PreconditionFailed);
+        }
+        check(resp, "PUT", key).await?;
+        Ok(PutOutcome::Ok)
+    }
+
+    /// Probe conditional-write support with a throwaway key: create it, then
+    /// PUT it again with `If-Match` pointing at a stale etag. A real 412
+    /// means the server enforces `If-Match` — the one conditional that backs
+    /// the HEAD CAS. `If-None-Match: *` is deliberately not probed: servers
+    /// like Nutstore ignore it, and an ignored create-only header is harmless
+    /// for content-addressed blobs and unique manifest keys. Inconclusive
+    /// probes fail open — an ignored header is harmless, a missed CAS is not.
+    async fn probe_conditional_writes(&self) -> Result<bool, AppError> {
+        let key = format!(".sync-probe-{}", uuid::Uuid::new_v4().simple());
+        match self
+            .put(&key, b"probe".to_vec(), PutCondition::IfNoneMatch)
+            .await
+        {
+            Ok(PutOutcome::Ok) => {}
+            outcome => {
+                log::warn!(
+                    target: "agentero::sync",
+                    "WebDAV conditional-write probe inconclusive ({outcome:?}); assuming supported"
+                );
+                return Ok(true);
             }
         }
-        let e = last_err.expect("loop sets last_err before exiting");
-        Err(AppError::message(format!(
-            "{method} {url}: {}",
-            error_chain(&e)
-        )))
+        let supported = match self
+            .put(
+                &key,
+                b"probe2".to_vec(),
+                PutCondition::IfMatch("\"00000000deadbeef\"".into()),
+            )
+            .await
+        {
+            Ok(PutOutcome::PreconditionFailed) => true,
+            Ok(PutOutcome::Ok) => false,
+            Err(e) => {
+                if let Err(e) = self.delete(&key).await {
+                    log::warn!(target: "agentero::sync", "probe cleanup {key}: {e}");
+                }
+                return Err(e);
+            }
+        };
+        if let Err(e) = self.delete(&key).await {
+            log::warn!(target: "agentero::sync", "probe cleanup {key}: {e}");
+        }
+        Ok(supported)
     }
 }
 
@@ -352,43 +333,10 @@ fn method(name: &str) -> Result<reqwest::Method, AppError> {
     reqwest::Method::from_bytes(name.as_bytes()).map_err(|e| AppError::message(e.to_string()))
 }
 
-/// reqwest's `Display` stops at the first source; walk the chain so transport
-/// failures surface their real cause (connection reset, timeout, …).
-fn error_chain(err: &reqwest::Error) -> String {
-    let mut out = err.to_string();
-    let mut source = std::error::Error::source(err);
-    while let Some(s) = source {
-        out.push_str(&format!(": {s}"));
-        source = s.source();
-    }
-    out
-}
-
-async fn check(
-    resp: reqwest::Response,
-    op: &str,
-    key: &str,
-) -> Result<reqwest::Response, AppError> {
-    if resp.status().is_success() {
-        return Ok(resp);
-    }
-    let status = resp.status();
-    let body = resp.text().await.unwrap_or_default();
-    let detail: String = body.chars().take(300).collect();
-    Err(AppError::message(format!("{op} {key}: {status} {detail}")))
-}
-
-fn etag_of(resp: &reqwest::Response) -> String {
-    resp.headers()
-        .get("etag")
-        .and_then(|v| v.to_str().ok())
-        .unwrap_or_default()
-        .to_string()
-}
-
 /// Percent-encode one path segment (unreserved chars pass through; `/` is
 /// never part of a segment here, but encoding it keeps hostile manifest
-/// paths from escaping the directory).
+/// paths from escaping the directory). Kept separate from the S3 client's
+/// SigV4 canonical encoder: same charset today, different specs to follow.
 fn encode_path_segment(s: &str) -> String {
     let mut out = String::with_capacity(s.len());
     for b in s.bytes() {

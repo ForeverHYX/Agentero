@@ -77,7 +77,10 @@
 		"selectEngineFirst": "请先选择一个 LaTeX 引擎",
 		"latexEngine": "LaTeX 引擎",
 		"detectingEngines": "检测引擎中…",
-		"noLatexEngine": "未找到 LaTeX 引擎"
+		"noLatexEngine": "未找到 LaTeX 引擎",
+		"cleanAux": "清除中间产物",
+		"cleanAuxSuccess": "已清除中间产物，可重新编译",
+		"cleanAuxFailed": "清除中间产物失败。"
 	},
 	"importLocalPdf": {
 		"dropNoPath": "无法读取拖入的 PDF。请改用魔棒 → 导入 PDF，或从 Finder 再拖一次。"

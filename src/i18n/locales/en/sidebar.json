@@ -77,7 +77,10 @@
 		"selectEngineFirst": "Select a LaTeX engine first",
 		"latexEngine": "LaTeX engine",
 		"detectingEngines": "Detecting engines…",
-		"noLatexEngine": "No LaTeX engine found"
+		"noLatexEngine": "No LaTeX engine found",
+		"cleanAux": "Clean intermediates",
+		"cleanAuxSuccess": "Intermediates cleaned — ready to recompile",
+		"cleanAuxFailed": "Failed to clean intermediates."
 	},
 	"importLocalPdf": {
 		"dropNoPath": "Could not read the dropped PDF. Try the magic wand → Import PDF, or drop from Finder again."

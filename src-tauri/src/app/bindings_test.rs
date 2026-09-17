@@ -227,6 +227,7 @@ fn export_typescript_bindings() {
             crate::features::pdf::export::commands::export_system_cjk_font,
             crate::features::web::commands::web_proxy_allow_host,
             crate::features::compile::detect_latex_engines,
+            crate::features::compile::clean_latex_aux_files,
             crate::features::jobs::commands::job_latex_compile_enqueue,
         ])
         // Desktop event surface (see `app::events_contract`): emit sites keep

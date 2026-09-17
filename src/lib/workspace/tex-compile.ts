@@ -99,6 +99,37 @@ export function selectTexEngine(id: string): void {
 }
 
 /**
+ * Clear the regenerable LaTeX intermediates (latexmk -c) for one source,
+ * keeping the PDF. Escape hatch for latexmk's stuck state after a failed
+ * run: its fingerprint database (`.fdb_latexmk`) records the error and,
+ * with an unchanged source, it refuses to recompile ("Nothing to do …
+ * gave an error in previous invocation"). Clearing the intermediates
+ * resets that database so the next compile is a full run.
+ */
+export async function cleanTexAuxFiles(texPath: string): Promise<boolean> {
+	// latexmk -c mid-compile would delete files the run is still writing.
+	if (texCompileStore.getState().compilingPath) return false;
+	try {
+		const res = await commands.cleanLatexAuxFiles(texPath);
+		if (!res.ok) {
+			notifyError(
+				res.error?.message || i18n.t("sidebar:fileTree.cleanAuxFailed"),
+			);
+			return false;
+		}
+		notifySuccess(i18n.t("sidebar:fileTree.cleanAuxSuccess"));
+		return true;
+	} catch (e) {
+		notifyError(
+			e instanceof Error && e.message
+				? e.message
+				: i18n.t("sidebar:fileTree.cleanAuxFailed"),
+		);
+		return false;
+	}
+}
+
+/**
  * Compile with the selected (or first detected) engine. Runs as a background
  * job: the tasks panel shows live latexmk progress (rule / run milestones)
  * and a cancel button; `compilingPath` still drives the file-tree spinner.

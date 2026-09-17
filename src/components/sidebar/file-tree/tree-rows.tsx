@@ -3,6 +3,7 @@ import {
 	ChevronDown,
 	ChevronRight,
 	Download,
+	Eraser,
 	Globe,
 	Library,
 	Loader2,
@@ -391,39 +392,64 @@ function TexCompileActions({
 							{t("fileTree.detectingEngines")}
 						</div>
 					) : hasEngines ? (
-						<div role="listbox" className="flex flex-col">
-							{actions.engines.map((engine) => {
-								const isSelected = actions.selectedEngine === engine.id;
-								return (
-									<button
-										key={engine.id}
-										type="button"
-										role="option"
-										aria-selected={isSelected}
-										className={cn(
-											"flex w-full items-center gap-1.5 rounded-sm px-2 py-1.5 text-left text-xs",
-											"focus:outline-none",
-											isSelected
-												? "bg-accent font-medium text-accent-foreground"
-												: "hover:bg-accent hover:text-accent-foreground focus-visible:bg-accent focus-visible:text-accent-foreground",
-										)}
-										onClick={(e) => {
-											e.stopPropagation();
-											actions.selectEngine(engine.id);
-											setPickerOpen(false);
-										}}
-									>
-										<Check
+						<div className="flex flex-col">
+							<div role="listbox" className="flex flex-col">
+								{actions.engines.map((engine) => {
+									const isSelected = actions.selectedEngine === engine.id;
+									return (
+										<button
+											key={engine.id}
+											type="button"
+											role="option"
+											aria-selected={isSelected}
 											className={cn(
-												"size-3 shrink-0",
-												isSelected ? "opacity-100" : "opacity-0",
+												"flex w-full items-center gap-1.5 rounded-sm px-2 py-1.5 text-left text-xs",
+												"focus:outline-none",
+												isSelected
+													? "bg-accent font-medium text-accent-foreground"
+													: "hover:bg-accent hover:text-accent-foreground focus-visible:bg-accent focus-visible:text-accent-foreground",
 											)}
-											aria-hidden
-										/>
-										<span className="flex-1 truncate">{engine.label}</span>
-									</button>
-								);
-							})}
+											onClick={(e) => {
+												e.stopPropagation();
+												actions.selectEngine(engine.id);
+												setPickerOpen(false);
+											}}
+										>
+											<Check
+												className={cn(
+													"size-3 shrink-0",
+													isSelected ? "opacity-100" : "opacity-0",
+												)}
+												aria-hidden
+											/>
+											<span className="flex-1 truncate">{engine.label}</span>
+										</button>
+									);
+								})}
+							</div>
+							{/* Clear intermediates: unstick latexmk after a failed run
+							 * (fingerprint db records the error, unchanged source
+							 * then never recompiles). Kept next to the engines it
+							 * applies to; hidden without latexmk (nothing to run). */}
+							<div className="mx-1 my-1 h-px bg-border" />
+							<button
+								type="button"
+								className={cn(
+									"flex w-full items-center gap-1.5 rounded-sm px-2 py-1.5 text-left text-xs",
+									"hover:bg-accent hover:text-accent-foreground",
+									"focus:outline-none focus-visible:bg-accent focus-visible:text-accent-foreground",
+								)}
+								onClick={(e) => {
+									e.stopPropagation();
+									setPickerOpen(false);
+									actions.cleanAux(texPath);
+								}}
+							>
+								<Eraser className="size-3 shrink-0" aria-hidden />
+								<span className="flex-1 truncate">
+									{t("fileTree.cleanAux")}
+								</span>
+							</button>
 						</div>
 					) : (
 						<div className="px-2 py-1.5 text-muted-foreground text-xs">

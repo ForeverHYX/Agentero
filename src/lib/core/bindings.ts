@@ -586,6 +586,17 @@ export const commands = {
 	 *  button stays hidden.
 	 */
 	detectLatexEngines: () => __TAURI_INVOKE<ApiResult<LatexEngine[]>>("detect_latex_engines"),
+	/**
+	 *  Clean the regenerable LaTeX intermediates for one source (`latexmk -c`):
+	 *  drops `.aux` / `.log` / `.fls` / `.fdb_latexmk` / … while keeping the PDF.
+	 * 
+	 *  This is the escape hatch for latexmk's stuck state after a failed run:
+	 *  its fingerprint database (`*.fdb_latexmk`) records the failure, and with
+	 *  an unchanged source it then refuses to recompile — "Nothing to do …
+	 *  pdflatex gave an error in previous invocation". Clearing the
+	 *  intermediates resets that database so the next compile is a full run.
+	 */
+	cleanLatexAuxFiles: (texPath: string) => __TAURI_INVOKE<ApiResult<null>>("clean_latex_aux_files", { texPath }),
 	jobLatexCompileEnqueue: (args: JobLatexCompileEnqueueArgs) => typedError<ApiResult<JobSnapshot>, string>(__TAURI_INVOKE("job_latex_compile_enqueue", { args })),
 };
 

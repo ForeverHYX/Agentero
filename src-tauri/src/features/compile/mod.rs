@@ -11,6 +11,7 @@ use tokio::io::AsyncBufReadExt;
 use tokio::io::BufReader;
 
 use crate::core::error::ApiResult;
+use crate::core::error::AppError;
 use crate::features::jobs::emit_job_changed;
 use crate::features::jobs::JobCenter;
 use crate::features::jobs::JobKind;
@@ -117,6 +118,87 @@ pub async fn detect_latex_engines() -> ApiResult<Vec<LatexEngine>> {
 
     log::debug!("detected LaTeX engines: {:?}", engines);
     ApiResult::ok(engines)
+}
+
+/// Clean the regenerable LaTeX intermediates for one source (`latexmk -c`):
+/// drops `.aux` / `.log` / `.fls` / `.fdb_latexmk` / … while keeping the PDF.
+///
+/// This is the escape hatch for latexmk's stuck state after a failed run:
+/// its fingerprint database (`*.fdb_latexmk`) records the failure, and with
+/// an unchanged source it then refuses to recompile — "Nothing to do …
+/// pdflatex gave an error in previous invocation". Clearing the
+/// intermediates resets that database so the next compile is a full run.
+#[tauri::command]
+#[specta::specta]
+pub async fn clean_latex_aux_files(tex_path: String) -> ApiResult<()> {
+    let tex_path = PathBuf::from(&tex_path);
+    if !tex_path.is_file() {
+        return ApiResult::err(AppError::message(format!(
+            "tex file not found: {}",
+            tex_path.display()
+        )));
+    }
+    let Some(cwd) = tex_path.parent().map(Path::to_path_buf) else {
+        return ApiResult::err(AppError::message("cannot determine parent directory"));
+    };
+    let Some(basename) = tex_path
+        .file_name()
+        .and_then(|n| n.to_str())
+        .map(str::to_string)
+    else {
+        return ApiResult::err(AppError::message("invalid tex file name"));
+    };
+    // GUI apps inherit launchd's minimal PATH — resolve latexmk the same way
+    // the compile runner does and spawn the absolute path.
+    let Some(latexmk) = resolve_engine("latexmk") else {
+        return ApiResult::err(AppError::message("latexmk not found on this system"));
+    };
+
+    log::info!(
+        "cleaning latex aux files for {} in {}",
+        basename,
+        cwd.display()
+    );
+
+    let mut cmd = tokio::process::Command::new(&latexmk);
+    cmd.current_dir(&cwd)
+        .arg("-c")
+        .arg(format!("-outdir={}", cwd.to_string_lossy()))
+        .arg(&basename)
+        .kill_on_drop(true)
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::piped());
+    if let Some(bin_dir) = latexmk.parent() {
+        let inherited = std::env::var_os("PATH").unwrap_or_default();
+        let mut path_env = std::ffi::OsString::from(bin_dir);
+        path_env.push(":");
+        path_env.push(inherited);
+        cmd.env("PATH", path_env);
+    }
+
+    let output = match cmd.output().await {
+        Ok(output) => output,
+        Err(e) => return ApiResult::err(AppError::message(format!("failed to run latexmk: {e}"))),
+    };
+    if output.status.success() {
+        return ApiResult::ok(());
+    }
+    // Prefer stderr for the failure message; latexmk -c reports its errors
+    // there, falling back to whatever stdout captured.
+    let mut tail = String::from_utf8_lossy(&output.stderr).trim().to_string();
+    if tail.is_empty() {
+        tail = String::from_utf8_lossy(&output.stdout).trim().to_string();
+    }
+    let tail = if tail.len() > 2000 {
+        format!("{}…", tail[tail.len() - 2000..].trim_start())
+    } else {
+        tail
+    };
+    ApiResult::err(AppError::message(if tail.is_empty() {
+        format!("latexmk clean exited with {}", output.status)
+    } else {
+        tail
+    }))
 }
 
 /// `params` payload of a `LatexCompile` job.

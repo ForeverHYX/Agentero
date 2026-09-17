@@ -343,6 +343,7 @@ function catalogTemplateFromId(templateId: string): AgentTemplate | undefined {
 		case "pi":
 		case "dsh":
 		case "kimi-code":
+		case "zcode":
 		case "custom":
 			return templateId;
 		default:

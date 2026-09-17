@@ -1,7 +1,7 @@
 use crate::core::error::AppError;
 pub(crate) use crate::core::process::windows_shell_path as simplified_agent_cwd;
 use crate::features::agent::acp::terminal::AcpTerminalManager;
-use crate::features::agent::models::{AgentDescriptor, AgentResultPayload};
+use crate::features::agent::models::{AgentDescriptor, AgentResultPayload, AgentTemplate};
 
 use crate::features::agent::registry::discovery::{login_shell_env, path_entries};
 use agent_client_protocol::schema::v1::{
@@ -252,6 +252,16 @@ pub(crate) fn to_acp_agent_local(
     cwd: Option<&Path>,
 ) -> Result<AcpAgent, AppError> {
     let mut child_env = effective_local_agent_env(desc);
+    // ZCode's adapter needs the desktop app's runtime provider table and a
+    // backend CLI that still supports the provider-registry push; user-set
+    // env in the registered agent takes precedence.
+    if desc.template == AgentTemplate::Zcode {
+        for (key, value) in crate::features::agent::registry::templates::zcode_runtime_env() {
+            if !desc.env.contains_key(&key) {
+                child_env.insert(key, value);
+            }
+        }
+    }
     let command = resolve_command_in_agent_env(&desc.command, &child_env)
         .unwrap_or_else(|| PathBuf::from(&desc.command));
 

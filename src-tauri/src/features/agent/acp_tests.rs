@@ -50,7 +50,22 @@ mod acp_live {
         assert!(ids.contains(&"pi"));
         assert!(ids.contains(&"dsh"));
         assert!(ids.contains(&"kimi-code"));
+        assert!(ids.contains(&"zcode"));
         assert!(!ids.contains(&"custom"));
+    }
+
+    #[test]
+    fn zcode_template_uses_the_acp_adapter() {
+        let zcode = catalog_templates()
+            .into_iter()
+            .find(|entry| entry.id == "zcode")
+            .expect("ZCode template");
+        assert_eq!(zcode.command, "zcode-acp-server");
+        assert_eq!(zcode.args, Vec::<String>::new());
+        // The adapter discovers the desktop app's zcode.cjs itself, so the
+        // "installed" badge tracks the adapter rather than a host `zcode` CLI.
+        assert_eq!(zcode.detect_command.as_deref(), Some("zcode-acp-server"));
+        assert!(zcode.install_command.is_some());
     }
 
     #[test]

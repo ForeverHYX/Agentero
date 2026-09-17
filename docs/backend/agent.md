@@ -21,7 +21,7 @@ Agentero 作为 **ACP Client**，stdio JSON-RPC 连接用户本机或远端 Agen
   环境变量（`SHELL -lic 'env -0'`）以及 `AgentDescriptor.env`。这样 macOS/Linux 上从
   GUI 启动 Agentero 也能读到 `.zshrc` / `.bashrc` 里 `export` 的 `OPENAI_API_KEY`、
   `OPENAI_BASE_URL` 等变量；`AgentDescriptor.env` 优先级最高，可覆盖 shell 值（#478）。
-- 统一接口：OpenCode、OpenClaw、Hermes、Claude ACP、Codex ACP、Qoder、Grok、Pi、Dsh（DeepSeek Harness）、Kimi Code、自定义 `command`/`args`/`env`。
+- 统一接口：OpenCode、OpenClaw、Hermes、Claude ACP、Codex ACP、Qoder、Grok、Pi、Dsh（DeepSeek Harness）、Kimi Code、ZCode、自定义 `command`/`args`/`env`。
 - Dsh：ACP 服务端是 `@deepseek-ai/dsh-acp-demo`（npm 包），与依赖插件一起固定
   `0.1.1-rc.2`。安装/启动三处入口，检测按序回退：
   1. App 管理目录 `~/.agentero/dsh-acp/node_modules/.bin/dsh-acp-demo`（设置页「安装」按钮，
@@ -46,6 +46,18 @@ Agentero 作为 **ACP Client**，stdio JSON-RPC 连接用户本机或远端 Agen
   `@moonshot-ai/kimi-code`（需 Node 22.19+）作回退。`kimi upgrade` 是交互式的，静默
   `update` 重跑幂等的官方 installer。登录在终端完成（`kimi` → `/login`，OAuth 或
   Moonshot API key），skill 走 slash mention。
+- ZCode：host CLI 无原生 ACP，走社区适配器 `zcode-acp-server`（桥接无头
+  `zcode app-server --stdio`，声明 `session/load` 续聊）。zcode CLI 内置在 ZCode
+  桌面应用中、通常不在 PATH 上，适配器会自动发现桌面应用内置 CLI（或用 `ZCODE_BIN`
+  指定），凭据直接复用 `~/.zcode` 的桌面登录——无需额外 API key。detect/ACP 入口
+  均为 `zcode-acp-server`（npm 安装，需 Node 22+），静默 install/update 走 npm，
+  Unix 侧装入 `~/.local` 前缀。
+  - spawn 时 Host 注入两个环境变量（注册项 env 可覆盖）：`ZCODE_BUILTIN_PROVIDER_CONFIG_FILE`
+    指向 `~/.zcode/v2/runtime/provider/*/*/endpoint-*/zcode-builtin.json` 中最新一份——
+    缺少它内置 CLI 的 provider 层不启动（backend dead）；`ZCODE_BIN` 指向 remote-assets
+    cache 中最新一个仍实现 `workspace/updateProviderRegistry` 的 `zcode.cjs`（桌面
+    3.12.3 起内置副本移除了该方法，缺失时 prompt 报 `provider_not_configured`），
+    均不存在时回落适配器默认发现逻辑。
 - Pi：无原生 ACP，走社区适配器 `pi-acp`（内部 spawn `pi --mode rpc`）；detect 用 host `pi`、
   ACP 入口用 `pi-acp`。pi 的 skill 以 `/skill:<name>` 暴露，故 Agentero 不发 `/<name>`
   mention，只注入 `SKILL.md` 正文。

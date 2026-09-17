@@ -67,8 +67,8 @@ Hermes 未触发它们，但对 Kimi Code 等真正委托 `terminal/*` 的 agent
 5. **`\\?\` 扩展 cwd 传给 ACP 会话**：前端可能送入 canonicalize 后的
    `\\?\D:\…`；Hermes 等基于 MSYS2 的 shell 无法 `cd` 进 `\\?\` 路径，
    且子进程 POSIX cwd 初始化失败后 mktemp/cd 全部 ENOENT。本地 ACP 的
-   run / warm / list / load 入口统一经 `simplified_agent_cwd` 规范化（list / load
-   收敛在 `service.rs` 的 `agent_cwd_or_local`），这四个入口的终端默认 cwd 均复用
+   run / warm / list / load 入口统一经 `simplified_agent_cwd` 规范化（统一收敛在
+   `acp/client.rs` 的 `agent_spawn_cwd`），这四个入口的终端默认 cwd 均复用
    同一结果；扩展 UNC 形式保持不变。
 6. **ACP 分发循环被终端等待阻塞**（PR #474 审查补充）：协议库逐条等待
    handler 完成；仅释放 manager 锁仍不能让后续 `kill` 进入 handler。

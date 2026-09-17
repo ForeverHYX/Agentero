@@ -1,9 +1,21 @@
-import { ChevronRight, CloudUpload, LoaderCircle, Unplug } from "lucide-react";
+import {
+	ChevronRight,
+	Cloud,
+	CloudUpload,
+	LoaderCircle,
+	Unplug,
+} from "lucide-react";
 import type { ComponentType } from "react";
 import { useCallback, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { FaAws } from "react-icons/fa6";
-import { SiAlibabacloud, SiBaidu, SiCloudflare, SiMinio } from "react-icons/si";
+import {
+	SiAlibabacloud,
+	SiBaidu,
+	SiCloudflare,
+	SiMinio,
+	SiNextcloud,
+} from "react-icons/si";
 import {
 	HelpLabel,
 	PageTitle,
@@ -104,6 +116,29 @@ const SYNC_PROVIDER_LINKS: SyncProviderLink[] = [
 	},
 ];
 
+const WEBDAV_PROVIDER_LINKS: SyncProviderLink[] = [
+	{
+		id: "jianguoyun",
+		name: "坚果云",
+		docsUrl: "https://help.jianguoyun.com/?p=2064",
+		icon: Cloud,
+		iconClassName: "text-[#2E7CF6]",
+	},
+	{
+		id: "nextcloud",
+		name: "Nextcloud",
+		docsUrl:
+			"https://docs.nextcloud.com/server/latest/user_manual/en/files/access_webdav.html",
+		icon: SiNextcloud,
+		iconClassName: "text-[#0082C9]",
+	},
+];
+
+const BACKEND_OPTIONS = [
+	{ value: "s3", labelKey: "sync.backendS3" },
+	{ value: "webdav", labelKey: "sync.backendWebdav" },
+] as const;
+
 export function SyncPane({ vaultPath }: { vaultPath: string | null }) {
 	const { t } = useTranslation("settings");
 	const localVault =
@@ -129,9 +164,10 @@ export function SyncPane({ vaultPath }: { vaultPath: string | null }) {
 			setForm(next.config);
 			// Surface the advanced group when it holds non-default values.
 			if (
-				next.config.region !== "us-east-1" ||
-				next.config.prefix !== "" ||
-				!next.config.forcePathStyle
+				next.config.backend === "s3" &&
+				(next.config.region !== "us-east-1" ||
+					next.config.prefix !== "" ||
+					!next.config.forcePathStyle)
 			) {
 				setAdvancedOpen(true);
 			}
@@ -205,6 +241,10 @@ export function SyncPane({ vaultPath }: { vaultPath: string | null }) {
 	const scope = form.scope;
 	const patchScope = (key: keyof SyncBackendConfig["scope"], value: boolean) =>
 		patch({ scope: { ...scope, [key]: value } });
+
+	const isWebdav = form.backend === "webdav";
+	const backendLocked = status?.configured === true;
+	const providerLinks = isWebdav ? WEBDAV_PROVIDER_LINKS : SYNC_PROVIDER_LINKS;
 
 	const save = async () => {
 		setSaving(true);
@@ -367,48 +407,103 @@ export function SyncPane({ vaultPath }: { vaultPath: string | null }) {
 				</p>
 			) : null}
 
-			<div className="mb-3 flex flex-wrap items-center gap-1.5">
-				{SYNC_PROVIDER_LINKS.map((provider) => {
-					const Icon = provider.icon;
-					return (
-						<Tooltip key={provider.id}>
-							<TooltipTrigger asChild>
-								<Button
-									type="button"
-									size="icon-lg"
-									variant="outline"
-									className="size-9 bg-background"
-									aria-label={t("sync.providerDocsAria", {
-										name: provider.name,
-									})}
-									onClick={() => openExternalUrl(provider.docsUrl)}
+			<div className="mb-3 flex flex-wrap items-center gap-2">
+				<span id="sync-backend-label" className="text-muted-foreground text-xs">
+					{t("sync.backend")}
+				</span>
+				<Tooltip>
+					<TooltipTrigger asChild>
+						<span className="inline-flex">
+							<Select
+								value={form.backend}
+								onValueChange={(value) =>
+									patch({ backend: value === "webdav" ? "webdav" : "s3" })
+								}
+								disabled={backendLocked}
+							>
+								<SelectTrigger
+									id="sync-backend"
+									size="sm"
+									className="w-36"
+									aria-labelledby="sync-backend-label"
 								>
-									<Icon
-										className={cn("size-5", provider.iconClassName)}
-										aria-hidden
-									/>
-								</Button>
-							</TooltipTrigger>
-							<TooltipContent side="bottom">{provider.name}</TooltipContent>
-						</Tooltip>
-					);
-				})}
+									<SelectValue />
+								</SelectTrigger>
+								<SelectContent>
+									{BACKEND_OPTIONS.map((option) => (
+										<SelectItem key={option.value} value={option.value}>
+											{t(option.labelKey)}
+										</SelectItem>
+									))}
+								</SelectContent>
+							</Select>
+						</span>
+					</TooltipTrigger>
+					{backendLocked ? (
+						<TooltipContent side="bottom">
+							{t("sync.backendLocked")}
+						</TooltipContent>
+					) : null}
+				</Tooltip>
+				<div className="ml-auto flex flex-wrap items-center gap-1.5">
+					{providerLinks.map((provider) => {
+						const Icon = provider.icon;
+						return (
+							<Tooltip key={provider.id}>
+								<TooltipTrigger asChild>
+									<Button
+										type="button"
+										size="icon-lg"
+										variant="outline"
+										className="size-9 bg-background"
+										aria-label={t("sync.providerDocsAria", {
+											name: provider.name,
+										})}
+										onClick={() => openExternalUrl(provider.docsUrl)}
+									>
+										<Icon
+											className={cn("size-5", provider.iconClassName)}
+											aria-hidden
+										/>
+									</Button>
+								</TooltipTrigger>
+								<TooltipContent side="bottom">{provider.name}</TooltipContent>
+							</Tooltip>
+						);
+					})}
+				</div>
 			</div>
 
-			<SettingsGroup>
-				<SettingsRow label={t("sync.endpoint")} htmlFor="sync-endpoint">
-					{field("endpoint", { placeholder: "https://…" })}
-				</SettingsRow>
-				<SettingsRow label={t("sync.bucket")} htmlFor="sync-bucket">
-					{field("bucket")}
-				</SettingsRow>
-				<SettingsRow label={t("sync.accessKey")} htmlFor="sync-accessKey">
-					{field("accessKey")}
-				</SettingsRow>
-				<SettingsRow label={t("sync.secretKey")} htmlFor="sync-secretKey">
-					{field("secretKey", { type: "password" })}
-				</SettingsRow>
-			</SettingsGroup>
+			{isWebdav ? (
+				<SettingsGroup>
+					<SettingsRow label={t("sync.serverUrl")} htmlFor="sync-webdavUrl">
+						{field("webdavUrl", {
+							placeholder: "https://dav.jianguoyun.com/dav/agentero",
+						})}
+					</SettingsRow>
+					<SettingsRow label={t("sync.username")} htmlFor="sync-webdavUsername">
+						{field("webdavUsername")}
+					</SettingsRow>
+					<SettingsRow label={t("sync.password")} htmlFor="sync-webdavPassword">
+						{field("webdavPassword", { type: "password" })}
+					</SettingsRow>
+				</SettingsGroup>
+			) : (
+				<SettingsGroup>
+					<SettingsRow label={t("sync.endpoint")} htmlFor="sync-endpoint">
+						{field("endpoint", { placeholder: "https://…" })}
+					</SettingsRow>
+					<SettingsRow label={t("sync.bucket")} htmlFor="sync-bucket">
+						{field("bucket")}
+					</SettingsRow>
+					<SettingsRow label={t("sync.accessKey")} htmlFor="sync-accessKey">
+						{field("accessKey")}
+					</SettingsRow>
+					<SettingsRow label={t("sync.secretKey")} htmlFor="sync-secretKey">
+						{field("secretKey", { type: "password" })}
+					</SettingsRow>
+				</SettingsGroup>
+			)}
 
 			<SettingsGroup>
 				<SettingsRow label={t("sync.autoSync")} htmlFor="sync-autoSync">
@@ -492,58 +587,60 @@ export function SyncPane({ vaultPath }: { vaultPath: string | null }) {
 				</SettingsRow>
 			</SettingsGroup>
 
-			<Collapsible open={advancedOpen} onOpenChange={setAdvancedOpen}>
-				<CollapsibleTrigger asChild>
-					<button
-						type="button"
-						className="mb-2 flex items-center gap-1 text-muted-foreground text-xs outline-none transition-colors hover:text-foreground"
-						aria-label={t("sync.advanced")}
-					>
-						<ChevronRight
-							className={cn(
-								"size-3.5 transition-transform",
-								advancedOpen && "rotate-90",
-							)}
-						/>
-						{t("sync.advanced")}
-					</button>
-				</CollapsibleTrigger>
-				<CollapsibleContent>
-					<SettingsGroup>
-						<SettingsRow label={t("sync.region")} htmlFor="sync-region">
-							{field("region")}
-						</SettingsRow>
-						<SettingsRow
-							label={
-								<HelpLabel
-									label={t("sync.prefix")}
-									help={t("sync.prefixHint")}
-								/>
-							}
-							htmlFor="sync-prefix"
+			{!isWebdav ? (
+				<Collapsible open={advancedOpen} onOpenChange={setAdvancedOpen}>
+					<CollapsibleTrigger asChild>
+						<button
+							type="button"
+							className="mb-2 flex items-center gap-1 text-muted-foreground text-xs outline-none transition-colors hover:text-foreground"
+							aria-label={t("sync.advanced")}
 						>
-							{field("prefix")}
-						</SettingsRow>
-						<SettingsRow
-							label={
-								<HelpLabel
-									label={t("sync.pathStyle")}
-									help={t("sync.pathStyleHint")}
-								/>
-							}
-							htmlFor="sync-pathStyle"
-						>
-							<Switch
-								id="sync-pathStyle"
-								checked={form.forcePathStyle}
-								onCheckedChange={(checked) =>
-									patch({ forcePathStyle: checked })
-								}
+							<ChevronRight
+								className={cn(
+									"size-3.5 transition-transform",
+									advancedOpen && "rotate-90",
+								)}
 							/>
-						</SettingsRow>
-					</SettingsGroup>
-				</CollapsibleContent>
-			</Collapsible>
+							{t("sync.advanced")}
+						</button>
+					</CollapsibleTrigger>
+					<CollapsibleContent>
+						<SettingsGroup>
+							<SettingsRow label={t("sync.region")} htmlFor="sync-region">
+								{field("region")}
+							</SettingsRow>
+							<SettingsRow
+								label={
+									<HelpLabel
+										label={t("sync.prefix")}
+										help={t("sync.prefixHint")}
+									/>
+								}
+								htmlFor="sync-prefix"
+							>
+								{field("prefix")}
+							</SettingsRow>
+							<SettingsRow
+								label={
+									<HelpLabel
+										label={t("sync.pathStyle")}
+										help={t("sync.pathStyleHint")}
+									/>
+								}
+								htmlFor="sync-pathStyle"
+							>
+								<Switch
+									id="sync-pathStyle"
+									checked={form.forcePathStyle}
+									onCheckedChange={(checked) =>
+										patch({ forcePathStyle: checked })
+									}
+								/>
+							</SettingsRow>
+						</SettingsGroup>
+					</CollapsibleContent>
+				</Collapsible>
+			) : null}
 
 			<div className="flex items-center gap-2">
 				{status?.configured ? (

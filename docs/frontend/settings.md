@@ -37,7 +37,7 @@
 | Appearance | 明暗、`uiTheme`、`uiScale`；界面/正文/等宽字体；Markdown 字号 / 行距 / 工具栏 |
 | Agent | 目录两层检测（Agent CLI / ACP）、未装「安装」/ 缺 ACP「安装 ACP」/ **有可静默升到的新版本时**「升级」（本地 `--version` 对比 npm latest 或 dsh pin；探测中/失败/hermes 等无法判定时不显示）、已安装或已注册行「卸载」（Trash 按钮 → 确认对话框展示 logo 与清理项：npm 全局包、受管目录，或仅注册项）、安装 / 升级进行中行内显示阶段进度条与取消（X）按钮（点击静默中止安装子进程，不弹错误）、默认 Agent、权限模式、自动精读、可选 **User-Agent**（Codex 中转亲和）、个人提示词、划词提问 Agent、**Embedding 端点**（arXiv 每日推荐用；`source` 在「Agentero 内置」与「自定义接口」之间切换，选内置时隐藏 Base URL / API Key / Model 三个输入框以及探测色点和 Test 按钮——凭证来自构建期注入；无 key 的源码 / dev 构建默认落到「自定义接口」且为空，见 [../backend/builtin-provider.md](../backend/builtin-provider.md)） |
 | 翻译 | 默认服务选择（含**内置 provider** `agentero`：无凭证卡片、无探测色点，可用性来自 Host `builtin_provider_status`；构建未注入 key 时禁用，当前已选中则仍留在列表里）、商用 API 配置、语言与 Agent 座 |
-| 同步 | S3 兼容云同步配置、顶部常见服务商 logo 打开官方配置指南、自动同步、同步范围逐类开关；标题旁色点显示未连接 / 已连接 / 同步中 / 错误，标题右侧放置连接 / 保存 / 立即同步主操作，底部仅保留解绑 |
+| 同步 | 云同步配置：存储后端下拉（对象存储 / WebDAV，与服务商 logo 同行，已配置时锁定需先解绑），按后端渲染凭据表单，顶部服务商 logo（按后端分组）打开官方配置指南，自动同步、同步范围逐类开关；标题旁色点显示未连接 / 已连接 / 同步中 / 错误，标题右侧放置连接 / 保存 / 立即同步主操作，底部仅保留解绑 |
 | 知识库诊断 | 主机运行环境 / 网络连通性 / Agent ACP 连通性 / Vault / Catalog / 双链 / 论文 aliases / 视觉批注格式；本地 Vault 可确认批量修复 |
 | 关于 | 版本信息与应用更新、CLI 安装/卸载（状态行由结构化字段推导并全部走 i18n，不直接展示后端英文 message；安装/卸载失败 Toast 带真实错误原因；安装成功后展示可复制的验证命令 `agentero(-cli) --version`，Windows 额外说明已自动加入用户 PATH、开新终端即可、无需重启；应用更新重启后 main window 启动时自动把已安装 CLI 同步到新版本，成功静默、失败 Toast，见 [docs/backend/cli.md](../backend/cli.md)）、「打开日志文件夹」与「清理日志」（`appLogDir()` / Host `logs_clear`，见 [backend/logging.md](../backend/logging.md)）；标题右侧「Star us on GitHub」打开仓库 |
 

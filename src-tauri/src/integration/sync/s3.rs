@@ -1,5 +1,7 @@
 //! Minimal S3-compatible client — exactly what sync needs and nothing more:
 //! GET / PUT (with conditional writes) / ListObjectsV2, signed with SigV4.
+//! Implements the [`RemoteStore`] contract; retry/error plumbing is shared
+//! in `store.rs`.
 //!
 //! Hand-rolled on reqwest + sha2 to avoid the AWS SDK dependency tree. The
 //! sync protocol prefers `If-Match` / `If-None-Match` PUTs (S3, R2 and MinIO
@@ -10,6 +12,9 @@
 use crate::core::error::AppError;
 use crate::core::http;
 use crate::integration::sync::config::SyncBackendConfig;
+use crate::integration::sync::store::{
+    check, etag_of, send_with_retries, PutCondition, PutOutcome, RemoteStore,
+};
 use chrono::Utc;
 use sha2::{Digest, Sha256};
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -29,20 +34,6 @@ pub struct S3Client {
     /// Seeded from the persisted probe result; flipped off at runtime when a
     /// conditional PUT comes back 400 NotImplemented.
     conditional_writes: AtomicBool,
-}
-
-pub enum PutCondition {
-    /// Create-only (`If-None-Match: *`).
-    IfNoneMatch,
-    /// Replace-only when unchanged (`If-Match: <etag>`).
-    IfMatch(String),
-}
-
-#[derive(Debug, PartialEq, Eq)]
-pub enum PutOutcome {
-    Ok,
-    /// The conditional write lost a race (412) — caller decides how to retry.
-    PreconditionFailed,
 }
 
 impl S3Client {
@@ -84,84 +75,12 @@ impl S3Client {
     }
 
     /// Whether conditional writes are (still) assumed to work.
-    pub fn supports_conditional_writes(&self) -> bool {
+    fn supports_conditional_writes(&self) -> bool {
         self.conditional_writes.load(Ordering::Relaxed)
     }
 
-    /// GET an object. `None` on 404; otherwise `(body, etag)`.
-    pub async fn get(&self, key: &str) -> Result<Option<(Vec<u8>, String)>, AppError> {
-        let resp = self.send("GET", key, &[], None, Vec::new()).await?;
-        if resp.status() == reqwest::StatusCode::NOT_FOUND {
-            return Ok(None);
-        }
-        let resp = check(resp, "GET", key).await?;
-        let etag = etag_of(&resp);
-        let body = resp
-            .bytes()
-            .await
-            .map_err(|e| AppError::message(format!("GET {key}: {e}")))?;
-        Ok(Some((body.to_vec(), etag)))
-    }
-
-    pub async fn put(
-        &self,
-        key: &str,
-        body: Vec<u8>,
-        condition: PutCondition,
-    ) -> Result<PutOutcome, AppError> {
-        let cond = if self.supports_conditional_writes() {
-            match &condition {
-                PutCondition::IfNoneMatch => Some(("If-None-Match", "*".to_string())),
-                PutCondition::IfMatch(etag) => Some(("If-Match", etag.clone())),
-            }
-        } else {
-            None
-        };
-        let resp = self
-            .send(
-                "PUT",
-                key,
-                &[],
-                cond.as_ref().map(|(n, v)| (*n, v.clone())),
-                body.clone(),
-            )
-            .await?;
-        if resp.status() == reqwest::StatusCode::PRECONDITION_FAILED
-            || resp.status() == reqwest::StatusCode::CONFLICT
-        {
-            return Ok(PutOutcome::PreconditionFailed);
-        }
-        if cond.is_some() && resp.status() == reqwest::StatusCode::BAD_REQUEST {
-            let detail: String = resp
-                .text()
-                .await
-                .unwrap_or_default()
-                .chars()
-                .take(300)
-                .collect();
-            if is_not_implemented(&detail) {
-                // Backend (e.g. Aliyun OSS) does not implement conditional
-                // writes: remember it for this client and retry as a plain
-                // PUT. Blobs/manifests are content-addressed (idempotent);
-                // the HEAD CAS degrades to GET → PUT, converging via the
-                // engine's merge retries instead of atomic swap.
-                log::warn!(
-                    target: "agentero::sync",
-                    "PUT {key}: backend lacks conditional writes; degrading to plain PUT"
-                );
-                self.conditional_writes.store(false, Ordering::Relaxed);
-                let resp = self.send("PUT", key, &[], None, body).await?;
-                check(resp, "PUT", key).await?;
-                return Ok(PutOutcome::Ok);
-            }
-            return Err(AppError::message(format!("PUT {key}: 400 {detail}")));
-        }
-        check(resp, "PUT", key).await?;
-        Ok(PutOutcome::Ok)
-    }
-
     /// DELETE an object. 404 counts as success (idempotent cleanup).
-    pub async fn delete(&self, key: &str) -> Result<(), AppError> {
+    async fn delete(&self, key: &str) -> Result<(), AppError> {
         let resp = self.send("DELETE", key, &[], None, Vec::new()).await?;
         if resp.status() == reqwest::StatusCode::NOT_FOUND {
             return Ok(());
@@ -169,44 +88,9 @@ impl S3Client {
         check(resp, "DELETE", key).await.map(|_| ())
     }
 
-    /// Probe conditional-write support with a throwaway key before the first
-    /// real sync: PUT it with `If-None-Match: *`, then clean up. `Ok(false)`
-    /// when the backend answers 400 NotImplemented; unexpected answers fail
-    /// open (the runtime fallback in `put` still catches them).
-    pub async fn probe_conditional_writes(&self) -> Result<bool, AppError> {
-        let key = format!(".sync-probe-{}", uuid::Uuid::new_v4().simple());
-        let resp = self
-            .send(
-                "PUT",
-                &key,
-                &[],
-                Some(("If-None-Match", "*".to_string())),
-                Vec::new(),
-            )
-            .await?;
-        let status = resp.status();
-        if status.is_success() {
-            if let Err(e) = self.delete(&key).await {
-                log::warn!(target: "agentero::sync", "probe cleanup {key}: {e}");
-            }
-            return Ok(true);
-        }
-        if status == reqwest::StatusCode::BAD_REQUEST {
-            let detail = resp.text().await.unwrap_or_default();
-            if is_not_implemented(&detail) {
-                return Ok(false);
-            }
-        }
-        log::warn!(
-            target: "agentero::sync",
-            "conditional-write probe inconclusive ({status}); assuming supported"
-        );
-        Ok(true)
-    }
-
     /// List up to `max` keys under `prefix` (relative to the configured
-    /// prefix). Used as the connection test and by GC.
-    pub async fn list(&self, prefix: &str, max: u32) -> Result<Vec<String>, AppError> {
+    /// prefix). Used by the connection test (`ensure_root`) and by GC.
+    async fn list(&self, prefix: &str, max: u32) -> Result<Vec<String>, AppError> {
         let full_prefix = format!("{}{prefix}", self.key_prefix);
         let query = [
             ("list-type".to_string(), "2".to_string()),
@@ -290,17 +174,10 @@ impl S3Client {
         let method = method
             .parse::<reqwest::Method>()
             .map_err(|e| AppError::message(e.to_string()))?;
-
-        // Every sync operation is idempotent (content-addressed blobs with
-        // If-None-Match, CAS'd HEAD), so transient transport errors — stale
-        // pooled connections, momentary container/port blips — are retried
-        // instead of failing the whole pass.
-        let mut last_err = None;
         let extra = extra_header.map(|(name, value)| (name, value.clone()));
-        for attempt in 0..3u32 {
-            if attempt > 0 {
-                tokio::time::sleep(std::time::Duration::from_millis(200 * attempt as u64)).await;
-            }
+        // Transport-level retries live in `send_with_retries`; every sync
+        // operation is idempotent (see its doc comment).
+        send_with_retries(&method, &url, || {
             let mut req = self
                 .http
                 .request(method.clone(), url.clone())
@@ -313,42 +190,124 @@ impl S3Client {
             if !body.is_empty() || method == reqwest::Method::PUT {
                 req = req.body(body.clone());
             }
-            match req.send().await {
-                Ok(resp) => return Ok(resp),
-                Err(e) if e.is_connect() || e.is_request() => {
-                    log::warn!(
-                        target: "agentero::sync",
-                        "{method} {key} attempt {}: {e}",
-                        attempt + 1
-                    );
-                    last_err = Some(e);
-                }
-                Err(e) => {
-                    return Err(AppError::message(format!(
-                        "{method} {key}: {}",
-                        error_chain(&e)
-                    )));
-                }
-            }
-        }
-        let e = last_err.expect("loop sets last_err before exiting");
-        Err(AppError::message(format!(
-            "{method} {key}: {}",
-            error_chain(&e)
-        )))
+            req
+        })
+        .await
     }
 }
 
-/// reqwest's `Display` stops at the first source; walk the chain so transport
-/// failures surface their real cause (connection reset, timeout, …).
-fn error_chain(err: &reqwest::Error) -> String {
-    let mut out = err.to_string();
-    let mut source = std::error::Error::source(err);
-    while let Some(s) = source {
-        out.push_str(&format!(": {s}"));
-        source = s.source();
+impl RemoteStore for S3Client {
+    /// Bucket access check via a one-key listing.
+    async fn ensure_root(&self) -> Result<(), AppError> {
+        self.list("", 1).await.map(|_| ())
     }
-    out
+
+    /// GET an object. `None` on 404; otherwise `(body, etag)`.
+    async fn get(&self, key: &str) -> Result<Option<(Vec<u8>, String)>, AppError> {
+        let resp = self.send("GET", key, &[], None, Vec::new()).await?;
+        if resp.status() == reqwest::StatusCode::NOT_FOUND {
+            return Ok(None);
+        }
+        let resp = check(resp, "GET", key).await?;
+        let etag = etag_of(&resp);
+        let body = resp
+            .bytes()
+            .await
+            .map_err(|e| AppError::message(format!("GET {key}: {e}")))?;
+        Ok(Some((body.to_vec(), etag)))
+    }
+
+    async fn put(
+        &self,
+        key: &str,
+        body: Vec<u8>,
+        condition: PutCondition,
+    ) -> Result<PutOutcome, AppError> {
+        let cond = if self.supports_conditional_writes() {
+            match &condition {
+                PutCondition::IfNoneMatch => Some(("If-None-Match", "*".to_string())),
+                PutCondition::IfMatch(etag) => Some(("If-Match", etag.clone())),
+            }
+        } else {
+            None
+        };
+        let resp = self
+            .send(
+                "PUT",
+                key,
+                &[],
+                cond.as_ref().map(|(n, v)| (*n, v.clone())),
+                body.clone(),
+            )
+            .await?;
+        if resp.status() == reqwest::StatusCode::PRECONDITION_FAILED
+            || resp.status() == reqwest::StatusCode::CONFLICT
+        {
+            return Ok(PutOutcome::PreconditionFailed);
+        }
+        if cond.is_some() && resp.status() == reqwest::StatusCode::BAD_REQUEST {
+            let detail: String = resp
+                .text()
+                .await
+                .unwrap_or_default()
+                .chars()
+                .take(300)
+                .collect();
+            if is_not_implemented(&detail) {
+                // Backend (e.g. Aliyun OSS) does not implement conditional
+                // writes: remember it for this client and retry as a plain
+                // PUT. Blobs/manifests are content-addressed (idempotent);
+                // the HEAD CAS degrades to GET → PUT, converging via the
+                // engine's merge retries instead of atomic swap.
+                log::warn!(
+                    target: "agentero::sync",
+                    "PUT {key}: backend lacks conditional writes; degrading to plain PUT"
+                );
+                self.conditional_writes.store(false, Ordering::Relaxed);
+                let resp = self.send("PUT", key, &[], None, body).await?;
+                check(resp, "PUT", key).await?;
+                return Ok(PutOutcome::Ok);
+            }
+            return Err(AppError::message(format!("PUT {key}: 400 {detail}")));
+        }
+        check(resp, "PUT", key).await?;
+        Ok(PutOutcome::Ok)
+    }
+
+    /// Probe conditional-write support with a throwaway key before the first
+    /// real sync: PUT it with `If-None-Match: *`, then clean up. `Ok(false)`
+    /// when the backend answers 400 NotImplemented; unexpected answers fail
+    /// open (the runtime fallback in `put` still catches them).
+    async fn probe_conditional_writes(&self) -> Result<bool, AppError> {
+        let key = format!(".sync-probe-{}", uuid::Uuid::new_v4().simple());
+        let resp = self
+            .send(
+                "PUT",
+                &key,
+                &[],
+                Some(("If-None-Match", "*".to_string())),
+                Vec::new(),
+            )
+            .await?;
+        let status = resp.status();
+        if status.is_success() {
+            if let Err(e) = self.delete(&key).await {
+                log::warn!(target: "agentero::sync", "probe cleanup {key}: {e}");
+            }
+            return Ok(true);
+        }
+        if status == reqwest::StatusCode::BAD_REQUEST {
+            let detail = resp.text().await.unwrap_or_default();
+            if is_not_implemented(&detail) {
+                return Ok(false);
+            }
+        }
+        log::warn!(
+            target: "agentero::sync",
+            "conditional-write probe inconclusive ({status}); assuming supported"
+        );
+        Ok(true)
+    }
 }
 
 /// OSS-style rejection of conditional headers: `400` with
@@ -357,28 +316,6 @@ fn error_chain(err: &reqwest::Error) -> String {
 /// false positive is harmless (plain PUTs still work).
 fn is_not_implemented(body: &str) -> bool {
     body.contains("NotImplemented")
-}
-
-async fn check(
-    resp: reqwest::Response,
-    op: &str,
-    key: &str,
-) -> Result<reqwest::Response, AppError> {
-    if resp.status().is_success() {
-        return Ok(resp);
-    }
-    let status = resp.status();
-    let body = resp.text().await.unwrap_or_default();
-    let detail: String = body.chars().take(300).collect();
-    Err(AppError::message(format!("{op} {key}: {status} {detail}")))
-}
-
-fn etag_of(resp: &reqwest::Response) -> String {
-    resp.headers()
-        .get("etag")
-        .and_then(|v| v.to_str().ok())
-        .unwrap_or_default()
-        .to_string()
 }
 
 /// AWS canonical URI encoding (unreserved chars pass through).

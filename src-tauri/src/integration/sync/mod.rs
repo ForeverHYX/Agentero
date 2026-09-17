@@ -1,4 +1,4 @@
-//! Vault cloud sync over S3-compatible object storage.
+//! Vault cloud sync over S3-compatible object storage or WebDAV.
 //!
 //! Design doc: `docs/development/cloud-sync-s3.md`. The engine is
 //! state-based: content-addressed blobs + immutable manifests + a CAS `HEAD`
@@ -11,6 +11,8 @@ pub mod local;
 mod s3;
 mod scheduler;
 pub mod snapshot;
+mod store;
+mod webdav;
 
 use std::collections::HashSet;
 use std::sync::Mutex;

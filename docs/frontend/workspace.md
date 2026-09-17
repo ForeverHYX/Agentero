@@ -35,7 +35,7 @@
 |---|---|
 | 路由 | `preferredModeForPath`：专用扩展名优先，`.md` 显式回 Markdown，`isUnderPapers` 拦截，其余一律 `text`（不设 `isTextOpenable` 白名单门槛——兜底查看器不做过滤） |
 | 高亮 | `textLanguageIdForPath`：`json` / `yaml(yml)` / `python(py,pyw)` / `tex(sty,cls)` / `bib`；`.txt` 与未知扩展名为纯文本 |
-| 语言实现 | `@codemirror/lang-json`、`@codemirror/lang-python`；TeX 走 `codemirror-lang-latex`（Overleaf Lezer 语法的社区包：精确高亮、环境自动闭合 / 缩进、preamble / 注释 / 小节折叠；`enableAutocomplete` 关闭——它默认装的 `autocompletion({override})` 层会吞掉其他补全源，补全统一经 `basicSetup` 的 autocompletion 调度语言数据；lint / hover tooltip 关闭保持安静）；yaml 走 `@codemirror/legacy-modes` StreamLanguage；`.bib` 用内置最小 BibTeX tokenizer（`%{}%` 注释、`@type`、字段、字符串） |
+| 语言实现 | `@codemirror/lang-json`、`@codemirror/lang-python`；TeX 走 `codemirror-lang-latex`（Overleaf Lezer 语法的社区包：精确高亮、环境自动闭合 / 缩进、preamble / 注释 / 小节折叠；`enableAutocomplete` 关闭——它默认装的 `autocompletion({override})` 层会吞掉其他补全源，补全统一经 `basicSetup` 的 autocompletion 调度语言数据；**lint 开启**——波浪线标未闭合环境 / 括号、重复 label、缺失引用等，悬停命令弹文档，`fileName` 让 linter 在 .sty/.cls 上放宽 document-env 规则）；yaml 走 `@codemirror/legacy-modes` StreamLanguage；`.bib` 用内置最小 BibTeX tokenizer（`%{}%` 注释、`@type`、字段、字符串） |
 | 代码提示 | TeX / BibTeX 自定义补全经 `language.data.of({ autocomplete })` 挂进语言数据（TeX 为语言包的命令 / 环境 / 数学符号补全 + 文件路径补全；BibTeX 为 `@` 后条目类型、条目内行首字段名）；JSON / Python 用语言包自带补全 |
 | 文件路径补全 | TeX 路径参数命令（`\input` / `\include` / `\includeonly` / `\includegraphics` / `\includepdf` / `\includesvg` / `\bibliography` / `\addbibresource`，含 `*` 变体与 `[可选参数]`）的 `{}` 内按需列目录：路径相对当前文件目录解析（latexmk 以 .tex 父目录为 cwd），目录项带尾 `/` 置顶、按命令过滤扩展名（`\bibliography` 去掉 `.bib` 后缀），经 Host 树命令 / SFTP 逐级列出（同文件树忽略规则），带 10s 目录缓存；`validFor` 检测目录前缀变化后重新查询 |
 | 换行 | `EditorView.lineWrapping` 全局启用 |

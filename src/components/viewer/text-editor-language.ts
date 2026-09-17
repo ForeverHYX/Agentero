@@ -319,17 +319,19 @@ export function textLanguageExtensions(path: string): Extension[] {
 			return [
 				// Overleaf-grammar language pack (highlighting, env auto-close,
 				// indent, folding, its own command/env completion via language
-				// data). The extras are off because they'd fight basicSetup:
-				// enableAutocomplete would install an autocompletion({override})
-				// layer that swallows every other source (the path completion
-				// below), and autoCloseBrackets/bracket matching already ship
-				// with basicSetup. Linting and hover tooltips stay off to keep
-				// the editor quiet while typing.
+				// data). enableAutocomplete stays off because it would install
+				// an autocompletion({override}) layer that swallows every other
+				// source (the path completion below); autoCloseBrackets /
+				// bracket matching already ship with basicSetup. Linting
+				// (unmatched environments, unclosed braces, …) and hover
+				// command docs are on; `fileName` lets the linter relax its
+				// document-env rules on .sty/.cls files.
 				latex({
 					enableAutocomplete: false,
-					enableLinting: false,
-					enableTooltips: false,
+					enableLinting: true,
+					enableTooltips: true,
 					autoCloseBrackets: false,
+					fileName: basenameOf(path),
 				}),
 				latexLanguage.data.of({
 					autocomplete: texPathCompletionSource(path, listVaultDirForTex),

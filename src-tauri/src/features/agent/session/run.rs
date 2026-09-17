@@ -203,7 +203,7 @@ async fn prepare_run_turn(params: &RunOnceParams) -> Result<RunTurnPrep, AppErro
             .as_ref()
             .map(PathBuf::from)
             .filter(|p| p.is_dir())
-            .unwrap_or_else(|| std::env::current_dir().unwrap_or_else(|_| PathBuf::from(".")))
+            .unwrap_or_else(crate::core::paths::agent_scratch_dir)
     });
     Ok(RunTurnPrep {
         full_prompt,

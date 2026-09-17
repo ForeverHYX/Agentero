@@ -111,6 +111,23 @@ pub fn bridge_config_dir() -> PathBuf {
     agentero_config_dir().join("bridge")
 }
 
+/// Private working directory for a spawned ACP agent when no Vault is known
+/// (initialize probe, warm before a Vault opens, history listing).
+///
+/// Never fall back to the process working directory: a macOS GUI app launched
+/// by LaunchServices has `/` as its cwd, so an agent that inspects its process
+/// cwd treats the whole filesystem as its workspace and enumerates `$HOME`.
+/// That trips macOS TCC prompts for Music / Desktop / Downloads / iCloud Drive
+/// / other apps' data (#570). Keeping the fallback inside Agentero's own data
+/// dir confines any such scan. Created on demand; falls back to the temp dir.
+pub fn agent_scratch_dir() -> PathBuf {
+    let dir = agentero_data_dir().join("agent-cwd");
+    match std::fs::create_dir_all(&dir) {
+        Ok(()) => dir,
+        Err(_) => std::env::temp_dir(),
+    }
+}
+
 /// Pre-XDG path used by older builds (`dirs::config_dir()/agentero`).
 /// On Linux this often equals the XDG path; on macOS it was
 /// `~/Library/Application Support/agentero`.
@@ -209,6 +226,15 @@ mod tests {
     fn data_dir_ends_with_agentero() {
         let p = agentero_data_dir();
         assert_eq!(p.file_name().and_then(|s| s.to_str()), Some("agentero"));
+    }
+
+    #[test]
+    fn agent_scratch_dir_is_private_and_never_the_process_cwd() {
+        let p = agent_scratch_dir();
+        assert!(p.is_dir(), "scratch dir must exist to be usable as a cwd");
+        assert_eq!(p.file_name().and_then(|s| s.to_str()), Some("agent-cwd"));
+        // Regression guard for #570: a Finder-launched GUI app's cwd is `/`.
+        assert_ne!(p, std::env::current_dir().unwrap());
     }
 
     #[test]

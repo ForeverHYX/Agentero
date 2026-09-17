@@ -13,8 +13,13 @@ Agentero 作为 **ACP Client**，stdio JSON-RPC 连接用户本机或远端 Agen
   shell（Git Bash）时无法 `cd`，POSIX cwd 也会初始化错误，`mktemp`/`cd` 报 ENOENT；
   扩展 UNC（`\?\UNC\...`）与 POSIX 路径保持不变，远程历史入口不做本地路径转换。详见
   [bug_fix/hermes-terminal-pending-msys2-hang.md](../bug_fix/hermes-terminal-pending-msys2-hang.md)。
-- 本地 Pi / 自定义 Agent 仍先经 shell 切到 Vault，其 `cmd.exe` 包装对同一前缀再剥一次
+- **本地 Agent 进程一律先经 shell 切到 Vault（或 scratch）目录**再 exec：ACP stdio spawn 无
+  cwd 字段，Finder 启动的 macOS GUI 进程 cwd 是 `/`，Agent 若按进程 cwd 扫描就会遍历整个
+  文件系统并触发 macOS 的 Music / Desktop / Downloads / iCloud 等 TCC 弹窗（#570）。因此不再只
+  给 Pi / 自定义模板加包装，所有模板在已知 cwd 时都包装；其 `cmd.exe` 包装对同一前缀再剥一次
   （幂等），避免 CMD 把 `\?\D:\...` 误判为 UNC（#458）。
+- 无 Vault 上下文时（initialize 探针、Vault 打开前的 warm、历史列表）cwd 取
+  `agent_scratch_dir()`（`…/agentero/agent-cwd`），**绝不**回落到进程 cwd，避免把 `/` 交给 Agent。
 - Windows 的 cwd 与完整 Agent 命令通过环境变量展开，避免 Rust argv 转义破坏 CMD 内层引号；
   cwd 环境变量始终携带双引号，防止无空格路径中的括号等 CMD 元字符被当作语法（#458）。
 - **Login-shell 环境注入**：本地 ACP agent 启动时会合并当前进程环境变量、用户 login-shell

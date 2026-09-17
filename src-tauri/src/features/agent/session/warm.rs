@@ -57,7 +57,7 @@ pub async fn warm_agent(
         vault_path
             .map(PathBuf::from)
             .filter(|p| p.is_dir())
-            .unwrap_or_else(|| std::env::current_dir().unwrap_or_else(|_| PathBuf::from(".")))
+            .unwrap_or_else(crate::core::paths::agent_scratch_dir)
     });
     let key: PoolKey = pool_key(&agent_id, cwd.clone(), remote.as_ref());
 

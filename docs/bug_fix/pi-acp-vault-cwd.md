@@ -1,12 +1,12 @@
 # Pi ACP 启动时未使用 Vault 工作目录
 
-**状态**：已修复（为 Pi 本地 ACP 启动注入 OS-level cwd）  
-**Issue**：#441  
-**影响面**：使用 Pi Agent 时的工作目录、论文/文件查找  
+**状态**：已修复（最初只包装 Pi；见 #570 后改为**所有本地 Agent** 都注入 OS-level cwd）  
+**Issue**：#441（#570 扩展）  
+**影响面**：使用 Pi Agent 时的工作目录、论文/文件查找；以及所有 Agent 的启动 cwd  
 **相关代码**：
 
-- `src-tauri/src/features/agent/models.rs` — `AgentTemplate::needs_local_cwd_shell_wrap`
-- `src-tauri/src/features/agent/acp.rs` — `to_acp_agent_local`、`wrap_local_command_with_cwd`
+- `src-tauri/src/features/agent/acp/client.rs` — `to_acp_agent_local`、`wrap_local_command_with_cwd`
+- `crates/agentero-core/src/paths.rs` — `agent_scratch_dir`（无 Vault 时的安全 cwd）
 
 ## 1. 问题现象
 
@@ -24,9 +24,13 @@ ACP 的 `NewSessionRequest` 携带 `cwd` 字段，用于告知 Agent 当前会�
 
 对于已知不原生处理 ACP `cwd` 的适配器（目前仅 Pi），在本地启动时用一个 shell 包装命令先把 OS-level 工作目录切到 Vault，再 `exec` 真正的 Agent。
 
-### 3.1 模板标记
+### 3.1 包装范围
 
-`AgentTemplate::needs_local_cwd_shell_wrap()` 返回需要 shell `cd` 包装的模板。当前只有 `Pi`，后续若发现其他适配器有同样问题可继续扩展。
+最初只对 `Pi` / `Custom` 做 shell `cd` 包装。但即使 Agent 正确处理 ACP `NewSessionRequest.cwd`，
+它的**进程 cwd** 仍是 Agentero 的 cwd——macOS 上经 LaunchServices 启动的 GUI 进程 cwd 是 `/`，
+Agent 启动阶段按进程 cwd 扫描就会遍历整个文件系统（#570，见
+[macos-tcc-folder-prompts.md](macos-tcc-folder-prompts.md)）。因此现在**所有**本地模板在已知
+cwd 时都包装；`needs_local_cwd_shell_wrap` 已移除。
 
 ### 3.2 Unix 包装
 
@@ -54,17 +58,19 @@ cmd /D /C "cd /d "%AGENTERO_AGENT_CWD%" && \"<command>\" \"<arg1>\" ..."
 - `list_acp_sessions` — 列出可恢复会话
 - `load_acp_session` — 加载历史会话
 
-`probe_agent` 没有 Vault 上下文，传入 `None`，保持原有行为。
+以上入口在 Vault 路径缺失/无效时用 `agent_scratch_dir()`（`…/agentero/agent-cwd`）兜底，
+不再回落到进程 cwd。`probe_agent` 无 Vault 上下文，同样传入该 scratch 目录（#570）。
 
 ## 4. 验收建议
 
 1. 在 Windows 上打开一个 Vault，选择 Pi Agent 发送与论文相关的提问。
 2. 观察 Pi 的查找/读取路径，确认它落在当前 Vault 目录下，而不是 `C:\` 或应用安装目录。
 3. 在 macOS/Linux 上重复，确认 Pi 同样以 Vault 为工作目录。
-4. 其他 ACP Agent（Codex、Claude ACP、Kimi Code 等）不受影响。
+4. 其他 ACP Agent（Codex、Claude ACP、Kimi Code、Grok 等）进程 cwd 同样落在 Vault，
+   启动扫描不再跑到 `$HOME`（#570）。
 
 ## 5. 边界
 
 - 该包装只作用于本地 Agent；SSH 远程 Agent 已在 `remote_agent_shell_command` 中通过 `cd` 处理工作目录。
-- `dsh` 模板自己管理 launcher 目录，不经过此包装。
+- `dsh` 模板自己管理 launcher 目录：外层 Vault 包装后再由其自身 `cd` 进 launcher，内层覆盖外层，行为不变。
 - 若 `pi-acp` 未来原生支持 ACP `cwd`，可移除 `Pi` 的包装标记。

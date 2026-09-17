@@ -357,7 +357,8 @@ pub async fn load_session(
 }
 
 /// Remote sessions advertise their remote cwd; local vaults use the vault
-/// directory when it exists (fallback: current dir).
+/// directory when it exists (fallback: Agentero's private scratch dir — never
+/// the process cwd, which is `/` for a Finder-launched GUI app, #570).
 fn agent_cwd_or_local(
     remote: Option<&dyn crate::features::agent::remote_host::RemoteAgentLaunch>,
     vault_path: Option<&str>,
@@ -368,7 +369,7 @@ fn agent_cwd_or_local(
         vault_path
             .map(PathBuf::from)
             .filter(|p| p.is_dir())
-            .unwrap_or_else(|| std::env::current_dir().unwrap_or_else(|_| PathBuf::from(".")))
+            .unwrap_or_else(crate::core::paths::agent_scratch_dir)
     };
     simplified_agent_cwd(&raw)
 }

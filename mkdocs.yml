@@ -129,6 +129,7 @@ nav:
       - 导入第三方 Skill 报「description is too long」（#355）: bug_fix/skill-import-description-length.md
       - Windows 启动与问题诊断弹出黑色控制台窗口: bug_fix/windows-console-window-flash.md
       - "笔记正文 < 比较符截断后续内容（#533）": bug_fix/note-markdown-stray-less-than.md
+      - "macOS 首次精读弹出 Music / iCloud / 文件夹权限（#570）": bug_fix/macos-tcc-folder-prompts.md
 
 markdown_extensions:
   - admonition

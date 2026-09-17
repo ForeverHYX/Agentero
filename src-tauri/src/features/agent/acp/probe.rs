@@ -18,7 +18,11 @@ pub async fn probe_agent(
     remote: Option<&dyn crate::features::agent::remote_host::RemoteAgentLaunch>,
 ) -> ProbeResult {
     let agent_id = desc.id.clone();
-    let acp = match to_acp_agent(desc, None, remote) {
+    // Probe has no Vault; still avoid the process cwd (`/` when launched by
+    // LaunchServices) so an agent that scans its cwd on startup cannot trip
+    // macOS folder prompts (#570).
+    let scratch = crate::core::paths::agent_scratch_dir();
+    let acp = match to_acp_agent(desc, Some(&scratch), remote) {
         Ok(a) => a,
         Err(e) => {
             return ProbeResult {

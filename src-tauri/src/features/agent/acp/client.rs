@@ -255,12 +255,16 @@ pub(crate) fn to_acp_agent_local(
     let command = resolve_command_in_agent_env(&desc.command, &child_env)
         .unwrap_or_else(|| PathBuf::from(&desc.command));
 
-    let (command, args) =
-        if let Some(cwd) = cwd.filter(|_| desc.template.needs_local_cwd_shell_wrap()) {
-            wrap_local_command_with_cwd(&command, &desc.args, &mut child_env, cwd)
-        } else {
-            (command, desc.args.clone())
-        };
+    // Every local agent process is started in the Vault (or scratch) directory,
+    // not Agentero's own cwd. The ACP stdio transport has no cwd field, so a
+    // Finder-launched macOS GUI app would otherwise hand the agent `/` and any
+    // startup scan (Codex/Grok/Pi …) would enumerate `$HOME`, tripping macOS TCC
+    // prompts for Music / Desktop / Downloads / iCloud (#570). Wrapping a
+    // relative custom `args` script also resolves against that directory.
+    let (command, args) = match cwd {
+        Some(cwd) => wrap_local_command_with_cwd(&command, &desc.args, &mut child_env, cwd),
+        None => (command, desc.args.clone()),
+    };
 
     let env: Vec<EnvVariable> = child_env
         .into_iter()

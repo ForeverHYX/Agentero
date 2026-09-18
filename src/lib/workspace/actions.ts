@@ -1103,7 +1103,10 @@ function citationPaperKeys(paperAbs: string): string[] {
  * page for restore to prefer, and re-apply the jump a few times while the
  * viewport settles.
  */
-function scheduleCitationJump(paperAbs: string, target: CitationTarget): void {
+export function scheduleCitationJump(
+	paperAbs: string,
+	target: CitationTarget,
+): void {
 	const tabId = tabIdForPath(paperAbs);
 	const keys = citationPaperKeys(paperAbs);
 	const page = target.pageIndex + 1;

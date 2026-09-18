@@ -107,6 +107,10 @@ async function boot() {
 		return;
 	}
 
+	const { SelectionChatPopover } = await import(
+		"@/components/selection/selection-chat-popover"
+	);
+
 	if (isFeatureWindow) {
 		const { FeatureWindowRoot } = await import(
 			"@/components/shell/feature-window-root"
@@ -120,6 +124,7 @@ async function boot() {
 					<ThemeProvider attribute="class" defaultTheme="system" enableSystem>
 						<TooltipProvider delayDuration={300}>
 							<FeatureWindowRoot />
+							<SelectionChatPopover />
 							<Toaster />
 						</TooltipProvider>
 					</ThemeProvider>
@@ -157,6 +162,7 @@ async function boot() {
 							>
 								<TooltipProvider delayDuration={300}>
 									<DocWindowRoot />
+									<SelectionChatPopover />
 									<Toaster />
 								</TooltipProvider>
 							</ThemeProvider>
@@ -197,6 +203,7 @@ async function boot() {
 						<ThemeProvider attribute="class" defaultTheme="system" enableSystem>
 							<TooltipProvider delayDuration={300}>
 								<App />
+								<SelectionChatPopover />
 								{/* Global error / notice stack (top-right); use notifyError from @/lib/notify */}
 								<Toaster />
 							</TooltipProvider>

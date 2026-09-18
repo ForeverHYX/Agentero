@@ -485,7 +485,9 @@ function renderChip(
 		label.textContent = selection.page
 			? t("composer.selectionChipWithPage", { title, page: selection.page })
 			: t("composer.selectionChip", { title });
-		label.title = selection.text.slice(0, 200);
+		label.title = [selection.text, selection.comment]
+			.filter(Boolean)
+			.join("\n\n");
 		chip.appendChild(label);
 
 		chip.setAttribute("aria-label", t("composer.removeSelection"));
@@ -613,7 +615,7 @@ export const ComposerInlineInput = forwardRef<
 				placeCaretAtEnd(root);
 				scrollEditorToBottom();
 			}
-		}, [renderValue, value, scrollEditorToBottom]);
+		});
 
 		useEffect(() => {
 			if (!autoFocus) return;

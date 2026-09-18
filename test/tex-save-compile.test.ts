@@ -123,6 +123,7 @@ describe("compileTexOnSave (manual ⌘S trigger)", () => {
 
 		expect(compileTexFileMock).toHaveBeenCalledWith(TEX_PATH, {
 			quietSuccess: true,
+			triggerPath: TEX_PATH,
 		});
 		const tab = pdfTab();
 		expect(tab?.loaded).toBe(true);
@@ -177,6 +178,7 @@ describe("compileTexOnSave (manual ⌘S trigger)", () => {
 		});
 		expect(compileTexFileMock).toHaveBeenLastCalledWith(TEX_PATH, {
 			quietSuccess: true,
+			triggerPath: TEX_PATH,
 		});
 	});
 

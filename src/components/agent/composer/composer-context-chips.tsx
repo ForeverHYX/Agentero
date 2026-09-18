@@ -167,6 +167,7 @@ export function ComposerContextChips({
 				return (
 					<button
 						key={sel.id}
+						title={[sel.text, sel.comment].filter(Boolean).join("\n\n")}
 						type="button"
 						className={chipShellClass(
 							sel.pinned ? undefined : "border-dashed bg-transparent",

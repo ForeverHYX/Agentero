@@ -92,6 +92,7 @@ export function useEditorContextMenu({
 	useEffect(
 		() => () => {
 			selectionRef.current?.unref();
+			CSS.highlights?.delete("agentero-context-selection");
 			selectionRef.current = null;
 		},
 		[],
@@ -146,6 +147,18 @@ export function useEditorContextMenu({
 	}, [editor, editorContainerRef, readOnly]);
 
 	const onContextMenu = useCallback(() => {
+		const domSelection = window.getSelection();
+		if (
+			domSelection?.rangeCount &&
+			editorContainerRef.current?.contains(domSelection.anchorNode) &&
+			!domSelection.isCollapsed &&
+			typeof Highlight !== "undefined"
+		) {
+			CSS.highlights.set(
+				"agentero-context-selection",
+				new Highlight(domSelection.getRangeAt(0).cloneRange()),
+			);
+		}
 		selectionRef.current?.unref();
 		const selection = editor.selection;
 		selectionRef.current = selection
@@ -169,6 +182,7 @@ export function useEditorContextMenu({
 				: null,
 		);
 	}, [
+		editorContainerRef,
 		currentHeadingAnchor,
 		dirtyRef,
 		editor,
@@ -180,6 +194,7 @@ export function useEditorContextMenu({
 
 	const onOpenChange = useCallback((open: boolean) => {
 		if (open) return;
+		CSS.highlights?.delete("agentero-context-selection");
 		const pinned = selectionRef.current;
 		window.setTimeout(() => {
 			if (selectionRef.current !== pinned) return;

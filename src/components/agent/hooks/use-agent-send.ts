@@ -427,6 +427,13 @@ export function useAgentSend({
 				kind: "user",
 				text,
 				...(visualAnnotations?.length ? { visualAnnotations } : {}),
+				...(resolvedSelections.length
+					? {
+							selections: resolvedSelections.map((selection) =>
+								structuredClone(selection),
+							),
+						}
+					: {}),
 				...(attachedImages.length ? { images: attachedImages } : {}),
 			};
 			const sessionStartLines = [...priorLines, userLine];

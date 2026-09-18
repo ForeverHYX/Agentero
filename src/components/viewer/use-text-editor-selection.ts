@@ -7,8 +7,8 @@
  * Add to chat only (text files have no marks/ sidecar, and no auto-copy —
  * silently replacing the clipboard mid-edit in a code buffer would destroy
  * the paste the selection is usually a prelude to). ⌘K opens the in-page
- * Ask popover; Add to chat / ⌘L pin the selection as an Agent composer
- * chip. Drag selections arm on mouse release (same as the PDF viewer);
+ * Ask popover; Add to chat opens an optional inline comment before pinning
+ * the quote as an Agent composer chip. ⌘L still pins directly. Drag selections arm on mouse release (same as the PDF viewer);
  * keyboard selections arm immediately, and the toolbar re-anchors while
  * the editor scrolls.
  */
@@ -23,13 +23,13 @@ import {
 	useRef,
 	useState,
 } from "react";
-import { addSelectionToChat } from "@/components/selection/add-selection-to-chat";
 import {
 	createSelectionAskThread,
 	useSelectionAsk,
 } from "@/components/selection/use-selection-ask";
 import { useSelectionQuickChat } from "@/components/selection/use-selection-quick-chat";
 import type { ScreenPoint } from "@/components/viewer/pdf/types";
+import { openSelectionChat } from "@/lib/agent/selection-chat-store";
 import {
 	clearActiveSelection,
 	publishSelection,
@@ -183,16 +183,19 @@ export function useTextEditorSelection({
 		const current = menuRef.current;
 		if (!current) return;
 		setMenu(null);
-		addSelectionToChat({
-			text: current.text,
-			sourcePath: pathRef.current,
-			origin: "markdown",
-			lineFrom: current.lineFrom,
-			lineTo: current.lineTo,
-		});
+		openSelectionChat(
+			{
+				text: current.text,
+				sourcePath: pathRef.current,
+				origin: "markdown",
+				lineFrom: current.lineFrom,
+				lineTo: current.lineTo,
+			},
+			current.screen,
+		);
 		// Collapse the selection so the toolbar does not re-arm when the editor
-		// regains focus; the update listener then drops the live chip (the pin
-		// above survives in `pinned`).
+		// regains focus; the update listener drops the live chip while the
+		// independent comment draft retains its quote and line range.
 		const view = viewRef.current;
 		const selection = view?.state.selection.main;
 		if (view && selection && !selection.empty) {

@@ -1043,3 +1043,9 @@ body.agentero-dockview-dragging * {
 .dark .agentero-codeblock .hljs-bullet {
 	color: #f2cc60;
 }
+
+::highlight(agentero-context-selection),
+::highlight(agentero-annotation-selection),
+::highlight(agentero-annotation-navigation) {
+	background-color: #3b82f650;
+}

@@ -18,7 +18,9 @@ import {
 } from "react";
 import { useTranslation } from "react-i18next";
 import { useStickToBottomContext } from "use-stick-to-bottom";
+import { useStore } from "zustand";
 import { AgentThinkingOrb } from "@/components/agent/agent-thinking-orb";
+import { ChatSelectionReferences } from "@/components/agent/chat-selection-references";
 import {
 	ChatAttachedImages,
 	ChatVisualAnnotations,
@@ -92,6 +94,8 @@ import {
 } from "@/lib/agent/chat-state";
 import { stripInlineTokens } from "@/lib/agent/composer-inline-tokens";
 import { stripPromptEnvelopeForDisplay } from "@/lib/agent/prompt-display";
+import { selectionNavigationStore } from "@/lib/agent/selection-navigation-state";
+import { selectionsPromptBlock } from "@/lib/agent/selection-prompt";
 import { cn } from "@/lib/core/utils";
 
 /** Compact note: interactive form is docked below, not inside the tool card. */
@@ -402,15 +406,26 @@ const ChatTranscriptRow = memo(function ChatTranscriptRow({
 			stripInlineTokens(line.text),
 		);
 		// Never render Codex env / Host system envelopes as user bubbles.
-		if (!userDisplay && visuals.length === 0 && attachedImages.length === 0)
+		if (
+			!userDisplay &&
+			visuals.length === 0 &&
+			attachedImages.length === 0 &&
+			!line.selections?.length
+		)
 			return null;
-		const copyPayload = formatUserLineForCopy({
-			text: userDisplay,
-			visualAnnotations: visuals,
-			images: attachedImages,
-		});
+		const copyPayload = [
+			formatUserLineForCopy({
+				text: userDisplay,
+				visualAnnotations: visuals,
+				images: attachedImages,
+			}),
+			selectionsPromptBlock(line.selections ?? []),
+		]
+			.filter(Boolean)
+			.join("\n\n");
 		return (
 			<Message from="user" className="max-w-[85%]">
+				<ChatSelectionReferences selections={line.selections ?? []} />
 				{/* Visual chips above the text bubble (not inside it). */}
 				{visuals.length > 0 ? (
 					<ChatVisualAnnotations annotations={visuals} />
@@ -426,7 +441,12 @@ const ChatTranscriptRow = memo(function ChatTranscriptRow({
 					) : null}
 					{/* Free-text only: skip empty bubble when the turn is image/visual-only. */}
 					{userDisplay ? (
-						<MessageContent className="rounded-2xl px-4 py-2.5">
+						<MessageContent
+							className="rounded-2xl px-4 py-2.5"
+							data-selection-chat-source={`Chat ${activeTabId}`}
+							data-selection-chat-origin="chat"
+							data-selection-chat-message={line.id}
+						>
 							<MessageResponse className="text-base leading-relaxed">
 								{userDisplay}
 							</MessageResponse>
@@ -601,7 +621,13 @@ const ChatTranscriptRow = memo(function ChatTranscriptRow({
 			const isAnimating =
 				Boolean(line.streaming) && index === lastIndex && part.text.length > 0;
 			return (
-				<div key={partKey} className="min-w-0">
+				<div
+					key={partKey}
+					className="min-w-0"
+					data-selection-chat-source={`Chat ${activeTabId}`}
+					data-selection-chat-origin="chat"
+					data-selection-chat-message={line.id}
+				>
 					<MessageResponse
 						isAnimating={isAnimating}
 						onOpenSource={onOpenSource}
@@ -740,6 +766,21 @@ function TranscriptBody({
 		activeTabId,
 		forceVirtualize,
 	});
+
+	const navigation = useStore(selectionNavigationStore);
+	useEffect(() => {
+		if (
+			!navigation.messageId ||
+			navigation.tabId !== activeTabId ||
+			!virtualized
+		)
+			return;
+		const index = lines.findIndex((line) => line.id === navigation.messageId);
+		if (index >= 0) {
+			rowVirtualizer.scrollToIndex(index, { align: "center" });
+			selectionNavigationStore.setState({ messageId: null });
+		}
+	}, [navigation, lines, virtualized, rowVirtualizer, activeTabId]);
 
 	// The edit button can target turns far above the viewport; bring the row
 	// into the mounted window when windowed rendering is active.

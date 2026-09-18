@@ -701,6 +701,16 @@ export function MarkdownEditor({
 												// updates can reflow and fire scroll without leaving [[.
 												scheduleCompletionProbe();
 											}}
+											onMouseDownCapture={(event) => {
+												if (
+													event.button === 2 &&
+													window.getSelection()?.toString() &&
+													event.currentTarget.contains(
+														window.getSelection()?.anchorNode ?? null,
+													)
+												)
+													event.preventDefault();
+											}}
 											onContextMenuCapture={handleEditorContextMenu}
 											onKeyDownCapture={readOnly ? undefined : handleKeyDown}
 											onBeforeInputCapture={
@@ -720,6 +730,8 @@ export function MarkdownEditor({
 											 * (matches Plate default variant pb-72).
 											 */}
 											<Editor
+												data-selection-chat-source={filePath || undefined}
+												data-selection-chat-origin="markdown"
 												placeholder={placeholder}
 												readOnly={readOnly}
 												// `pl-10` leaves room for the block drag handle

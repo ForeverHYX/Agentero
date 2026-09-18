@@ -1,3 +1,4 @@
+import { normalizeQuoteContext } from "./selection-context";
 /**
  * Inline @mention / $skill / /command / selection tokens embedded in composer
  * draft text. Contenteditable renders markers as chips; send path strips
@@ -86,7 +87,9 @@ export function decodeSelectionTokenPayload(
 			typeof candidate.id !== "string" ||
 			typeof candidate.text !== "string" ||
 			typeof candidate.sourcePath !== "string" ||
-			(candidate.origin !== "pdf" && candidate.origin !== "markdown")
+			(candidate.origin !== "pdf" &&
+				candidate.origin !== "markdown" &&
+				candidate.origin !== "chat")
 		) {
 			return null;
 		}
@@ -96,6 +99,32 @@ export function decodeSelectionTokenPayload(
 			sourcePath: candidate.sourcePath,
 			origin: candidate.origin,
 			page: candidate.page,
+			lineFrom: candidate.lineFrom,
+			lineTo: candidate.lineTo,
+			comment:
+				typeof candidate.comment === "string" ? candidate.comment : undefined,
+			messageId:
+				typeof candidate.messageId === "string"
+					? candidate.messageId
+					: undefined,
+			chatSessionId:
+				typeof candidate.chatSessionId === "string"
+					? candidate.chatSessionId
+					: undefined,
+			context: candidate.context
+				? normalizeQuoteContext(candidate.context)
+				: undefined,
+			textAnchor:
+				candidate.textAnchor &&
+				typeof candidate.textAnchor.exact === "string" &&
+				typeof candidate.textAnchor.prefix === "string" &&
+				typeof candidate.textAnchor.suffix === "string"
+					? {
+							exact: candidate.textAnchor.exact,
+							prefix: candidate.textAnchor.prefix,
+							suffix: candidate.textAnchor.suffix,
+						}
+					: undefined,
 			rects: candidate.rects,
 			paperAbsPath: candidate.paperAbsPath,
 			pinned: candidate.pinned === true,
@@ -139,6 +168,41 @@ export function extractSelectionTokens(text: string): SelectionContext[] {
 		if (sel) out.push(sel);
 	}
 	return out;
+}
+
+/** Hide only valid selection tokens in the editor; keep them in the owning chat draft. */
+export function withoutSelectionTokens(text: string): string {
+	return text.replace(SELECTION_RE, (token, payload: string) =>
+		decodeSelectionTokenPayload(payload) ? "" : token,
+	);
+}
+/** Keep annotations in insertion order and before prose so @/$ completion sees the typed suffix. */
+export function mergeSelectionDraftInput(draft: string, input: string): string {
+	const selections = new Map(
+		extractSelectionTokens(draft).map((s) => [s.id, s]),
+	);
+	for (const selection of extractSelectionTokens(input))
+		selections.set(selection.id, selection);
+	return (
+		Array.from(selections.values(), encodeSelectionToken).join("") +
+		withoutSelectionTokens(input)
+	);
+}
+export function updateSelectionToken(
+	text: string,
+	id: string,
+	comment: string | null,
+): string {
+	return text.replace(SELECTION_RE, (token, payload: string) => {
+		const selection = decodeSelectionTokenPayload(payload);
+		if (!selection || selection.id !== id) return token;
+		return comment === null
+			? ""
+			: encodeSelectionToken({
+					...selection,
+					comment: comment.trim() || undefined,
+				});
+	});
 }
 
 /**

@@ -20,13 +20,6 @@ import type {
 } from "shiki";
 import { createHighlighter } from "shiki";
 import { Button } from "@/components/ui/button";
-import {
-	Select,
-	SelectContent,
-	SelectItem,
-	SelectTrigger,
-	SelectValue,
-} from "@/components/ui/select";
 import { copyTextToClipboard } from "@/lib/core/clipboard";
 import { cn } from "@/lib/core/utils";
 
@@ -328,55 +321,6 @@ export const CodeBlockContainer = ({
 	/>
 );
 
-export const CodeBlockHeader = ({
-	children,
-	className,
-	...props
-}: HTMLAttributes<HTMLDivElement>) => (
-	<div
-		className={cn(
-			"flex items-center justify-between border-b bg-muted/80 px-3 py-2 text-muted-foreground text-xs",
-			className,
-		)}
-		{...props}
-	>
-		{children}
-	</div>
-);
-
-export const CodeBlockTitle = ({
-	children,
-	className,
-	...props
-}: HTMLAttributes<HTMLDivElement>) => (
-	<div className={cn("flex items-center gap-2", className)} {...props}>
-		{children}
-	</div>
-);
-
-export const CodeBlockFilename = ({
-	children,
-	className,
-	...props
-}: HTMLAttributes<HTMLSpanElement>) => (
-	<span className={cn("font-mono", className)} {...props}>
-		{children}
-	</span>
-);
-
-export const CodeBlockActions = ({
-	children,
-	className,
-	...props
-}: HTMLAttributes<HTMLDivElement>) => (
-	<div
-		className={cn("-my-1 -mr-1 flex items-center gap-2", className)}
-		{...props}
-	>
-		{children}
-	</div>
-);
-
 export const CodeBlockContent = ({
 	code,
 	language,
@@ -558,54 +502,3 @@ export const CompactCodeBlock = ({
 		</CodeBlockContext.Provider>
 	);
 };
-
-export type CodeBlockLanguageSelectorProps = ComponentProps<typeof Select>;
-
-export const CodeBlockLanguageSelector = (
-	props: CodeBlockLanguageSelectorProps,
-) => <Select {...props} />;
-
-export type CodeBlockLanguageSelectorTriggerProps = ComponentProps<
-	typeof SelectTrigger
->;
-
-export const CodeBlockLanguageSelectorTrigger = ({
-	className,
-	...props
-}: CodeBlockLanguageSelectorTriggerProps) => (
-	<SelectTrigger
-		className={cn(
-			"h-7 border-none bg-transparent px-2 text-xs shadow-none",
-			className,
-		)}
-		size="sm"
-		{...props}
-	/>
-);
-
-export type CodeBlockLanguageSelectorValueProps = ComponentProps<
-	typeof SelectValue
->;
-
-export const CodeBlockLanguageSelectorValue = (
-	props: CodeBlockLanguageSelectorValueProps,
-) => <SelectValue {...props} />;
-
-export type CodeBlockLanguageSelectorContentProps = ComponentProps<
-	typeof SelectContent
->;
-
-export const CodeBlockLanguageSelectorContent = ({
-	align = "end",
-	...props
-}: CodeBlockLanguageSelectorContentProps) => (
-	<SelectContent align={align} {...props} />
-);
-
-export type CodeBlockLanguageSelectorItemProps = ComponentProps<
-	typeof SelectItem
->;
-
-export const CodeBlockLanguageSelectorItem = (
-	props: CodeBlockLanguageSelectorItemProps,
-) => <SelectItem {...props} />;

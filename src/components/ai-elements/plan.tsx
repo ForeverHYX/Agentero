@@ -15,7 +15,6 @@ import {
 	CardAction,
 	CardContent,
 	CardDescription,
-	CardFooter,
 	CardHeader,
 	CardTitle,
 } from "@/components/ui/card";
@@ -127,12 +126,6 @@ export const PlanContent = (props: PlanContentProps) => (
 	<CollapsibleContent asChild>
 		<CardContent data-slot="plan-content" {...props} />
 	</CollapsibleContent>
-);
-
-export type PlanFooterProps = ComponentProps<"div">;
-
-export const PlanFooter = (props: PlanFooterProps) => (
-	<CardFooter data-slot="plan-footer" {...props} />
 );
 
 export type PlanStepStatus = "pending" | "in_progress" | "completed";

@@ -1,10 +1,5 @@
 {
 	"context": {
-		"totalCost": "Total cost",
-		"input": "Input",
-		"output": "Output",
-		"reasoning": "Reasoning",
-		"cache": "Cache",
 		"iconLabel": "Model context usage"
 	},
 	"tool": {
@@ -31,17 +26,11 @@
 			"description": "Start a conversation to see messages here"
 		}
 	},
-	"message": {
-		"previousBranch": "Previous branch",
-		"nextBranch": "Next branch",
-		"branchIndicator": "{{current}} of {{total}}"
-	},
 	"attachments": {
 		"remove": "Remove"
 	},
 	"modelSelector": {
-		"label": "Model Selector",
-		"providerLogo": "{{provider}} logo"
+		"label": "Model Selector"
 	},
 	"plan": {
 		"toggle": "Toggle plan",

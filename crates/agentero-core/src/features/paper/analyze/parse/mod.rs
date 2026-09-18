@@ -183,29 +183,6 @@ pub struct PaperParseBodyArgs {
     pub task_id: Option<String>,
 }
 
-/// After PDF/TeX download: if no TeX and PDF present, generate `PAPER.md` when missing.
-pub async fn maybe_generate_paper_md_after_download(
-    vault: &Path,
-    path_rel: &str,
-    paper_dir: &Path,
-) -> PaperParseResult {
-    maybe_generate_paper_md_after_download_with_task(vault, path_rel, paper_dir, None).await
-}
-
-/// Auto-parse variant used by frontend background tasks.
-///
-/// `task_id` connects frontend cancellation to the parser worker. The parser
-/// runs in a killable child process so a stuck PDFium/OCR call cannot keep the
-/// import or download command alive indefinitely.
-pub async fn maybe_generate_paper_md_after_download_with_task(
-    vault: &Path,
-    path_rel: &str,
-    paper_dir: &Path,
-    task_id: Option<&str>,
-) -> PaperParseResult {
-    parse_paper_body_inner(vault, path_rel, paper_dir, false, task_id, None).await
-}
-
 /// Manual / bulk parse entry (command).
 pub async fn parse_paper_body(
     args: PaperParseBodyArgs,

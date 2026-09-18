@@ -159,11 +159,6 @@ pub(crate) fn managed_cli_binary() -> PathBuf {
     managed_cli_dir().join(managed_binary_name())
 }
 
-/// Locate a real, version-reporting CLI next to the app / in the workspace (never stubs).
-pub fn resolve_bundled_cli<R: Runtime>(app: &AppHandle<R>) -> Option<PathBuf> {
-    resolve_local_cli(app).map(|r| r.path)
-}
-
 pub(crate) fn resolve_local_cli<R: Runtime>(app: &AppHandle<R>) -> Option<ResolvedCli> {
     // 1) Managed download cache (product path after Install).
     let managed = managed_cli_binary();

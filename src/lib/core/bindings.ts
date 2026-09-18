@@ -347,13 +347,6 @@ export const commands = {
 	 */
 	paperReadingActivityBatch: (args: PaperReadingActivityBatchArgs) => __TAURI_INVOKE<ApiResult<{ [key in string]: ReadingActivityPoint[] }>>("paper_reading_activity_batch", { args }),
 	/**
-	 *  Resolve and fill missing `publication` values for papers in the catalog.
-	 *  Uses arXiv journal_ref / S2 `publicationVenue`, then DOI → S2 then Crossref,
-	 *  then title → Semantic Scholar. Crossref is last among identifier sources
-	 *  because its `container-title` truncates many conference proceedings.
-	 */
-	paperBackfillPublication: (args: PaperBackfillPublicationArgs) => typedError<ApiResult<PaperBackfillPublicationResult_Serialize>, string>(__TAURI_INVOKE("paper_backfill_publication", { args })),
-	/**
 	 *  Full-text search over the Vault's Markdown files. See `services::search`.
 	 * 
 	 *  Async + `run_blocking`: the walk reads every Markdown file, which must not
@@ -3402,28 +3395,6 @@ export type PaperAssetsStatus = {
 	pdf: boolean,
 	tex: boolean,
 	paperMd: boolean,
-};
-
-export type PaperBackfillPublicationArgs = {
-	vaultPath: string,
-	/**  Optional Translator base URL; left empty for direct Crossref/arXiv/S2. */
-	translatorBaseUrl?: string | null,
-};
-
-export type PaperBackfillPublicationResult = PaperBackfillPublicationResult_Serialize | PaperBackfillPublicationResult_Deserialize;
-
-export type PaperBackfillPublicationResult_Deserialize = {
-	total: number,
-	updated: number,
-	failed: number,
-	errors?: string[],
-};
-
-export type PaperBackfillPublicationResult_Serialize = {
-	total: number,
-	updated: number,
-	failed: number,
-	errors?: string[],
 };
 
 /**  Uniform result shape for every entry (camelCase matches the frontend). */

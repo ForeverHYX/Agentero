@@ -209,12 +209,6 @@ fn save_cache(vault: &Path, cache: &CitingScanCache) -> Result<(), AppError> {
     Ok(())
 }
 
-/// Last scan result for this vault, if any. Lets the UI reopen the candidate
-/// list without going back online.
-pub fn cached_result(vault: &Path) -> Option<CitingScanResult> {
-    load_cache(vault).last_result
-}
-
 // -------------------------------------------------------------- pure functions
 
 /// Informativeness of a cited paper: citing a 190k-citation classic tells us

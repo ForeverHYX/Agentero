@@ -473,14 +473,6 @@ fn is_retryable_github_status_code(code: u16) -> bool {
     code == 403 || code == 429 || (500..600).contains(&code)
 }
 
-/// Whether a transport / reqwest error should trigger mirror fallback.
-pub fn should_fallback_github_transport(err: &reqwest::Error) -> bool {
-    if let Some(status) = err.status() {
-        return should_fallback_github_status(status);
-    }
-    true
-}
-
 /// Classify `AppError` messages produced by Skill / download helpers for mirror
 /// fallback. Prefer status-aware helpers when the status is still in hand.
 pub fn should_fallback_github_error(err: &AppError) -> bool {

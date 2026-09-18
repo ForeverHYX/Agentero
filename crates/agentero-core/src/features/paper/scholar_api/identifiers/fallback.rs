@@ -192,16 +192,6 @@ pub async fn fetch_arxiv_metadata(
     .await
 }
 
-/// Resolve a DOI through the Crossref chain (Crossref → S2 → OpenAlex).
-pub async fn fetch_crossref_metadata(doi: &str) -> Result<ApiPaper, AppError> {
-    run_chain(DOI_CHAIN, &ApiQuery::Doi(doi.to_string()), None).await
-}
-
-/// Resolve a PMID through the PubMed chain.
-pub async fn fetch_pubmed_metadata(pmid: &str) -> Result<ApiPaper, AppError> {
-    run_chain(PMID_CHAIN, &ApiQuery::Pmid(pmid.to_string()), None).await
-}
-
 /// First fallback chain whose resolver matches `text`, probing the table
 /// independently of the primary identifier: a `doi.org` URL resolves as
 /// `url` first, yet its DOI still gets the Crossref chain.

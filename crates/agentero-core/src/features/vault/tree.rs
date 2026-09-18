@@ -94,7 +94,10 @@ pub struct VaultTreeNode {
     pub has_tex: Option<bool>,
 }
 
-fn should_ignore(name: &str) -> bool {
+/// Whether a vault-root child name is excluded from the tree. Public for the
+/// LaTeX root scan (`features/compile/root.rs`), which walks the same vault
+/// and must apply the identical exclusion set.
+pub fn should_ignore(name: &str) -> bool {
     if name.is_empty() {
         return true;
     }

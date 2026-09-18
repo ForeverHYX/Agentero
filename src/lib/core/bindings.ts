@@ -599,6 +599,7 @@ export const commands = {
 	 *  built-in checks instead of erroring on every keystroke.
 	 */
 	chktexLint: (texPath: string, content: string) => __TAURI_INVOKE<ApiResult<LatexLintDiagnostic[]>>("chktex_lint", { texPath, content }),
+	resolveLatexRoot: (texPath: string, vaultPath: string) => __TAURI_INVOKE<ApiResult<LatexRoot>>("resolve_latex_root", { texPath, vaultPath }),
 	jobLatexCompileEnqueue: (args: JobLatexCompileEnqueueArgs) => typedError<ApiResult<JobSnapshot>, string>(__TAURI_INVOKE("job_latex_compile_enqueue", { args })),
 };
 
@@ -2975,6 +2976,25 @@ export type LatexLintDiagnostic = {
 	code: number,
 	message: string,
 };
+
+export type LatexRoot = {
+	rootPath: string,
+	source: LatexRootSource,
+};
+
+/**
+ *  How the compile root was determined — for logs/debugging only; the compile
+ *  pipeline treats every variant identically.
+ */
+export type LatexRootSource = 
+/**  `% !TEX root = …` magic-comment chain (loop detection included). */
+"magicComment" | 
+/**  The file itself carries `\documentclass` / `\begin{document}`. */
+"selfIndicator" | 
+/**  Vault scan found a root whose input/include closure contains the file. */
+"vaultScan" | 
+/**  Nothing found — the file compiles itself. */
+"fallbackSelf";
 
 export type LayoutModelStatus = {
 	ready: boolean,

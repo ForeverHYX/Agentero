@@ -454,9 +454,7 @@
 			"label": "翻译提示词",
 			"placeholder": "留空使用内置学术翻译提示词；可先「填入默认」再修改。",
 			"seed": "填入默认",
-			"reset": "恢复默认",
-			"appliesTo": "仅替换 Agent 与 OpenAI 兼容服务的内置提示词；免费引擎与内置服务不使用提示词。",
-			"variablesHint": "原文与 [[n]] 批量规则始终由应用自动附加。"
+			"reset": "恢复默认"
 		}
 	},
 	"layout": {

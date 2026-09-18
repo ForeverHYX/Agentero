@@ -737,23 +737,6 @@ export function TranslatePane({
 							className="min-h-[110px] resize-y font-mono text-xs placeholder:text-muted-foreground/50"
 							spellCheck={true}
 						/>
-						<p className="text-muted-foreground text-xs leading-relaxed">
-							{t("translate.customPrompt.appliesTo")}
-						</p>
-						<p className="text-muted-foreground text-xs leading-relaxed">
-							{/* Variable names are JSX literals on purpose: react-i18next
-							    would treat a literal {{…}} inside a translation as
-							    interpolation and render it empty. */}
-							<code className="rounded bg-muted px-1 py-0.5 font-mono">
-								{"{{targetLang}}"}
-							</code>
-							{" / "}
-							<code className="rounded bg-muted px-1 py-0.5 font-mono">
-								{"{{sourceLang}}"}
-							</code>
-							{" — "}
-							{t("translate.customPrompt.variablesHint")}
-						</p>
 					</div>
 				</SettingsGroup>
 			</div>

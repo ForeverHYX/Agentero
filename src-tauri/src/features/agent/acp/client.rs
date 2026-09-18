@@ -1,5 +1,5 @@
 use crate::core::error::AppError;
-pub(crate) use crate::core::process::windows_shell_path as simplified_agent_cwd;
+use crate::core::process::windows_shell_path;
 use crate::features::agent::acp::terminal::AcpTerminalManager;
 use crate::features::agent::models::{AgentDescriptor, AgentResultPayload, AgentTemplate};
 
@@ -61,10 +61,9 @@ pub(crate) fn shell_quote(s: &str) -> String {
 /// agents like the Pi adapter start with the vault as their OS-level working
 /// directory.
 #[cfg(not(windows))]
-pub(crate) fn wrap_local_command_with_cwd(
+fn wrap_local_command_with_cwd(
     command: &Path,
     args: &[String],
-    _env: &mut HashMap<String, String>,
     cwd: &Path,
 ) -> (PathBuf, Vec<String>) {
     let mut script = format!(
@@ -104,7 +103,7 @@ pub(crate) fn windows_shell_quote(s: &str) -> String {
 /// True UNC paths stay unchanged; supporting them requires a separate `pushd` flow.
 #[cfg(any(windows, test))]
 pub(crate) fn windows_cmd_cwd(cwd: &Path) -> String {
-    simplified_agent_cwd(cwd).to_string_lossy().into_owned()
+    windows_shell_path(cwd).to_string_lossy().into_owned()
 }
 
 /// Pre-quote the cwd environment value so metacharacters remain literal after
@@ -276,20 +275,22 @@ pub(crate) fn agent_spawn_cwd(
             .filter(|p| p.is_dir())
             .map_or_else(crate::core::paths::agent_scratch_dir, Ok)?,
     };
-    Ok(simplified_agent_cwd(&raw))
+    Ok(windows_shell_path(&raw))
 }
 
 /// Unix launches change cwd before exec, except Dsh whose own launcher already
-/// changes to its managed directory before starting the agent.
+/// changes to its managed directory before starting the agent. The shell takes
+/// the cwd inline, so `env` stays unused on this platform (signature parity
+/// with the Windows launcher below).
 #[cfg(not(windows))]
 fn local_launch_command(
     desc: &AgentDescriptor,
     command: PathBuf,
-    env: &mut HashMap<String, String>,
+    _env: &mut HashMap<String, String>,
     cwd: Option<&Path>,
 ) -> (PathBuf, Vec<String>) {
     match cwd.filter(|_| desc.template != AgentTemplate::Dsh) {
-        Some(cwd) => wrap_local_command_with_cwd(&command, &desc.args, env, cwd),
+        Some(cwd) => wrap_local_command_with_cwd(&command, &desc.args, cwd),
         None => (command, desc.args.clone()),
     }
 }
@@ -577,11 +578,9 @@ mod cwd_shell_wrap_tests {
     #[test]
     #[cfg(not(windows))]
     fn wrap_unix_builds_sh_cd_exec_script() {
-        let mut env = HashMap::new();
         let (cmd, args) = wrap_local_command_with_cwd(
             Path::new("/usr/bin/pi-acp"),
             &["--foo".to_string(), "bar baz".to_string()],
-            &mut env,
             Path::new("/path/with spaces"),
         );
         assert_eq!(cmd, PathBuf::from("/bin/sh"));
@@ -589,7 +588,6 @@ mod cwd_shell_wrap_tests {
         assert_eq!(args[0], "-c");
         assert!(args[1]
             .starts_with("cd '/path/with spaces' && exec '/usr/bin/pi-acp' '--foo' 'bar baz'"));
-        assert!(env.is_empty());
     }
 
     /// #570 policy guard: on Unix every local template is wrapped except Dsh,
@@ -717,12 +715,12 @@ mod cwd_shell_wrap_tests {
 
         assert_eq!(
             agent_spawn_cwd(None, vault.to_str()).unwrap(),
-            simplified_agent_cwd(&vault)
+            windows_shell_path(&vault)
         );
         // Missing/invalid vault -> private scratch dir, never the process cwd.
         assert_eq!(
             agent_spawn_cwd(None, vault.join("missing").to_str()).unwrap(),
-            simplified_agent_cwd(&crate::core::paths::agent_scratch_dir().unwrap())
+            windows_shell_path(&crate::core::paths::agent_scratch_dir().unwrap())
         );
 
         let _ = std::fs::remove_dir(&vault);

@@ -8,7 +8,7 @@ Agentero 作为 **ACP Client**，stdio JSON-RPC 连接用户本机或远端 Agen
 - ACP `initialize` 在 run / warm / 历史 list / load 四处统一最多等待 30 秒（设置页
   探针同样保留 30 秒总预算），覆盖 BYOA 冷启动；其余 session RPC 保持 15 秒预算。
 - 会话 `cwd` = 当前 Vault 根（远程则为远端 Vault 根）。run / warm / list / load
-  统一由 `agent_spawn_cwd()` 选择路径，并在内部调用 `simplified_agent_cwd` 归一；history
+  统一由 `agent_spawn_cwd()` 选择路径，并在内部调用 `core::process::windows_shell_path` 归一；history
   不再二次归一。Windows 把 canonicalize 出的 `\\?\D:\...` 还原为 `D:\...`，避免 Agent
   转交给 MSYS2 shell（Git Bash）时 `mktemp` / `cd` 报 ENOENT；扩展 UNC
   （`\\?\UNC\...`）与 SSH 的 POSIX 路径保持不变。详见

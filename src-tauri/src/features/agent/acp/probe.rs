@@ -21,11 +21,12 @@ pub async fn probe_agent(
     // Unix probes use scratch (or the remote vault) instead of inheriting `/`
     // from LaunchServices. Windows probes keep their original direct launch:
     // an added cmd layer would become the only process the SDK can kill.
-    let acp = match (!cfg!(windows))
-        .then(|| agent_spawn_cwd(remote, None))
-        .transpose()
-        .and_then(|cwd| to_acp_agent(desc, cwd.as_deref(), remote))
-    {
+    let cwd = if cfg!(windows) {
+        Ok(None)
+    } else {
+        agent_spawn_cwd(remote, None).map(Some)
+    };
+    let acp = match cwd.and_then(|cwd| to_acp_agent(desc, cwd.as_deref(), remote)) {
         Ok(a) => a,
         Err(e) => {
             return ProbeResult {

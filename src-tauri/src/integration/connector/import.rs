@@ -240,15 +240,21 @@ pub async fn write_snapshot_html_remote(
     Ok(path)
 }
 
+/// Validate that uploaded raw bytes have the `%PDF` header.
+fn ensure_pdf_bytes(bytes: &[u8]) -> Result<(), AppError> {
+    if bytes.len() < 4 || &bytes[..4] != b"%PDF" {
+        return Err(AppError::message("uploaded attachment is not a PDF"));
+    }
+    Ok(())
+}
+
 /// Write a browser-uploaded PDF into a remote paper folder.
 pub async fn write_attachment_pdf_remote(
     session: Arc<RemoteSession>,
     paper_rel: &str,
     bytes: &[u8],
 ) -> Result<String, AppError> {
-    if bytes.len() < 4 || &bytes[..4] != b"%PDF" {
-        return Err(AppError::message("uploaded attachment is not a PDF"));
-    }
+    ensure_pdf_bytes(bytes)?;
     let rel = paper_rel.trim().trim_matches('/').replace('\\', "/");
     if rel.is_empty() || !session.fs.exists(&rel).await? {
         return Err(AppError::message("paper folder missing"));
@@ -492,94 +498,130 @@ fn decode_connector_title(raw: &str) -> String {
 /// the HTTP 201 body. Parsing is triggered only after `connector:item-saved`.
 /// Official Zotero returns `{ canRecognize }`; we return `canRecognize: false`
 /// because `/connector/getRecognizedItem` is not implemented yet.
-pub async fn import_standalone_attachment(
-    ctrl: Arc<ConnectorController>,
-    session_id: &str,
-    title: Option<&str>,
-    url: Option<&str>,
-    bytes: &[u8],
-) -> Result<ConnectorImportResult, AppError> {
-    if bytes.len() < 4 || &bytes[..4] != b"%PDF" {
-        return Err(AppError::message("uploaded attachment is not a PDF"));
-    }
+fn translator_url_from_ctrl(ctrl: &ConnectorController) -> String {
+    use tauri::Manager;
+    ctrl.app_handle()
+        .and_then(|app| {
+            app.try_state::<crate::features::system::settings::AppSettingsStore>()
+                .and_then(|s| s.get().ok())
+                .map(|r| r.settings.translator_base_url)
+        })
+        .unwrap_or_else(|| crate::features::paper::import::DEFAULT_TRANSLATOR_BASE_URL.to_string())
+}
 
-    let (vault_handle, parent_dir) = ctrl.vault_handle_and_parent()?;
-    let parent_dir = {
-        // Prefer session parent if the session was already opened (e.g. re-save).
-        let session_parent = ctrl.session_parent_dir(session_id);
-        if session_parent.is_empty() {
-            parent_dir
-        } else {
-            session_parent
-        }
-    };
-
+/// Fallback metadata for a standalone PDF when online resolution is unavailable.
+fn fallback_standalone_meta(title: Option<&str>, clean_url: Option<&str>) -> papers::PaperRecord {
     let title_raw = title.map(str::trim).filter(|s| !s.is_empty());
     let title = title_raw
         .map(decode_connector_title)
+        .as_deref()
+        .map(crate::features::paper::import::strip_pdf_ext)
         .filter(|s| !s.is_empty())
+        .map(str::to_string)
         .or_else(|| {
-            url.and_then(|u| {
-                Path::new(u)
-                    .file_stem()
-                    .and_then(|s| s.to_str())
-                    .map(|s| s.replace('%', " "))
+            clean_url.and_then(|u| {
+                Path::new(u).file_stem().and_then(|s| s.to_str()).map(|s| {
+                    urlencoding::decode(s)
+                        .map(|cow| cow.into_owned())
+                        .unwrap_or_else(|_| s.replace('%', " "))
+                })
             })
         })
         .filter(|s| !s.is_empty())
         .unwrap_or_else(|| "PDF".into());
     let base_id = crate::features::paper::import::slug_from_stem(&title);
-    let mut meta = papers::PaperRecord::local_pdf(base_id, title.clone());
-    meta.meta_source = Some("zotero-connector".into());
-    if let Some(u) = url.map(str::trim).filter(|s| !s.is_empty()) {
-        meta.source_url = Some(u.to_string());
-        meta.pdf_url = Some(u.to_string());
+    let mut fallback_meta = papers::PaperRecord::local_pdf(base_id, title);
+    if let Some(u) = clean_url {
+        fallback_meta.source_url = Some(u.to_string());
+        fallback_meta.pdf_url = Some(u.to_string());
     }
+    fallback_meta
+}
 
-    // Session must exist for later updateSession / progress; create if new.
+/// Resolve metadata for a standalone PDF upload: first try online resolution via
+/// translator / scholar APIs when a URL is available, otherwise fall back to
+/// title / URL-derived metadata. The browser extension expects a response well
+/// under ~15s, so the synchronous lookup is bounded far below the translator's
+/// own 60s timeout; on timeout or failure the fallback metadata is used and the
+/// background recognition pass completes the record later.
+async fn resolve_standalone_meta(
+    ctrl: &ConnectorController,
+    title: Option<&str>,
+    url: Option<&str>,
+) -> papers::PaperRecord {
+    const RESOLVE_BUDGET: std::time::Duration = std::time::Duration::from_secs(6);
+    let clean_url = url.map(str::trim).filter(|s| !s.is_empty());
+    if let Some(u) = clean_url {
+        let base = translator_url_from_ctrl(ctrl);
+        let lookup = crate::features::paper::import::resolve_metadata(u, &base, None);
+        if let Ok(Ok((mut resolved_meta, _))) = tokio::time::timeout(RESOLVE_BUDGET, lookup).await {
+            resolved_meta.meta_source = Some("zotero-connector".into());
+            resolved_meta.source_url = Some(u.to_string());
+            resolved_meta.pdf_url = Some(u.to_string());
+            return resolved_meta;
+        }
+    }
+    fallback_standalone_meta(title, clean_url)
+}
+
+/// Ensure a Connector progress session exists for a standalone upload (allows reuse on retry).
+fn ensure_standalone_session(
+    ctrl: &ConnectorController,
+    session_id: &str,
+    progress_id: &str,
+    title: &str,
+) -> Result<(), AppError> {
     let progress_item = ProgressItem {
-        id: Value::String(url.unwrap_or("standalone").to_string()),
-        title: title.clone(),
+        id: Value::String(progress_id.to_string()),
+        title: title.to_string(),
         item_type: "attachment".into(),
         attachments: Vec::new(),
     };
     match ctrl.create_session(session_id, vec![progress_item]) {
-        Ok(()) => {}
-        Err(e) if e.to_string().contains("SESSION_EXISTS") => {
-            // Official rejects SESSION_EXISTS; allow reuse so a retry after a
-            // partial failure can still land the PDF.
-        }
-        Err(e) => return Err(e),
+        Ok(()) => Ok(()),
+        Err(e) if e.to_string().contains("SESSION_EXISTS") => Ok(()),
+        Err(e) => Err(e),
     }
+}
 
-    let result = if let Some(sid) = parse_remote_handle(&vault_handle) {
+/// Dispatch paper shell creation and PDF persistence to local or remote storage.
+async fn dispatch_standalone_import(
+    ctrl: &ConnectorController,
+    vault_handle: &str,
+    parent_dir: &str,
+    meta: papers::PaperRecord,
+    bytes: &[u8],
+) -> Result<ConnectorImportResult, AppError> {
+    let note_mode = note_mode_from_ctrl(ctrl);
+    if let Some(sid) = parse_remote_handle(vault_handle) {
         let reg = ctrl
             .remote_registry()
             .ok_or_else(|| AppError::message("remote registry unavailable"))?;
         let session = reg.get(sid).await?;
-        import_standalone_remote(
-            session,
-            &parent_dir,
-            meta,
-            bytes,
-            note_mode_from_ctrl(&ctrl),
-        )
-        .await?
+        import_standalone_remote(session, parent_dir, meta, bytes, note_mode).await
     } else {
         let host_app = ctrl
             .app_handle()
             .map(|app| crate::features::host_hooks::wrap(&app));
         import_standalone_local(
-            Path::new(&vault_handle),
-            &parent_dir,
+            Path::new(vault_handle),
+            parent_dir,
             meta,
             bytes,
             host_app.as_ref(),
-            note_mode_from_ctrl(&ctrl),
+            note_mode,
         )
-        .await?
-    };
+        .await
+    }
+}
 
+/// Finalize session tracking, record item paths, and notify UI/Connector.
+async fn complete_standalone_session(
+    ctrl: &ConnectorController,
+    session_id: &str,
+    url: Option<&str>,
+    result: &ConnectorImportResult,
+) -> Result<(), AppError> {
     let item_key = url
         .map(str::trim)
         .filter(|value| !value.is_empty())
@@ -603,6 +645,36 @@ pub async fn import_standalone_attachment(
     } else {
         ctrl.finalize_session_if_ready(session_id).await?;
     }
+    Ok(())
+}
+
+pub async fn import_standalone_attachment(
+    ctrl: Arc<ConnectorController>,
+    session_id: &str,
+    title: Option<&str>,
+    url: Option<&str>,
+    bytes: &[u8],
+) -> Result<ConnectorImportResult, AppError> {
+    ensure_pdf_bytes(bytes)?;
+
+    let (vault_handle, default_parent) = ctrl.vault_handle_and_parent()?;
+    let session_parent = ctrl.session_parent_dir(session_id);
+    let parent_dir = if session_parent.is_empty() {
+        default_parent
+    } else {
+        session_parent
+    };
+
+    let meta = resolve_standalone_meta(&ctrl, title, url).await;
+    let progress_id = url
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .unwrap_or("standalone");
+    ensure_standalone_session(&ctrl, session_id, progress_id, &meta.title)?;
+
+    let result = dispatch_standalone_import(&ctrl, &vault_handle, &parent_dir, meta, bytes).await?;
+    complete_standalone_session(&ctrl, session_id, url, &result).await?;
+
     Ok(result)
 }
 
@@ -618,24 +690,40 @@ async fn import_standalone_local(
         paper_commit, AssetsPolicy, CommitStatus, DedupePolicy, PaperCommitOptions,
     };
 
-    // Keep commit deferred; parser jobs are requested after connector:item-saved.
+    let needs_recognize = meta.doi.is_none() && meta.arxiv_id.is_none();
     let title = meta.title.clone();
     let commit = paper_commit(
         meta,
         PaperCommitOptions {
             vault,
             parent_dir,
-            dedupe: DedupePolicy::None,
+            dedupe: DedupePolicy::ByCatalogId,
             assets: AssetsPolicy::Deferred,
             translate_abstract: false,
             note_mode,
             fresh_timestamps: true,
             cache: None,
             app,
-            defer_parse_jobs: false,
+            defer_parse_jobs: needs_recognize,
         },
     )
     .await?;
+
+    let paper_dir = PathBuf::from(&commit.paper_dir);
+    let pdf_path = paper_dir.join(format!("{}.pdf", commit.id));
+    if !pdf_path.is_file() {
+        fs::write(&pdf_path, bytes)?;
+        if let Some(app) = app {
+            crate::features::lifecycle::emit_paper_assets_ready(Some(app), vault, &commit.id);
+        }
+    }
+
+    if commit.status == CommitStatus::Created && needs_recognize {
+        if let Some(app) = app {
+            app.spawn_recognize_metadata(vault, &commit.path);
+        }
+    }
+
     if commit.status == CommitStatus::Deduped {
         return Ok(ConnectorImportResult {
             path: commit.path,
@@ -646,9 +734,6 @@ async fn import_standalone_local(
             item_type: "attachment".into(),
         });
     }
-
-    let paper_dir = PathBuf::from(&commit.paper_dir);
-    fs::write(paper_dir.join(format!("{}.pdf", commit.id)), bytes)?;
 
     Ok(ConnectorImportResult {
         path: commit.path,
@@ -673,6 +758,25 @@ async fn import_standalone_remote(
         return Err(AppError::message("resolved metadata has empty id"));
     }
     if let Ok(Some(existing)) = papers::get_by_id(&session.work_root, &id) {
+        // Dedupe hit with a missing PDF: backfill the file both into the local
+        // staging mirror and onto the remote vault, or the save is lost.
+        let staging = session.work_root.join(&existing.path);
+        let pdf_path = staging.join(format!("{id}.pdf"));
+        if !pdf_path.is_file() {
+            fs::create_dir_all(&staging)?;
+            fs::write(&pdf_path, bytes)?;
+            let remote_pdf = format!("{}/{id}.pdf", existing.path.trim_matches('/'));
+            session
+                .fs
+                .write(
+                    &remote_pdf,
+                    bytes,
+                    WriteOpts {
+                        create_parents: true,
+                    },
+                )
+                .await?;
+        }
         return Ok(ConnectorImportResult {
             path: existing.path,
             id: existing.id,
@@ -968,5 +1072,42 @@ mod tests {
                 papers::PaperTag::new("@zotero:survey"),
             ]
         );
+    }
+
+    #[test]
+    fn test_ensure_pdf_bytes() {
+        assert!(ensure_pdf_bytes(b"%PDF-1.7...").is_ok());
+        assert!(ensure_pdf_bytes(b"%PD").is_err());
+        assert!(ensure_pdf_bytes(b"<html>").is_err());
+        assert!(ensure_pdf_bytes(b"").is_err());
+    }
+
+    #[test]
+    fn test_fallback_standalone_meta() {
+        let meta1 =
+            fallback_standalone_meta(Some("My Great Paper"), Some("https://example.com/doc.pdf"));
+        assert_eq!(meta1.title, "My Great Paper");
+        assert_eq!(meta1.meta_source.as_deref(), Some("local"));
+        assert_eq!(
+            meta1.source_url.as_deref(),
+            Some("https://example.com/doc.pdf")
+        );
+
+        let meta2 = fallback_standalone_meta(None, Some("https://example.com/my%20paper.pdf"));
+        assert_eq!(meta2.title, "my paper");
+
+        let meta3 = fallback_standalone_meta(None, None);
+        assert_eq!(meta3.title, "PDF");
+
+        let meta4 = fallback_standalone_meta(
+            Some("usenixsecurity26-peng-jiaqian.pdf"),
+            Some("https://www.usenix.org/system/files/usenixsecurity26-peng-jiaqian.pdf"),
+        );
+        assert_eq!(meta4.title, "usenixsecurity26-peng-jiaqian");
+        assert_eq!(meta4.id, "usenixsecurity26-peng-jiaqian");
+
+        let meta5 = fallback_standalone_meta(Some("paper.PDF"), None);
+        assert_eq!(meta5.title, "paper");
+        assert_eq!(meta5.id, "paper");
     }
 }

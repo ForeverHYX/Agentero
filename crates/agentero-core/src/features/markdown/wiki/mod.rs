@@ -10,4 +10,4 @@ pub mod rename;
 pub mod resolve;
 
 pub use index::WikiIndexState;
-pub use notes::append_title_alias_best_effort;
+pub use notes::sync_notes_title_and_alias;

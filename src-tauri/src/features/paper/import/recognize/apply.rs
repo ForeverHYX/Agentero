@@ -108,9 +108,16 @@ fn meta_update_in_place(
     apply_probe_fields(record, probe, meta_source);
     papers::upsert_paper(vault, record)?;
     if record.title != old_title {
-        crate::features::markdown::wiki::append_title_alias_best_effort(
+        log::info!(
+            target: "agentero::import",
+            "recognize in-place syncing NOTES.md: path={path}, old_title={:?}, new_title={:?}",
+            old_title,
+            record.title
+        );
+        crate::features::markdown::wiki::sync_notes_title_and_alias(
             vault,
             &path,
+            &old_title,
             &record.title,
         );
     }
@@ -140,7 +147,7 @@ pub(crate) async fn apply_probe_result(
     };
     // The user edited metadata (Edit-Metadata marks `manual`) before
     // recognition finished — their values win, skip entirely.
-    if record.meta_source.as_deref().is_some_and(|s| s != "local") {
+    if record.meta_source.as_deref() == Some("manual") {
         return Ok(RecognizeApply::Skipped("user-edited"));
     }
 
@@ -256,9 +263,16 @@ async fn rename_to_canonical(
                     "post-rename metadata upsert failed: {e}");
             }
             if record.title != old_title {
-                crate::features::markdown::wiki::append_title_alias_best_effort(
+                log::info!(
+                    target: "agentero::import",
+                    "recognize rename syncing NOTES.md: path={to_rel}, old_title={:?}, new_title={:?}",
+                    old_title,
+                    record.title
+                );
+                crate::features::markdown::wiki::sync_notes_title_and_alias(
                     vault,
                     to_rel,
+                    &old_title,
                     &record.title,
                 );
             }

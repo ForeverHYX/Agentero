@@ -159,9 +159,9 @@ liteparse 在**运行时 `dlopen`** PDFium，而 `liteparse-pdfium-sys` 的 buil
 - **仅命中标题（`title`）** → 只 upsert catalog 元数据，不改目录名。标题开头的 UTF-8 BOM（包括被错误显示为 `ï»¿` 的形式）会在此边界移除。
 - **未命中（`no-match`/`error`）** → `meta_source=local-unresolved`，用户可在 Edit Metadata 手填 DOI/arXiv 并刷新（`paper_resolve_identifier`）。
 - **arXiv 链整体限流（HTTP 429）**：Zotero Recognizer 常只返回 arXiv id、不带 title；随后 arXiv 兜底链（Atom→S2→alphaXiv）**整条**被限流时（链内已自动 2s 冷却重试一趟）才保留文件名占位标题，并在 `recognizeMetadata` job 的 `params.warning=arxiv_rate_limited` 上让前端 Toast——链内单源 429 会被下一优先级源静默承接，不再触发警告。
-- **用户抢先编辑**：识别完成时若 `meta_source` 已非 `local`（如 `manual`），识别结果整体放弃。
+- **用户抢先编辑**：识别完成时若 `meta_source=manual`（Edit-Metadata 手改），识别结果整体放弃；其余来源（含 Connector 兜底的 `zotero-connector` 与未解决的 `local-unresolved`）允许识别结果按字段级合并覆盖非空值。
 
-时序约定：`paper_commit` 以 `defer_parse_jobs: true` 跳过 commit 期的 ParseBody/ParseRefs spawn，由 RecognizeMetadata runner 在目录名尘埃落定后统一编排 PAPER.md / refs / layout（`LookupImportResult.recognize_pending=true` 时前端也跳过自己的 layout enqueue）。
+时序约定：`paper_commit` 以 `defer_parse_jobs: true` 跳过 commit 期的 ParseBody/ParseRefs spawn，且 Host 调度器对处于 `RecognizeMetadata` 阶段的论文直接延后/跳过 `ParseBody`、`ParseRefs`、`LayoutAnalyze` 与 `reconcile` 命令，由 RecognizeMetadata runner 在目录名尘埃落定后统一按最终路径编排 PAPER.md / refs / layout，避免改名前抢跑产生重复解析与目录移动冲突。
 
 - 实现：识别链路 `src-tauri/src/features/paper/import/recognize/pdf_recognize.rs`（payload 组装 + HTTP client + `map_crossref_work`）；probe worker 变体在 `pdf_parse/mod.rs`（`--agentero-internal-pdf-recognize-worker`）；job 编排 `import/job_runners.rs::recognize_metadata_runner`。
 - payload 结构复刻 Zotero document-worker `getRecognizerData`：`word = [xMin,yMin,xMax,yMax,fontSize,spaceAfter,baseline,rotation,0,bold,italic,0,fontIndex,text]`，行来自 liteparse 投影行（竖排 arXiv stamp 落到独立行，服务端可重建）。

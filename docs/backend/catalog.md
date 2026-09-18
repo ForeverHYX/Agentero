@@ -39,7 +39,7 @@
 |---|---|
 | `paper_list` / `paper_get` | 读 |
 | `paper_set_tags` / `paper_set_is_read` | 写 |
-| `paper_update_meta` | 手动编辑元数据（patch 语义：只更新传入字段，空串清空；置 `meta_source=manual`；改标题时向 NOTES.md aliases 追加新标题）。远程 Vault 暂不支持 |
+| `paper_update_meta` | 手动编辑元数据（patch 语义：只更新传入字段，空串清空；置 `meta_source=manual`；改标题时同步 NOTES.md：合并 aliases 旧+新标题，占位 H1 替换为新标题，用户自拟标题保留）。远程 Vault 暂不支持 |
 | `paper_rescan` | 盘 → 库 |
 | `paper_export` / `paper_import` | Bib 等 |
 | `paper_page_counts` / `paper_set_page_counts` | 页数缓存读写 |

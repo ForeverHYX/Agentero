@@ -63,6 +63,6 @@ Connector 是增量导入入口，不会把 Agentero 变成 Zotero 的同步数�
 - Connector 服务仅监听本机 loopback，不要暴露到局域网或公网。
 - 不能与 Zotero 桌面端同时占用 `23119`。
 - 支持保存条目与 PDF 附件（含浏览器上传登录墙 PDF）；浏览器直连失败时会再尝试 OA resolver（DOI/arXiv → Crossref/Unpaywall）。
-- 支持在已打开的 PDF 页面用 Connector 图标直接保存（standalone attachment）。
+- 支持在已打开的 PDF 页面用 Connector 图标直接保存（standalone attachment，会自动识别 URL 元数据并支持已存在条目的去重合并）。
 - 部分站点仍可能需在 Agentero 内手动 Download。
 - 远程 Vault 可以使用 Connector，但必须先连接远程会话，并确认状态绑定到该 Vault。

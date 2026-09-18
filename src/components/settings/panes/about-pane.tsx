@@ -20,6 +20,7 @@ import {
 	SettingsRow,
 } from "@/components/settings/settings-layout";
 import { Button } from "@/components/ui/button";
+import { lifecycleErrorMessage } from "@/lib/agent/lifecycle-error";
 import {
 	type CliInstallStatus,
 	type FinderServiceStatus,
@@ -30,6 +31,7 @@ import {
 	uninstallCliCommand,
 	uninstallFinderService,
 } from "@/lib/cli/api";
+import { errorText } from "@/lib/core/error";
 import { clearLogs } from "@/lib/core/logger";
 import { notifyError, notifySuccess } from "@/lib/core/notify";
 import { openExternalUrl } from "@/lib/core/open-external";
@@ -109,6 +111,10 @@ export function AboutPane() {
 			}
 		});
 	};
+	const installErrorText = (err: unknown) =>
+		lifecycleErrorMessage(errorText(err), (key, options) =>
+			t(key, { ...options, defaultValue: "" }),
+		);
 	const onInstallCli = () => {
 		setCliBusy(true);
 		void installCliCommand()
@@ -125,7 +131,7 @@ export function AboutPane() {
 			// makes users guess at causes (e.g. "64-bit not supported").
 			.catch((err) =>
 				notifyError(t("about.cli.installFailed"), {
-					description: err instanceof Error ? err.message : String(err),
+					description: installErrorText(err),
 				}),
 			)
 			.finally(() => setCliBusy(false));
@@ -155,7 +161,7 @@ export function AboutPane() {
 			})
 			.catch((err) =>
 				notifyError(t("about.finder.installFailed"), {
-					description: err instanceof Error ? err.message : String(err),
+					description: installErrorText(err),
 				}),
 			)
 			.finally(() => setFinderBusy(false));

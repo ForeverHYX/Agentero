@@ -298,7 +298,7 @@
 		"lifecycleScanning": "正在扫描 PATH…",
 		"lifecycleProbing": "正在探测 ACP…",
 		"lifecycleUninstalling": "正在卸载…",
-		"npmCacheWriteFailed": "npm 无法写入缓存。请在“命令提示符”中运行 {{cacheCommand}}，然后重试。若仍失败，请关闭其他 Node/npm 进程、在杀毒软件中允许 Node.js，或修正缓存目录权限。",
+		"npmCacheWriteFailed": "npm 无法写入缓存。Agentero 的受管安装会自动使用独立缓存目录——请重试。若仍失败，请在“命令提示符”中运行 {{cacheCommand}} 后重试，并关闭其他 Node/npm 进程、在杀毒软件中允许 Node.js、修正缓存目录权限。",
 		"uninstallAgent": "卸载",
 		"uninstallAgentAria": "卸载 {{name}} Agent",
 		"uninstallAgentTitle": "卸载 Agent",

@@ -298,7 +298,7 @@
 		"lifecycleScanning": "Scanning PATH…",
 		"lifecycleProbing": "Probing ACP…",
 		"lifecycleUninstalling": "Uninstalling…",
-		"npmCacheWriteFailed": "npm cannot write to its cache. In Command Prompt, run {{cacheCommand}}, then retry. If it persists, close other Node/npm processes, allow Node.js in your antivirus, or correct the cache folder permissions.",
+		"npmCacheWriteFailed": "npm cannot write to its cache. Agentero's managed installs use an isolated cache directory automatically — please retry. If it persists, run {{cacheCommand}} in Command Prompt and retry, close other Node/npm processes, allow Node.js in your antivirus, or correct the cache folder permissions.",
 		"uninstallAgent": "Uninstall",
 		"uninstallAgentAria": "Uninstall {{name}} agent",
 		"uninstallAgentTitle": "Uninstall agent",

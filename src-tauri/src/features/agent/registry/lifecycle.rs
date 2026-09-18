@@ -663,7 +663,7 @@ fn host_install_command(template_id: &str) -> Result<String, String> {
                 &grok_install_windows_command(),
                 "npm i -g @xai-official/grok@latest",
             )),
-            "zcode" => Ok("npm i -g zcode-acp-server@latest".to_string()),
+            "zcode" => Ok(ZCODE_ACP_INSTALL_COMMAND.to_string()),
             _ => Err(format!("no host install for {template_id}")),
         }
     }
@@ -930,6 +930,7 @@ fn run_tool_lifecycle_silently(
         let mut cmd = Command::new("bash");
         cmd.arg("-c").arg(script);
         apply_proxy_env_to_command(&mut cmd, proxy_enabled, proxy_url);
+        apply_npm_cache_env(&mut cmd, effective_npm_cache_dir().as_deref());
         if let Some(login_path) = login_shell_path() {
             let inherited = std::env::var("PATH").unwrap_or_default();
             cmd.env("PATH", merge_path_segments(&login_path, &inherited));
@@ -952,6 +953,7 @@ fn run_tool_lifecycle_silently(
             .env("PATH", merged_path)
             .creation_flags(CREATE_NO_WINDOW);
         apply_proxy_env_to_command(&mut cmd, proxy_enabled, proxy_url);
+        apply_npm_cache_env(&mut cmd, effective_npm_cache_dir().as_deref());
         let output = run_command_with_cancellation(cmd, app, task_id, phase);
         let _ = fs::remove_file(&bat_file);
         check_lifecycle_cancelled(task_id)?;
@@ -975,6 +977,74 @@ fn apply_proxy_env_to_command(cmd: &mut Command, proxy_enabled: bool, proxy_url:
             }
         }
     }
+}
+
+/// Isolate managed installs from an unwritable system npm cache (the classic
+/// Windows `npm error EPERM ... cache` failure). npm honors `npm_config_cache`,
+/// so the child gets an Agentero-owned cache directory when the effective
+/// system cache cannot be written. A healthy cache is left untouched so users
+/// keep their warm download cache.
+fn apply_npm_cache_env(cmd: &mut Command, default_cache: Option<&std::path::Path>) {
+    if npm_cache_override(default_cache).is_none() {
+        return;
+    }
+    let managed = managed_npm_cache_dir();
+    if fs::create_dir_all(&managed).is_ok() {
+        cmd.env("npm_config_cache", managed);
+    }
+}
+
+/// None when `default_cache` is usable; Some(managed dir) when managed
+/// installs must bypass an unwritable system cache.
+fn npm_cache_override(default_cache: Option<&std::path::Path>) -> Option<std::path::PathBuf> {
+    if default_cache.is_some_and(dir_is_writable) {
+        return None;
+    }
+    Some(managed_npm_cache_dir())
+}
+
+/// npm's effective cache for this user: an explicit `npm_config_cache` wins,
+/// then the platform default (`npm-cache` under %LOCALAPPDATA% on Windows,
+/// `~/.npm` elsewhere). `.npmrc` overrides need an npm spawn to resolve; a
+/// healthy probe of the default then simply keeps today's behavior.
+fn effective_npm_cache_dir() -> Option<std::path::PathBuf> {
+    if let Ok(from_env) = std::env::var("npm_config_cache") {
+        if !from_env.trim().is_empty() {
+            return Some(std::path::PathBuf::from(from_env));
+        }
+    }
+    #[cfg(target_os = "windows")]
+    {
+        dirs::data_local_dir().map(|d| d.join("npm-cache"))
+    }
+    #[cfg(not(target_os = "windows"))]
+    {
+        dirs::home_dir().map(|d| d.join(".npm"))
+    }
+}
+
+fn managed_npm_cache_dir() -> std::path::PathBuf {
+    dirs::data_local_dir()
+        .or_else(dirs::home_dir)
+        .unwrap_or_else(|| std::path::PathBuf::from("."))
+        .join("Agentero")
+        .join("npm-cache")
+}
+
+/// True when `dir` exists (or can be created) and accepts a new file.
+fn dir_is_writable(dir: &std::path::Path) -> bool {
+    if fs::create_dir_all(dir).is_err() {
+        return false;
+    }
+    let probe = dir.join(".agentero-write-probe");
+    let writable = fs::OpenOptions::new()
+        .create(true)
+        .write(true)
+        .truncate(true)
+        .open(&probe)
+        .is_ok();
+    let _ = fs::remove_file(&probe);
+    writable
 }
 
 fn acquire_lifecycle_lock(
@@ -1305,14 +1375,41 @@ mod tests {
         assert!(text.contains("Dsh"));
     }
 
+    /// PowerShell `-EncodedCommand` payloads hide the script inside base64, so
+    /// decode them back to text for assertions.
+    fn decode_encoded_commands(cmd: &str) -> String {
+        use base64::{engine::general_purpose::STANDARD, Engine as _};
+        cmd.split("-EncodedCommand ")
+            .skip(1)
+            .filter_map(|rest| {
+                let bytes = STANDARD.decode(rest.split_whitespace().next()?).ok()?;
+                let units: Vec<u16> = bytes
+                    .chunks_exact(2)
+                    .map(|pair| u16::from_le_bytes([pair[0], pair[1]]))
+                    .collect();
+                Some(String::from_utf16_lossy(&units))
+            })
+            .collect::<Vec<_>>()
+            .join("\n")
+    }
+
     #[test]
     fn kimi_install_prefers_official_script_with_npm_fallback() {
         let cmd = host_install_command("kimi-code").expect("kimi install");
+        // Windows runs the official script through an EncodedCommand payload.
+        let script = if cfg!(target_os = "windows") {
+            decode_encoded_commands(&cmd)
+        } else {
+            cmd.clone()
+        };
         assert!(
-            cmd.contains("code.kimi.com/kimi-code"),
+            script.contains("code.kimi.com/kimi-code"),
             "kimi install must use the official script"
         );
-        assert!(!cmd.contains("curl | bash"), "must not pipe curl to bash");
+        assert!(
+            !script.contains("curl | bash"),
+            "must not pipe curl to bash"
+        );
         assert!(
             cmd.contains("@moonshot-ai/kimi-code"),
             "kimi install must fall back to npm"
@@ -1507,6 +1604,49 @@ mod tests {
         assert!(!stdout.contains("HTTP_PROXY"));
         assert!(!stdout.contains("HTTPS_PROXY"));
         assert!(!stdout.contains("ALL_PROXY"));
+    }
+
+    #[test]
+    fn npm_cache_env_keeps_a_writable_default() {
+        let writable = std::env::temp_dir().join("agentero-npm-cache-test-ok");
+        fs::create_dir_all(&writable).expect("create probe dir");
+        let mut cmd = std::process::Command::new("env");
+        apply_npm_cache_env(&mut cmd, Some(&writable));
+        let output = cmd.output().expect("run env");
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        assert!(
+            !stdout.contains("npm_config_cache="),
+            "a healthy cache must be left alone: {stdout}"
+        );
+        let _ = fs::remove_dir_all(&writable);
+    }
+
+    #[test]
+    fn npm_cache_override_bypasses_an_unwritable_default() {
+        // A regular file can never host a cache dir, so create_dir_all fails.
+        let file = std::env::temp_dir().join("agentero-npm-cache-test-file");
+        fs::write(&file, b"x").expect("write probe file");
+        assert!(!dir_is_writable(&file));
+        let managed = npm_cache_override(Some(&file)).expect("override expected");
+        assert!(managed.ends_with("npm-cache"), "{managed:?}");
+        // Unknown default (no home/data dir): fail safe to the managed cache.
+        assert!(npm_cache_override(None).is_some());
+        let _ = fs::remove_file(&file);
+    }
+
+    #[test]
+    fn npm_cache_env_injects_managed_cache_when_default_unwritable() {
+        let file = std::env::temp_dir().join("agentero-npm-cache-test-file-2");
+        fs::write(&file, b"x").expect("write probe file");
+        let mut cmd = std::process::Command::new("env");
+        apply_npm_cache_env(&mut cmd, Some(&file));
+        let output = cmd.output().expect("run env");
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        assert!(
+            stdout.contains("npm_config_cache="),
+            "unwritable default must be replaced: {stdout}"
+        );
+        let _ = fs::remove_file(&file);
     }
 }
 

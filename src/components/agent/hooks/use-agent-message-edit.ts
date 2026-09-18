@@ -134,6 +134,7 @@ export function useAgentMessageEdit({
 		setEditingText("");
 		await send(text, {
 			baseLines,
+			selections: original?.kind === "user" ? (original.selections ?? []) : [],
 			...(mergedImages.length ? { images: mergedImages } : {}),
 		});
 	};

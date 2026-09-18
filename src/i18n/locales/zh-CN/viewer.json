@@ -252,7 +252,15 @@
 		"translateDelete": "删除",
 		"translatePinAria": "打开翻译：{{preview}}",
 		"translateNoAgent": "没有可用的 Agent 进行翻译，请先在设置 → Agent 中配置。",
-		"translateOpenSettings": "打开翻译设置"
+		"translateOpenSettings": "打开翻译设置",
+		"annotationCount": "{{count}} 条批注",
+		"selectedText": "引用原文",
+		"userComment": "批注",
+		"noComment": "未添加批注",
+		"locateSource": "定位原文",
+		"chatSource": "聊天消息",
+		"sourcePage": "第 {{page}} 页",
+		"sourceUnavailable": "来源暂不可用，或原文已改动、存在多处匹配。引用原文仍保留在批注中。"
 	},
 	"html": {
 		"empty": "暂无论文。",

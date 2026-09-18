@@ -615,7 +615,7 @@ export const ComposerInlineInput = forwardRef<
 				placeCaretAtEnd(root);
 				scrollEditorToBottom();
 			}
-		}, [renderValue, value, scrollEditorToBottom]);
+		});
 
 		useEffect(() => {
 			if (!autoFocus) return;

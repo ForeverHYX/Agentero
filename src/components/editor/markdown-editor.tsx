@@ -701,6 +701,16 @@ export function MarkdownEditor({
 												// updates can reflow and fire scroll without leaving [[.
 												scheduleCompletionProbe();
 											}}
+											onMouseDownCapture={(event) => {
+												if (
+													event.button === 2 &&
+													window.getSelection()?.toString() &&
+													event.currentTarget.contains(
+														window.getSelection()?.anchorNode ?? null,
+													)
+												)
+													event.preventDefault();
+											}}
 											onContextMenuCapture={handleEditorContextMenu}
 											onKeyDownCapture={readOnly ? undefined : handleKeyDown}
 											onBeforeInputCapture={

@@ -2,21 +2,27 @@ import { beforeEach, describe, expect, it } from "vitest";
 import {
 	encodeSelectionToken,
 	extractSelectionTokens,
+	mergeSelectionDraftInput,
+	plainTriggerSuffix,
+	updateSelectionToken,
+	withoutSelectionTokens,
 } from "@/lib/agent/composer-inline-tokens";
+import { annotationStore } from "@/lib/agent/selection-annotations";
 import {
 	beginSelectionComment,
 	confirmSelectionChat,
 	dismissSelectionChat,
+	openAnnotationEditor,
 	openSelectionChat,
 	selectionChatStore,
 } from "@/lib/agent/selection-chat-store";
+import { selectionsPromptBlock } from "@/lib/agent/selection-prompt";
 import {
 	clearActiveSelection,
 	clearSelections,
 	consumeSelections,
 	currentSelections,
 	publishSelection,
-	selectionsPromptBlock,
 } from "@/lib/agent/selection-store";
 import { vaultStore } from "@/lib/vault/store";
 
@@ -135,5 +141,89 @@ describe("Add to chat comments", () => {
 		expect(selectionChatStore.getState().draft).toBeNull();
 		expect(currentSelections()).toEqual([]);
 		vaultStore.setState({ vaultPath: previous });
+	});
+});
+
+describe("annotation draft editing", () => {
+	it("edits/removes exactly the chosen quote and preserves prose and mention tokens", () => {
+		const first = {
+			id: "first",
+			text: "same quote",
+			sourcePath: "a.md",
+			origin: "markdown" as const,
+			pinned: true,
+			comment: "old",
+		};
+		const second = { ...first, id: "second", comment: "keep" };
+		const prose = "请解释 {{m:notes%2Fb.md}} @query";
+		const original =
+			encodeSelectionToken(first) + encodeSelectionToken(second) + prose;
+		const updated = updateSelectionToken(original, first.id, "new");
+		expect(extractSelectionTokens(updated).map((s) => s.comment)).toEqual([
+			"new",
+			"keep",
+		]);
+		expect(withoutSelectionTokens(updated)).toBe(prose);
+		expect(
+			extractSelectionTokens(updateSelectionToken(updated, first.id, null)),
+		).toEqual([second]);
+		expect(
+			plainTriggerSuffix(mergeSelectionDraftInput(original, prose)),
+		).toMatch(/@query$/);
+	});
+	it("keeps insertion order when adding a new quote through the visible input", () => {
+		const first = {
+			id: "one",
+			text: "first",
+			sourcePath: "a.md",
+			origin: "markdown" as const,
+			pinned: true,
+		};
+		const second = { ...first, id: "two", text: "second" };
+		const result = mergeSelectionDraftInput(
+			`${encodeSelectionToken(first)}draft`,
+			`draft${encodeSelectionToken(second)}`,
+		);
+		expect(extractSelectionTokens(result).map((s) => s.id)).toEqual([
+			"one",
+			"two",
+		]);
+		expect(withoutSelectionTokens(result)).toBe("draft");
+		expect(
+			extractSelectionTokens(
+				mergeSelectionDraftInput(
+					result,
+					`typed${encodeSelectionToken(second)}`,
+				),
+			),
+		).toHaveLength(2);
+	});
+	it("cancel is inert and saving edits the owning composer instead of pinning another quote", () => {
+		clearSelections();
+		const selection = {
+			id: "edit",
+			text: "quote",
+			sourcePath: "a.md",
+			origin: "markdown" as const,
+			pinned: true,
+			comment: "old",
+		};
+		let value = encodeSelectionToken(selection);
+		annotationStore.setState({
+			binding: {
+				selections: [selection],
+				update: (id, comment) => {
+					value = updateSelectionToken(value, id, comment);
+				},
+			},
+		});
+		openAnnotationEditor(selection, screen);
+		dismissSelectionChat();
+		expect(extractSelectionTokens(value)[0].comment).toBe("old");
+		openAnnotationEditor(selection, screen);
+		expect(confirmSelectionChat("updated")).toBe(true);
+		expect(extractSelectionTokens(value)[0].comment).toBe("updated");
+		expect(currentSelections()).toEqual([]);
+		annotationStore.setState({ binding: null });
 	});
 });

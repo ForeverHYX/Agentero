@@ -7,10 +7,8 @@
 import type { TFunction } from "i18next";
 import type { PromptImage } from "@/lib/agent/api";
 import type { ChatVisualAnnotation } from "@/lib/agent/chat-state";
-import {
-	type SelectionContext,
-	selectionsPromptBlock,
-} from "@/lib/agent/selection-store";
+import { selectionsPromptBlock } from "@/lib/agent/selection-prompt";
+import type { SelectionContext } from "@/lib/agent/selection-store";
 import type { PdfVisualDraft } from "@/lib/agent/visual-context-store";
 import { buildVisualAnnotationsPrompt } from "@/lib/pdf/agent-trace/prompt";
 

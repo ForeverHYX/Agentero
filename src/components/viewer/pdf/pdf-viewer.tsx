@@ -1493,6 +1493,7 @@ function PdfViewerInner({
 			height: number;
 		}) => (
 			<PdfPageLayers
+				annotationSource={paperRelPath ?? paperAbsPath ?? undefined}
 				docId={docId}
 				pageIndex={pageIndex}
 				width={width}
@@ -1509,6 +1510,8 @@ function PdfViewerInner({
 		),
 		[
 			docId,
+			paperRelPath,
+			paperAbsPath,
 			pdfTone,
 			zoomRef,
 			annotationCap,

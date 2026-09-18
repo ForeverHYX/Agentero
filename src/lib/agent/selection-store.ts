@@ -15,6 +15,7 @@ import { stripSystemReminder } from "@/lib/agent/prompt-display";
 import { toVaultRelative } from "@/lib/core/path";
 import type { PdfVisualNormalizedRect } from "@/lib/pdf-visual/types";
 import { vaultStore } from "@/lib/vault/store";
+import { normalizeQuoteContext, type QuoteContext } from "./selection-context";
 
 export type SelectionOrigin = "pdf" | "markdown" | "chat";
 
@@ -41,6 +42,11 @@ export type SelectionContext = {
 	comment?: string;
 	/** Source message within a chat conversation. */
 	messageId?: string;
+	/** Durable provider conversation identity when available. */
+	chatSessionId?: string;
+	/** Text and neighbors let a reopened surface locate the quote without choosing an ambiguous match. */
+	textAnchor?: { exact: string; prefix: string; suffix: string };
+	context?: QuoteContext;
 	pinned: boolean;
 };
 
@@ -57,8 +63,6 @@ export const selectionStore = createStore<SelectionStore>(() => ({
 	pinned: [],
 }));
 
-let nextSelectionId = 0;
-
 export type SelectionInput = Omit<SelectionContext, "id" | "pinned">;
 
 /** Freeze provenance before focus changes or a PDF selection is cleared. */
@@ -71,12 +75,13 @@ export function createSelectionContext(
 	if (!text) return null;
 	return {
 		...input,
-		id: `sel-${++nextSelectionId}`,
+		id: `sel-${crypto.randomUUID()}`,
 		text,
 		sourcePath:
 			input.origin === "chat"
 				? input.sourcePath
 				: toVaultRelative(vaultStore.getState().vaultPath, input.sourcePath),
+		context: normalizeQuoteContext(input.context),
 		comment: input.comment?.trim() || undefined,
 		paperAbsPath: input.paperAbsPath?.trim() || undefined,
 		rects: input.rects?.map((r) => ({ ...r })),
@@ -200,30 +205,4 @@ export function clearSelections(): void {
 	const { active, pinned } = selectionStore.getState();
 	if (!active && pinned.length === 0) return;
 	selectionStore.setState({ active: null, pinned: [] });
-}
-
-/** Prompt scaffold in English, matching the PDF-ask quote precedent. */
-export function selectionsPromptBlock(selections: SelectionContext[]): string {
-	return selections
-		.map((sel) => {
-			const where = sel.page
-				? `${sel.sourcePath} (page ${sel.page})`
-				: sel.lineFrom != null
-					? `${sel.sourcePath} (lines ${sel.lineFrom}${
-							sel.lineTo != null && sel.lineTo > sel.lineFrom
-								? `-${sel.lineTo}`
-								: ""
-						})`
-					: sel.sourcePath;
-			const quoted = sel.text
-				.split("\n")
-				.map((line) => `> ${line}`)
-				.join("\n");
-			const source = sel.messageId
-				? `${where} (message ${sel.messageId})`
-				: where;
-			const comment = sel.comment?.trim();
-			return `Selected text from ${source}:\n${quoted}${comment ? `\n\nUser comment on this selection:\n${comment}` : ""}`;
-		})
-		.join("\n\n");
 }

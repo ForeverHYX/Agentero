@@ -252,7 +252,16 @@
 		"translateDelete": "Delete",
 		"translatePinAria": "Open translation: {{preview}}",
 		"translateNoAgent": "No available Agent for translation. Configure one in Settings → Agent.",
-		"translateOpenSettings": "Open translation settings"
+		"translateOpenSettings": "Open translation settings",
+		"annotationCount_one": "{{count}} annotation",
+		"annotationCount_other": "{{count}} annotations",
+		"selectedText": "Selected text",
+		"userComment": "Your comment",
+		"noComment": "No comment",
+		"locateSource": "Show in source",
+		"chatSource": "Chat message",
+		"sourcePage": "Page {{page}}",
+		"sourceUnavailable": "The source is unavailable, changed, or matches more than one location. The original quote is preserved."
 	},
 	"html": {
 		"empty": "No paper available.",

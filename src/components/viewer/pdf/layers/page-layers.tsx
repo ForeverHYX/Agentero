@@ -270,6 +270,7 @@ type AnnotationCapabilityProvides = ReturnType<
 >["provides"];
 
 export type PdfPageLayersProps = {
+	annotationSource?: string;
 	docId: string;
 	pageIndex: number;
 	width: number;
@@ -363,6 +364,7 @@ const PageTranslateTab = memo(function PageTranslateTab({
 });
 
 export const PdfPageLayers = memo(function PdfPageLayers({
+	annotationSource,
 	docId,
 	pageIndex,
 	width,
@@ -576,6 +578,9 @@ export const PdfPageLayers = memo(function PdfPageLayers({
 	return (
 		<div
 			ref={pageShellRef}
+			data-annotation-pdf={docId}
+			data-annotation-source={annotationSource}
+			data-annotation-page={pageIndex + 1}
 			className={cn(
 				"relative overflow-visible rounded-sm shadow-sm ring-1",
 				PDF_PAPER_SHELL_CLASS[tone],

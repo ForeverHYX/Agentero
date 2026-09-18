@@ -2,6 +2,7 @@
  * Pure chat transcript / agent switcher helpers for AgentPanel.
  * Kept free of React so unit tests can cover stream merge + option building.
  */
+
 import type { ToolUIPart } from "ai";
 import type { TFunction } from "i18next";
 import type {
@@ -23,6 +24,8 @@ import {
 } from "@/lib/agent/prompt-display";
 import { copyTextToClipboard } from "@/lib/core/clipboard";
 import { nextLineId, nextPartId } from "@/lib/pdf-visual/ids";
+import { selectionsPromptBlock } from "./selection-prompt";
+import type { SelectionContext } from "./selection-store";
 
 /** Snapshot of a visual PDF annotation attached to a local user chat line. */
 export type ChatVisualAnnotation = {
@@ -127,6 +130,7 @@ export type ChatLine =
 			text: string;
 			/** Local multimodal visual crops sent with this turn (session-local). */
 			visualAnnotations?: ChatVisualAnnotation[];
+			selections?: SelectionContext[];
 			/**
 			 * General composer image attachments (paste / file pick) for this turn.
 			 * Session-local only — not persisted to ACP session history load.
@@ -204,12 +208,14 @@ export function buildLocalTranscriptPrompt(
 	opts?: { excludeTrailingUserText?: string },
 ): string {
 	const turns: string[] = [];
+	let lastUserText: string | null = null;
 	for (const line of lines) {
 		if (line.kind === "user") {
 			const text = line.text.trim();
 			const hasVisual = Boolean(line.visualAnnotations?.length);
 			const hasImages = Boolean(line.images?.length);
-			if (!text && !hasVisual && !hasImages) continue;
+			const references = selectionsPromptBlock(line.selections ?? []);
+			if (!text && !hasVisual && !hasImages && !references) continue;
 			const label =
 				text ||
 				(hasVisual
@@ -217,20 +223,21 @@ export function buildLocalTranscriptPrompt(
 					: hasImages
 						? "(image attachment)"
 						: "");
-			turns.push(`User: ${label}`);
+			turns.push(`User: ${[label, references].filter(Boolean).join("\n\n")}`);
+			lastUserText = text;
 			continue;
 		}
 		if (line.kind === "agent") {
 			const text = agentTextFromParts(line.parts).trim();
 			if (!text) continue;
 			turns.push(`Assistant: ${text}`);
+			lastUserText = null;
 		}
 	}
 	if (opts?.excludeTrailingUserText != null) {
 		const needle = opts.excludeTrailingUserText.trim();
 		if (needle) {
-			const last = turns[turns.length - 1];
-			if (last === `User: ${needle}`) turns.pop();
+			if (lastUserText === needle) turns.pop();
 		}
 	}
 	if (turns.length === 0) return "";

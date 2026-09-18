@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it } from "vitest";
 
+import { selectionsPromptBlock } from "@/lib/agent/selection-prompt";
 import {
 	clearSelections,
 	consumeSelections,
@@ -7,7 +8,6 @@ import {
 	pinActiveSelection,
 	publishSelection,
 	selectionStore,
-	selectionsPromptBlock,
 	selectionsWithPdfAnchor,
 } from "@/lib/agent/selection-store";
 

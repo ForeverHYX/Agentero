@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { embedPdfDocumentId, stripEmbedPdfRevision } from "@/lib/pdf/document-id";
+import {
+	embedPdfDocumentId,
+	stripEmbedPdfRevision,
+} from "@/lib/pdf/document-id";
 
 describe("embedPdfDocumentId", () => {
 	it("keeps the base id for url sources without bytes", () => {

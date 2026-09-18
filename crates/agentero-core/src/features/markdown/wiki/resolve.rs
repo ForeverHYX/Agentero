@@ -4,6 +4,7 @@ use crate::features::wiki::models::{
     BlockAnchor, HeadingAnchor, InternalLinkOccurrence, InternalLinkSyntax, LinkFragment,
     LinkResolutionStatus, ResolvedLink, WikiDocument,
 };
+use crate::features::wiki::util::{normalize_key, stem_of};
 use std::collections::HashMap;
 use std::path::Path;
 
@@ -25,14 +26,6 @@ pub fn normalize_rel(path: &str) -> String {
     parts.join("/")
 }
 
-fn normalize_key(value: &str) -> String {
-    value
-        .split_whitespace()
-        .collect::<Vec<_>>()
-        .join(" ")
-        .to_lowercase()
-}
-
 pub fn heading_path_ends_with(path: &[String], suffix: &[String]) -> bool {
     !suffix.is_empty()
         && path.len() >= suffix.len()
@@ -40,14 +33,6 @@ pub fn heading_path_ends_with(path: &[String], suffix: &[String]) -> bool {
             .iter()
             .zip(suffix)
             .all(|(current, wanted)| normalize_key(current) == normalize_key(wanted))
-}
-
-fn stem_of(path: &str) -> String {
-    Path::new(path)
-        .file_stem()
-        .and_then(|value| value.to_str())
-        .unwrap_or(path)
-        .to_string()
 }
 
 fn add_extensions(value: &str) -> Vec<String> {

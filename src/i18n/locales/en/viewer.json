@@ -241,6 +241,7 @@
 		"quickChat": "Quick chat",
 		"explainVisual": "Explain formula or selection",
 		"addToChat": "Add to chat",
+		"chatCommentPlaceholder": "Add an optional comment…",
 		"translate": "Translate",
 		"removeHighlight": "Remove highlight",
 		"highlightMenuLabel": "Highlight actions",

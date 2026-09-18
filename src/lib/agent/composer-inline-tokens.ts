@@ -86,7 +86,9 @@ export function decodeSelectionTokenPayload(
 			typeof candidate.id !== "string" ||
 			typeof candidate.text !== "string" ||
 			typeof candidate.sourcePath !== "string" ||
-			(candidate.origin !== "pdf" && candidate.origin !== "markdown")
+			(candidate.origin !== "pdf" &&
+				candidate.origin !== "markdown" &&
+				candidate.origin !== "chat")
 		) {
 			return null;
 		}
@@ -96,6 +98,14 @@ export function decodeSelectionTokenPayload(
 			sourcePath: candidate.sourcePath,
 			origin: candidate.origin,
 			page: candidate.page,
+			lineFrom: candidate.lineFrom,
+			lineTo: candidate.lineTo,
+			comment:
+				typeof candidate.comment === "string" ? candidate.comment : undefined,
+			messageId:
+				typeof candidate.messageId === "string"
+					? candidate.messageId
+					: undefined,
 			rects: candidate.rects,
 			paperAbsPath: candidate.paperAbsPath,
 			pinned: candidate.pinned === true,

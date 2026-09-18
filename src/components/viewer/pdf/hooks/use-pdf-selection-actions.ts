@@ -20,17 +20,13 @@ import {
 	useRef,
 } from "react";
 import type { SelectionMenuState } from "@/components/viewer/pdf/types";
+import { openSelectionChat } from "@/lib/agent/selection-chat-store";
 import { registerSelectionQuickChat } from "@/lib/agent/selection-quick-chat";
-import {
-	pinActiveSelection,
-	publishSelection,
-} from "@/lib/agent/selection-store";
 import type { PdfAskAnchor } from "@/lib/pdf/ask/types";
 import {
 	DEFAULT_HIGHLIGHT_COLOR,
 	type HighlightColor,
 } from "@/lib/pdf/highlight/palette";
-import { openRightTab } from "@/lib/shell/ui-window-actions";
 
 type SelectionCapabilityProvides = ReturnType<
 	typeof useSelectionCapability
@@ -164,18 +160,19 @@ export function usePdfSelectionActions({
 		setSelectionMenu(null);
 		selectionCap?.clear(docId);
 		if (!quote) return;
-		// Re-publish after clear: clearing the PDF selection also drops the live chip.
+		// Keep a draft after clear: typing a comment must not depend on live selection.
 		// Keep page geometry so the next Agent turn can write a conversation card pin.
-		publishSelection({
-			text: quote,
-			sourcePath: paperRelPath ?? paperAbsPath ?? "PDF",
-			origin: "pdf",
-			page: anchor.page,
-			rects: anchor.rects,
-			paperAbsPath: paperAbsPath ?? undefined,
-		});
-		pinActiveSelection();
-		openRightTab("agent");
+		openSelectionChat(
+			{
+				text: quote,
+				sourcePath: paperRelPath ?? paperAbsPath ?? "PDF",
+				origin: "pdf",
+				page: anchor.page,
+				rects: anchor.rects,
+				paperAbsPath: paperAbsPath ?? undefined,
+			},
+			menu.screen,
+		);
 	}, [selectionCap, docId, paperRelPath, paperAbsPath, setSelectionMenu]);
 
 	const handleMenuTranslate = useCallback(() => {

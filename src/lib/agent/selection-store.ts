@@ -16,7 +16,7 @@ import { toVaultRelative } from "@/lib/core/path";
 import type { PdfVisualNormalizedRect } from "@/lib/pdf-visual/types";
 import { vaultStore } from "@/lib/vault/store";
 
-export type SelectionOrigin = "pdf" | "markdown";
+export type SelectionOrigin = "pdf" | "markdown" | "chat";
 
 export type SelectionContext = {
 	id: string;
@@ -37,6 +37,10 @@ export type SelectionContext = {
 	rects?: PdfVisualNormalizedRect[];
 	/** Absolute paper folder for mark writes (PDF only). */
 	paperAbsPath?: string;
+	/** Optional instruction attached to this quote, not to the whole turn. */
+	comment?: string;
+	/** Source message within a chat conversation. */
+	messageId?: string;
 	pinned: boolean;
 };
 
@@ -55,43 +59,37 @@ export const selectionStore = createStore<SelectionStore>(() => ({
 
 let nextSelectionId = 0;
 
-/** Replace the live selection chip (empty text clears it instead). */
-export function publishSelection(input: {
-	text: string;
-	sourcePath: string;
-	origin: SelectionOrigin;
-	page?: number;
-	lineFrom?: number;
-	lineTo?: number;
-	rects?: PdfVisualNormalizedRect[];
-	paperAbsPath?: string;
-}): void {
+export type SelectionInput = Omit<SelectionContext, "id" | "pinned">;
+
+/** Freeze provenance before focus changes or a PDF selection is cleared. */
+export function createSelectionContext(
+	input: SelectionInput,
+): SelectionContext | null {
 	const text = stripSystemReminder(input.text.trim())
 		.trim()
 		.slice(0, MAX_SELECTION_CHARS);
-	if (!text) {
-		clearActiveSelection(input.origin);
-		return;
-	}
-	const active: SelectionContext = {
+	if (!text) return null;
+	return {
+		...input,
 		id: `sel-${++nextSelectionId}`,
 		text,
-		sourcePath: toVaultRelative(
-			vaultStore.getState().vaultPath,
-			input.sourcePath,
-		),
-		origin: input.origin,
-		page: input.page,
-		lineFrom: input.lineFrom,
-		lineTo: input.lineTo,
+		sourcePath:
+			input.origin === "chat"
+				? input.sourcePath
+				: toVaultRelative(vaultStore.getState().vaultPath, input.sourcePath),
+		comment: input.comment?.trim() || undefined,
+		paperAbsPath: input.paperAbsPath?.trim() || undefined,
+		rects: input.rects?.map((r) => ({ ...r })),
 		pinned: false,
 	};
-	if (input.rects?.length) {
-		active.rects = input.rects.map((r) => ({ ...r }));
-	}
-	const paperAbs = input.paperAbsPath?.trim();
-	if (paperAbs) {
-		active.paperAbsPath = paperAbs;
+}
+
+/** Replace the live selection chip (empty text clears it instead). */
+export function publishSelection(input: SelectionInput): void {
+	const active = createSelectionContext(input);
+	if (!active) {
+		clearActiveSelection(input.origin);
+		return;
 	}
 	selectionStore.setState({ active });
 }
@@ -147,17 +145,30 @@ export function clearActiveSelection(origin?: SelectionOrigin): void {
 
 /** Freeze the live selection as a pinned chip. Returns false when there is none. */
 export function pinActiveSelection(): boolean {
-	const { active, pinned } = selectionStore.getState();
+	const { active } = selectionStore.getState();
 	if (!active) return false;
+	pinSelection(active);
+	return true;
+}
+
+/** Pin a captured quote even after focus has cleared/replaced the live selection. */
+export function pinSelection(active: SelectionContext): void {
+	const { pinned } = selectionStore.getState();
 	const deduped = pinned.filter(
 		(item) =>
-			item.text !== active.text || item.sourcePath !== active.sourcePath,
+			item.text !== active.text ||
+			item.sourcePath !== active.sourcePath ||
+			item.origin !== active.origin ||
+			item.page !== active.page ||
+			item.lineFrom !== active.lineFrom ||
+			item.lineTo !== active.lineTo ||
+			item.messageId !== active.messageId ||
+			item.comment !== active.comment,
 	);
 	selectionStore.setState({
 		active: null,
 		pinned: [...deduped, { ...active, pinned: true }].slice(-MAX_PINNED),
 	});
-	return true;
 }
 
 /** Remove one chip (live or pinned) by id. */
@@ -208,7 +219,11 @@ export function selectionsPromptBlock(selections: SelectionContext[]): string {
 				.split("\n")
 				.map((line) => `> ${line}`)
 				.join("\n");
-			return `Selected text from ${where}:\n${quoted}`;
+			const source = sel.messageId
+				? `${where} (message ${sel.messageId})`
+				: where;
+			const comment = sel.comment?.trim();
+			return `Selected text from ${source}:\n${quoted}${comment ? `\n\nUser comment on this selection:\n${comment}` : ""}`;
 		})
 		.join("\n\n");
 }

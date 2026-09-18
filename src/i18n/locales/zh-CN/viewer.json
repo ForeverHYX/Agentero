@@ -241,6 +241,7 @@
 		"quickChat": "快速对话",
 		"explainVisual": "解释公式或选区",
 		"addToChat": "加入对话",
+		"chatCommentPlaceholder": "添加批注（可选）…",
 		"translate": "翻译",
 		"removeHighlight": "删除高亮",
 		"highlightMenuLabel": "高亮操作",

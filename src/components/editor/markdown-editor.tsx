@@ -720,6 +720,8 @@ export function MarkdownEditor({
 											 * (matches Plate default variant pb-72).
 											 */}
 											<Editor
+												data-selection-chat-source={filePath || undefined}
+												data-selection-chat-origin="markdown"
 												placeholder={placeholder}
 												readOnly={readOnly}
 												// `pl-10` leaves room for the block drag handle

@@ -426,7 +426,12 @@ const ChatTranscriptRow = memo(function ChatTranscriptRow({
 					) : null}
 					{/* Free-text only: skip empty bubble when the turn is image/visual-only. */}
 					{userDisplay ? (
-						<MessageContent className="rounded-2xl px-4 py-2.5">
+						<MessageContent
+							className="rounded-2xl px-4 py-2.5"
+							data-selection-chat-source={`Chat ${activeTabId}`}
+							data-selection-chat-origin="chat"
+							data-selection-chat-message={line.id}
+						>
 							<MessageResponse className="text-base leading-relaxed">
 								{userDisplay}
 							</MessageResponse>
@@ -601,7 +606,13 @@ const ChatTranscriptRow = memo(function ChatTranscriptRow({
 			const isAnimating =
 				Boolean(line.streaming) && index === lastIndex && part.text.length > 0;
 			return (
-				<div key={partKey} className="min-w-0">
+				<div
+					key={partKey}
+					className="min-w-0"
+					data-selection-chat-source={`Chat ${activeTabId}`}
+					data-selection-chat-origin="chat"
+					data-selection-chat-message={line.id}
+				>
 					<MessageResponse
 						isAnimating={isAnimating}
 						onOpenSource={onOpenSource}

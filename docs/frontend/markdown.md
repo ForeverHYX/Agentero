@@ -150,3 +150,7 @@ Markdown 已能表达的语法不做 HTML 语义化转换，只处理 Markdown �
 | `src/lib/vault/fs-watch.ts` | 文件变更重载 |
 
 Vault 文件约定：[../backend/data-model.md](../backend/data-model.md)。
+
+### 选区加入对话
+
+正文选中文字后出现「加入对话」浮动入口，点击后可直接填写可选批注并确认加入聊天草稿。批注绑定原文和笔记路径，不写入 Markdown 文件。编辑态和只读笔记均可使用，格式工具栏与右键编辑菜单不受影响。见 [agent.md](agent.md)。

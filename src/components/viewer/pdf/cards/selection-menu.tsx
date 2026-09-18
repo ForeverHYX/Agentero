@@ -23,7 +23,7 @@ type SelectionMenuProps = {
 	onHighlight: (color: HighlightColor) => void;
 	/** Open an in-page Ask (quick chat) thread for the selection. */
 	onAsk: () => void;
-	/** Pin the selection as an Agent composer context chip and open the chat. */
+	/** Open an optional inline comment before adding the quote to chat. */
 	onAddToChat: () => void;
 	onTranslate: () => void;
 	/** Show the highlight color stack (needs marks/ to persist into). */
@@ -137,6 +137,7 @@ export function SelectionMenu({
 					type="button"
 					className="inline-flex h-7 shrink-0 items-center gap-1 rounded-md px-1.5 text-caption font-medium text-foreground outline-none transition-colors hover:bg-accent hover:text-accent-foreground focus-visible:ring-2 focus-visible:ring-ring/50 active:scale-[0.97] motion-reduce:active:scale-100"
 					aria-label={`${t("selection.addToChat")} ${addToChatShortcut}`}
+					onPointerDown={(event) => event.preventDefault()}
 					onClick={onAddToChat}
 				>
 					<span>{t("selection.addToChat")}</span>

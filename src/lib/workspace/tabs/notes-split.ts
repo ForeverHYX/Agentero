@@ -38,27 +38,6 @@ export function tabIsPaperNotes(tab: DocTab | null): boolean {
 }
 
 /**
- * Anchor for stacking another paper body as a sibling tab (same dock group),
- * so opening paper B does not create a third column beside PDF|NOTES.
- */
-export function findPaperColumnAnchor(
-	tabs: DocTab[],
-	opts?: { excludeId?: string; preferId?: string | null },
-): DocTab | null {
-	const candidates = tabs.filter(
-		(t) => t.id !== opts?.excludeId && isPaperContentTab(t),
-	);
-	if (!candidates.length) return null;
-	if (opts?.preferId) {
-		const preferred = candidates.find((t) => t.id === opts.preferId);
-		if (preferred) return preferred;
-	}
-	// Prefer a paper that already has NOTES open (established reading layout).
-	const withNotes = candidates.find((t) => tabHasNotesSplit(tabs, t));
-	return withNotes ?? candidates[0] ?? null;
-}
-
-/**
  * Anchor for stacking another NOTES panel into the right reading column.
  */
 export function findNotesColumnAnchor(

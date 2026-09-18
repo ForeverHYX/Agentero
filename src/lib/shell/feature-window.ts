@@ -150,17 +150,6 @@ export async function preferFeatureWindow(
 	return focusFeatureWindow(view);
 }
 
-/** True when this webview is a feature popout (`?window=feature`). */
-export function isFeatureWindowRoute(): boolean {
-	try {
-		return (
-			new URLSearchParams(window.location.search).get("window") === "feature"
-		);
-	} catch {
-		return false;
-	}
-}
-
 export function isFeatureViewType(
 	value: string | null | undefined,
 ): value is FeatureViewType {
@@ -174,11 +163,4 @@ export function readFeatureWindowView(): FeatureViewType | null {
 	} catch {
 		return null;
 	}
-}
-
-export async function isFeaturePoppedOut(
-	view: FeatureViewType,
-): Promise<boolean> {
-	const { uiStore } = await import("@/lib/shell/ui-store");
-	return uiStore.getState().featurePoppedOut[view] === true;
 }

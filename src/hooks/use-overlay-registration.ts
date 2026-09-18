@@ -1,7 +1,6 @@
 import { useEffect, useRef, useSyncExternalStore } from "react";
 
 import {
-	getOverlayStackSnapshot,
 	isAnyModalOverlayOpen,
 	pushOverlay,
 	subscribeOverlayStack,
@@ -48,14 +47,5 @@ export function useAnyModalOverlayOpen(): boolean {
 		subscribeOverlayStack,
 		isAnyModalOverlayOpen,
 		() => false,
-	);
-}
-
-/** Debug / tests: current stack ids top-last. */
-export function useOverlayStackIds(): string[] {
-	return useSyncExternalStore(
-		subscribeOverlayStack,
-		() => getOverlayStackSnapshot().map((h) => h.id),
-		() => [] as string[],
 	);
 }

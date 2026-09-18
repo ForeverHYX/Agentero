@@ -15,15 +15,6 @@ import {
 import { errorText } from "@/lib/core/error";
 import { callApi } from "@/lib/core/ipc";
 
-/** Categories the Host falls back to when neither caller nor state has any. */
-export const DEFAULT_REC_CATEGORIES = [
-	"cs.AI",
-	"cs.CL",
-	"cs.LG",
-	"cs.CV",
-	"stat.ML",
-] as const;
-
 /** Read models come straight from the generated wire contract. */
 export type { ProbeEmbeddingResult, RecommendItem, RecommendResult };
 

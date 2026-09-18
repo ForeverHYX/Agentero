@@ -146,10 +146,6 @@ export function setCommandOpen(open: boolean): void {
 	uiStore.setState({ commandOpen: open });
 }
 
-export function setCommandMode(mode: PaletteMode): void {
-	uiStore.setState({ commandMode: mode });
-}
-
 export function openPalette(mode: PaletteMode): void {
 	const { commandOpen, commandMode } = uiStore.getState();
 	if (commandOpen && commandMode === mode) {

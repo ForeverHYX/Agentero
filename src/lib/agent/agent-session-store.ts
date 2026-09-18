@@ -324,10 +324,6 @@ export function getAgentSessionState(): AgentSessionStore {
  */
 let agentSessionHandoffApplied = false;
 
-export function hasAppliedAgentSessionHandoff(): boolean {
-	return agentSessionHandoffApplied;
-}
-
 /** Apply a cross-window handoff snapshot (new Agent feature window boot). */
 export function applyAgentSessionHandoff(payload: {
 	sessions: AgentSessionRecord[];

@@ -19,9 +19,3 @@ export const USER_AGENT_PRESETS: readonly UserAgentPreset[] = [
 	{ id: "claudeCode", value: "claude-code/1.0.0" },
 	{ id: "claudeCodeLegacy", value: "claude-code/0.1.0" },
 ] as const;
-
-export function matchUserAgentPresetId(value: string): string | null {
-	const v = value.trim();
-	const hit = USER_AGENT_PRESETS.find((p) => p.value === v);
-	return hit ? hit.id : null;
-}

@@ -34,7 +34,7 @@ export function getSettings(): AppSettings {
 }
 
 /** Persist and broadcast a full settings snapshot. */
-export function updateSettings(next: AppSettings): void {
+function updateSettings(next: AppSettings): void {
 	settingsStore.setState(next, true);
 	saveSettings(next);
 }

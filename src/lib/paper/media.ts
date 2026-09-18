@@ -66,16 +66,6 @@ export async function localBytesToViewerSource(
 }
 
 /**
- * Read a local PDF into a `blob:` URL for PDF.js.
- * @see localBytesToViewerSource
- */
-export async function localPdfToViewerSource(
-	absPath: string,
-): Promise<string | null> {
-	return localBytesToViewerSource(absPath, "application/pdf");
-}
-
-/**
  * Read a local (or remote-cached) file into a standalone `ArrayBuffer`.
  *
  * Preferred over {@link localBytesToViewerSource} for the PDF engine: EmbedPDF

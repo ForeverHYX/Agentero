@@ -252,14 +252,6 @@ export async function lookupAnnotationRef(
 	return null;
 }
 
-/** Whether the paper marks store currently has this id. */
-export async function annotationRefExists(
-	paperAbsPath: string,
-	id: string,
-): Promise<boolean> {
-	return (await lookupAnnotationRef(paperAbsPath, id)) !== null;
-}
-
 /**
  * Resolvable wiki target for a paper unit — never the display title alone.
  *

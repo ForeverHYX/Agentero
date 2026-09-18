@@ -81,8 +81,6 @@ let cache: AppSettings = {
 };
 let loaded = false;
 let loadPromise: Promise<AppSettings> | null = null;
-/** Absolute path reported by Host (empty until loaded in Tauri). */
-let settingsFilePath = "";
 
 function cloneSettings(s: AppSettings): AppSettings {
 	return {
@@ -108,11 +106,6 @@ export function loadSettings(): AppSettings {
 	return cloneSettings(cache);
 }
 
-/** Absolute path to Host settings file, if known. */
-export function getSettingsFilePath(): string {
-	return settingsFilePath;
-}
-
 /**
  * Load settings from Host XDG config (`settings.json`).
  * One-shot: migrates legacy `localStorage` when the file does not exist yet.
@@ -126,7 +119,6 @@ export async function ensureSettingsLoaded(): Promise<AppSettings> {
 				const res = await callApi(() => commands.settingsGet(), {
 					fallback: "settings_get failed",
 				});
-				settingsFilePath = res.path;
 				let next = normalizeSettings(fromSettingsWire(res.settings));
 
 				if (!res.existed) {

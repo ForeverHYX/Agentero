@@ -463,36 +463,6 @@ export async function resolveIdentifierMetadata(
 	return paperFromWire(record);
 }
 
-export type PaperBackfillPublicationResult = {
-	total: number;
-	updated: number;
-	failed: number;
-	errors: string[];
-};
-
-export async function backfillPublication(
-	vaultPath: string,
-	settings?: AppSettings,
-): Promise<PaperBackfillPublicationResult> {
-	if (!isTauri()) {
-		throw new Error(i18n.t("sidebar:papersLibrary.desktopOnly"));
-	}
-	const r = await callApiResult(
-		() =>
-			commands.paperBackfillPublication({
-				vaultPath,
-				translatorBaseUrl: translatorBase(settings),
-			}),
-		{ fallback: i18n.t("sidebar:papersLibrary.backfillPublicationFailed") },
-	);
-	return {
-		total: r.total,
-		updated: r.updated,
-		failed: r.failed,
-		errors: r.errors ?? [],
-	};
-}
-
 export type PaperImportResult = {
 	imported: number;
 	skipped: number;

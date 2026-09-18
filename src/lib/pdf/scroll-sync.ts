@@ -28,9 +28,6 @@ export type ScrollSyncPeer = {
 	onZoomChange: (listener: (zoom: number) => void) => () => void;
 };
 
-/** @deprecated Prefer {@link ScrollSyncPeer}; kept for older call sites. */
-export type ExternalScrollSyncViewport = ScrollSyncPeer;
-
 const pairs = new Map<string, ScrollSyncPair>();
 let groupSequence = 1;
 const peers = new Map<string, ScrollSyncPeer>();
@@ -52,14 +49,6 @@ export function registerScrollSyncPeer(
 		peers.delete(docId);
 		notify(peerListeners);
 	};
-}
-
-/** @deprecated Use {@link registerScrollSyncPeer}. */
-export function registerExternalScrollSyncViewport(
-	docId: string,
-	viewport: ScrollSyncPeer,
-): () => void {
-	return registerScrollSyncPeer(docId, viewport);
 }
 
 export function getScrollSyncPeer(docId: string): ScrollSyncPeer | null {
@@ -90,23 +79,9 @@ export function getScrollSyncElement(docId: string): HTMLElement | null {
 	return scrollElements.get(docId) ?? null;
 }
 
-/** @deprecated Use {@link getScrollSyncPeer}. */
-export function getExternalScrollSyncViewport(
-	docId: string,
-): ScrollSyncPeer | null {
-	return getScrollSyncPeer(docId);
-}
-
 export function subscribeScrollSyncPeers(listener: () => void): () => void {
 	peerListeners.add(listener);
 	return () => peerListeners.delete(listener);
-}
-
-/** @deprecated Use {@link subscribeScrollSyncPeers}. */
-export function subscribeExternalScrollSyncViewports(
-	listener: () => void,
-): () => void {
-	return subscribeScrollSyncPeers(listener);
 }
 
 export function subscribeScrollSyncPairs(listener: () => void): () => void {

@@ -37,8 +37,6 @@ import {
 } from "@/lib/pdf/highlight/palette";
 /** Card width in CSS px — also the gutter width reserved on the viewport. */
 export const COMMENT_CARD_WIDTH_PX = 224;
-/** Collapsed selection-comment chip width (icon only). */
-export const COMMENT_AFFORDANCE_COLLAPSED_WIDTH_PX = 36;
 /** Horizontal gap between the page edge and the rail. */
 export const COMMENT_CARD_GAP_PX = 8;
 /** Extra px so ring + shadow aren't clipped by the viewport overflow. */

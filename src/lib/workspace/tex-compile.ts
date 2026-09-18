@@ -99,18 +99,41 @@ export function selectTexEngine(id: string): void {
 }
 
 /**
+ * Resolve the compile root for a .tex path: `% !TEX root` magic-comment chain
+ * → self indicator (\documentclass / \begin{document}) → vault-wide reverse
+ * \input/\include scan → the file itself. One IPC call over fresh disk state
+ * (callers flush editors first, so a just-typed magic comment is visible);
+ * falls back to `texPath` on any error so compilation still runs.
+ */
+export async function resolveTexRoot(texPath: string): Promise<string> {
+	try {
+		const res = await commands.resolveLatexRoot(
+			texPath,
+			vaultStore.getState().vaultPath ?? "",
+		);
+		return res.ok && res.data?.rootPath ? res.data.rootPath : texPath;
+	} catch {
+		return texPath;
+	}
+}
+
+/**
  * Clear the regenerable LaTeX intermediates (latexmk -c) for one source,
  * keeping the PDF. Escape hatch for latexmk's stuck state after a failed
  * run: its fingerprint database (`.fdb_latexmk`) records the error and,
  * with an unchanged source, it refuses to recompile ("Nothing to do …
  * gave an error in previous invocation"). Clearing the intermediates
  * resets that database so the next compile is a full run.
+ *
+ * Runs against the project's root file — the fdb database and aux set live
+ * with the root, so clearing a child file's own name would be a no-op.
  */
 export async function cleanTexAuxFiles(texPath: string): Promise<boolean> {
 	// latexmk -c mid-compile would delete files the run is still writing.
 	if (texCompileStore.getState().compilingPath) return false;
+	const root = await resolveTexRoot(texPath);
 	try {
-		const res = await commands.cleanLatexAuxFiles(texPath);
+		const res = await commands.cleanLatexAuxFiles(root);
 		if (!res.ok) {
 			notifyError(
 				res.error?.message || i18n.t("sidebar:fileTree.cleanAuxFailed"),
@@ -135,12 +158,17 @@ export async function cleanTexAuxFiles(texPath: string): Promise<boolean> {
  * and a cancel button; `compilingPath` still drives the file-tree spinner.
  * Returns the absolute pdf path on success, else null.
  *
+ * `texPath` is the compile ROOT (a `resolveTexRoot` product) — the job's
+ * identity, dedupe key and output PDF all follow it. `triggerPath` marks the
+ * file the user actually acted on, so the file-tree spinner stays on the
+ * triggered row even when the build target is its root.
+ *
  * `quietSuccess` skips the success toast (save-triggered compiles would spam
  * one per autosave); failures always notify.
  */
 export async function compileTexFile(
 	texPath: string,
-	opts?: { quietSuccess?: boolean },
+	opts?: { quietSuccess?: boolean; triggerPath?: string },
 ): Promise<string | null> {
 	initTexEngines();
 	// Wait for the in-flight scan: reading the store immediately after a
@@ -155,7 +183,7 @@ export async function compileTexFile(
 	// One in-flight compile at a time (prevents ⌘\ double-fire).
 	if (compilingPath) return null;
 
-	texCompileStore.setState({ compilingPath: texPath });
+	texCompileStore.setState({ compilingPath: opts?.triggerPath ?? texPath });
 	try {
 		await enqueueTaskSettled({
 			kind: "latexCompile",

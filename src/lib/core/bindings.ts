@@ -4576,6 +4576,12 @@ export type TranslateSettings = {
 	dualPaneTranslate?: boolean,
 	agentId?: string,
 	modelId?: string,
+	/**
+	 *  Custom translate prompt replacing the built-in instructions for the
+	 *  Agent and OpenAI-compatible providers (free MT and the built-in ignore
+	 *  it). Empty = built-in. Max 8000 chars.
+	 */
+	customPrompt?: string,
 };
 
 export type TranslateTextArgs = {
@@ -4592,6 +4598,12 @@ export type TranslateTextArgs = {
 	region?: string | null,
 	/**  OpenAI-compatible model id. */
 	model?: string | null,
+	/**
+	 *  Custom translate instruction (settings `translate.customPrompt`); empty →
+	 *  built-in academic prompt. Injected by the Host command; replaces the
+	 *  system+rules block on the OpenAI-compatible path only.
+	 */
+	customPrompt?: string | null,
 	/**
 	 *  Optional request timeout in milliseconds (clamped 1s–30s). Default 30s.
 	 *  Settings probe uses a shorter value for snappy parallel checks.

@@ -21,17 +21,48 @@ struct OpenAiRequest<'a> {
 /// `src/lib/translate/prompt.ts`; keep both in sync.
 const OPENAI_TRANSLATE_SYSTEM: &str = "You are a professional academic translator. You render research-paper prose into fluent, idiomatic target-language text and output only the translation.";
 
+/// Numbered batch payload ([[1]] …, [[2]] …): ask the model to keep the
+/// markers and paragraph count so the caller can split the result back.
+/// Appended by the Host on both the default and the custom-prompt path.
+const NUMBERED_BATCH_RULE: &str = "The text contains several paragraphs, each prefixed with a [[n]] marker. Translate every paragraph and keep the same [[n]] markers, in the same order, with the same number of paragraphs. Do not merge paragraphs.";
+
 /// Literal word-for-word output at 0.0 reads badly for paper prose; a small
 /// amount of sampling lets the model restructure sentences.
 const OPENAI_TRANSLATE_TEMPERATURE: f32 = 0.2;
 
-fn openai_translate_prompt(text: &str, source: &str, target: &str) -> String {
-    // Numbered batch payload ([[1]] …, [[2]] …): ask the model to keep the
-    // markers and paragraph count so the caller can split the result back.
-    let numbered_hint = if text.contains("[[1]]") {
-        "\n- The text contains several paragraphs, each prefixed with a [[n]] marker. Translate every paragraph and keep the same [[n]] markers, in the same order, with the same number of paragraphs. Do not merge paragraphs."
+/// Map a language code to a prompt-facing display name. Mirrors
+/// `targetLangDisplayName` in `src/lib/translate/lang.ts`; unknown values pass
+/// through so future codes keep working.
+fn target_display_name(target: &str) -> String {
+    let t = target.trim();
+    let lower = t.to_ascii_lowercase();
+    if lower == "zh" || lower == "zh-cn" || lower.starts_with("zh-") || lower == "chinese" {
+        "Chinese".into()
+    } else if lower == "en" || lower.starts_with("en-") || lower == "english" {
+        "English".into()
     } else {
-        ""
+        t.to_string()
+    }
+}
+
+/// Substitute `{{targetLang}}` / `{{sourceLang}}` in a user-supplied prompt
+/// template. `auto` keeps the wording the built-in prompt uses.
+fn interpolate_custom_prompt(custom: &str, source: &str, target: &str) -> String {
+    let from = if source == "auto" {
+        "the source language"
+    } else {
+        source
+    };
+    custom
+        .replace("{{targetLang}}", &target_display_name(target))
+        .replace("{{sourceLang}}", from)
+}
+
+fn openai_translate_prompt(text: &str, source: &str, target: &str) -> String {
+    let numbered_hint = if text.contains("[[1]]") {
+        format!("\n- {NUMBERED_BATCH_RULE}")
+    } else {
+        String::new()
     };
     let from = if source == "auto" {
         "the source language"
@@ -48,6 +79,37 @@ fn openai_translate_prompt(text: &str, source: &str, target: &str) -> String {
     )
 }
 
+/// Compose the (system, user) message pair. A non-empty `custom_prompt`
+/// replaces the built-in system + rules block (after `{{targetLang}}` /
+/// `{{sourceLang}}` interpolation); the numbered-batch rule and the text
+/// payload stay Host-composed so `[[n]]` splitting keeps working.
+fn openai_translate_messages(
+    text: &str,
+    source: &str,
+    target: &str,
+    custom_prompt: Option<&str>,
+) -> (String, String) {
+    let custom = custom_prompt.map(str::trim).filter(|s| !s.is_empty());
+    match custom {
+        None => (
+            OPENAI_TRANSLATE_SYSTEM.to_string(),
+            openai_translate_prompt(text, source, target),
+        ),
+        Some(template) => {
+            let system = interpolate_custom_prompt(template, source, target);
+            let mut user = String::new();
+            if text.contains("[[1]]") {
+                user.push_str(NUMBERED_BATCH_RULE);
+                user.push_str("\n\n");
+            }
+            user.push_str("Text:\n");
+            user.push_str(text);
+            (system, user)
+        }
+    }
+}
+
+#[allow(clippy::too_many_arguments)]
 pub async fn translate_openai_compatible(
     text: &str,
     source: &str,
@@ -56,6 +118,7 @@ pub async fn translate_openai_compatible(
     api_key: Option<&str>,
     base_url: Option<&str>,
     model: Option<&str>,
+    custom_prompt: Option<&str>,
 ) -> Result<String, AppError> {
     let key = super::required_api_key("OpenAI-compatible", api_key)?;
     let model = model
@@ -65,7 +128,7 @@ pub async fn translate_openai_compatible(
             AppError::message("OpenAI-compatible requires model (Settings → Translate)")
         })?;
     let url = super::optional_endpoint(base_url, "https://api.openai.com/v1", "/chat/completions");
-    let prompt = openai_translate_prompt(text, source, target);
+    let (system, user) = openai_translate_messages(text, source, target, custom_prompt);
     let client = http::client(timeout)?;
     let resp = client
         .post(&url)
@@ -76,11 +139,11 @@ pub async fn translate_openai_compatible(
             messages: [
                 OpenAiMessage {
                     role: "system",
-                    content: OPENAI_TRANSLATE_SYSTEM,
+                    content: &system,
                 },
                 OpenAiMessage {
                     role: "user",
-                    content: &prompt,
+                    content: &user,
                 },
             ],
             temperature: OPENAI_TRANSLATE_TEMPERATURE,
@@ -119,15 +182,44 @@ mod tests {
 
     #[test]
     fn openai_prompt_carries_academic_rules_and_marker_hint() {
-        let single = openai_translate_prompt("Hello world", "auto", "zh-CN");
+        let (system, single) = openai_translate_messages("Hello world", "auto", "zh-CN", None);
+        assert_eq!(system, OPENAI_TRANSLATE_SYSTEM);
         assert!(single.contains("the source language"));
         assert!(single.contains("zh-CN"));
         assert!(single.contains("Translate the meaning, not the word order"));
         assert!(single.contains("Output only the translation."));
         assert!(!single.contains("[[n]] marker"));
 
-        let batch = openai_translate_prompt("[[1]] a\n\n[[2]] b", "en", "zh-CN");
+        let (_, batch) = openai_translate_messages("[[1]] a\n\n[[2]] b", "en", "zh-CN", None);
         assert!(batch.contains("from en to zh-CN"));
         assert!(batch.contains("[[n]] marker"));
+    }
+
+    #[test]
+    fn custom_prompt_replaces_instructions_but_not_payload() {
+        let (system, user) = openai_translate_messages(
+            "Hello world",
+            "auto",
+            "zh-CN",
+            Some("Translate into {{targetLang}} from {{sourceLang}}. Be terse."),
+        );
+        assert_eq!(
+            system,
+            "Translate into Chinese from the source language. Be terse."
+        );
+        assert!(user.starts_with("Text:\nHello world"));
+        assert!(!user.contains("Rules:"));
+        // Whitespace-only custom prompts fall back to the built-in prompt.
+        let (system, _) = openai_translate_messages("Hello world", "auto", "zh-CN", Some("  "));
+        assert_eq!(system, OPENAI_TRANSLATE_SYSTEM);
+    }
+
+    #[test]
+    fn custom_prompt_keeps_numbered_batch_rule() {
+        let (_, user) =
+            openai_translate_messages("[[1]] a\n\n[[2]] b", "en", "zh-CN", Some("Custom."));
+        assert!(user.contains("[[n]] marker"));
+        assert!(user.contains("Do not merge paragraphs."));
+        assert!(user.ends_with("Text:\n[[1]] a\n\n[[2]] b"));
     }
 }

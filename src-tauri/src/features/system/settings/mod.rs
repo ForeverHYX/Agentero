@@ -241,6 +241,11 @@ pub struct TranslateSettings {
     pub agent_id: String,
     #[serde(default)]
     pub model_id: String,
+    /// Custom translate prompt replacing the built-in instructions for the
+    /// Agent and OpenAI-compatible providers (free MT and the built-in ignore
+    /// it). Empty = built-in. Max 8000 chars.
+    #[serde(default)]
+    pub custom_prompt: String,
 }
 
 impl Default for TranslateSettings {
@@ -254,6 +259,7 @@ impl Default for TranslateSettings {
             dual_pane_translate: false,
             agent_id: String::new(),
             model_id: String::new(),
+            custom_prompt: String::new(),
         }
     }
 }
@@ -598,6 +604,17 @@ impl AppSettingsStore {
         } else {
             Some(api_key.to_string())
         }
+    }
+
+    /// Custom translate prompt (Settings → 翻译; empty = built-in). Injected by
+    /// `translate_text` for the OpenAI-compatible path; the Agent path builds
+    /// its prompt on the frontend.
+    pub fn translate_custom_prompt(&self) -> String {
+        self.inner
+            .lock()
+            .ok()
+            .map(|guard| guard.translate.custom_prompt.trim().to_string())
+            .unwrap_or_default()
     }
 
     pub fn layout_backend(&self) -> String {
@@ -1065,6 +1082,10 @@ fn normalize(s: &mut AppSettings) {
     if s.translate.source_lang != "auto" {
         s.translate.source_lang = default_translate_source();
     }
+    // Cap hand-edited oversized prompts; this value is echoed to a billed API
+    // on every request. No trim: leading whitespace may be intentional (the
+    // settings UI trims on blur, same as agent_personal_prompt).
+    s.translate.custom_prompt = s.translate.custom_prompt.chars().take(8000).collect();
 
     const LAYOUT_BACKENDS: &[&str] = &["local", "paddle", "mineru"];
     if !LAYOUT_BACKENDS.contains(&s.layout.backend.as_str()) {
@@ -1407,6 +1428,30 @@ mod tests {
         };
         normalize(&mut s);
         assert_eq!(s.auto_update_internal_links, "ask");
+    }
+
+    #[test]
+    fn normalize_caps_translate_custom_prompt() {
+        // Hand-edited oversized prompt is capped; empty and normal values pass.
+        let mut s = AppSettings {
+            translate: TranslateSettings {
+                custom_prompt: "x".repeat(9000),
+                ..Default::default()
+            },
+            ..AppSettings::default()
+        };
+        normalize(&mut s);
+        assert_eq!(s.translate.custom_prompt.chars().count(), 8000);
+
+        let mut s = AppSettings {
+            translate: TranslateSettings {
+                custom_prompt: "keep me".into(),
+                ..Default::default()
+            },
+            ..AppSettings::default()
+        };
+        normalize(&mut s);
+        assert_eq!(s.translate.custom_prompt, "keep me");
     }
 
     #[test]

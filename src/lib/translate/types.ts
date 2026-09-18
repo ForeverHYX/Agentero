@@ -61,6 +61,14 @@ export type TranslateSettings = {
 	 * Empty = follow loadModelPref(agentId) / agent current.
 	 */
 	modelId: string;
+	/**
+	 * Custom translate prompt replacing the built-in instructions for the
+	 * Agent and OpenAI-compatible providers (free MT and the built-in ignore
+	 * it). Empty = built-in. Supports {{targetLang}} / {{sourceLang}}; the
+	 * source text and [[n]] batch rules are always appended by the app.
+	 * Max 8000 chars.
+	 */
+	customPrompt: string;
 };
 
 export type TranslateProviderConfig = {
@@ -96,6 +104,11 @@ export type TranslateRunOptions = {
 	providerId?: TranslateProviderId;
 	/** Current BYOK provider config, resolved from settings. */
 	providerConfig?: TranslateProviderConfig;
+	/**
+	 * Agent path: custom prompt override; defaults to
+	 * settings.translate.customPrompt (set by `runTranslate`).
+	 */
+	customPrompt?: string;
 	/**
 	 * Agent path: inject runner so lib/ does not depend on ACP wiring.
 	 * Streaming is the caller's concern; this returns the final string when used.

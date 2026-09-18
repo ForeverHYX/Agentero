@@ -55,6 +55,26 @@ pub async fn translate_text(
         }
     }
 
+    // Custom prompt: the WebView never sends it; the Host injects the durable
+    // settings value for the only prompt-driven MT provider (the Agent path
+    // builds its prompt on the frontend). Free MT / built-in ignore prompts.
+    if args
+        .provider
+        .trim()
+        .eq_ignore_ascii_case("openaicompatible")
+        && args
+            .custom_prompt
+            .as_deref()
+            .map(str::trim)
+            .unwrap_or("")
+            .is_empty()
+    {
+        let custom = app.state::<AppSettingsStore>().translate_custom_prompt();
+        if !custom.is_empty() {
+            args.custom_prompt = Some(custom);
+        }
+    }
+
     let text_len = args.text.chars().count();
     let op = OpTimer::start_with(
         "translate_text",

@@ -17,8 +17,10 @@ import {
 	parseLayoutTranslateSidecar,
 	persistLayoutTranslateSidecarBestEffort,
 	toLayoutTranslateItems,
+	translateServiceKey,
 } from "@/lib/pdf/layout/layout-translate";
 import type { PdfLayoutRegion } from "@/lib/pdf/layout/types";
+import { DEFAULT_TRANSLATE_SETTINGS } from "@/lib/translate/defaults";
 
 vi.mock("@/lib/vault", () => ({
 	joinVaultPath: (parent: string, name: string) => `${parent}/${name}`,
@@ -498,5 +500,45 @@ describe("persistLayoutTranslateSidecarBestEffort debounce", () => {
 		persistLayoutTranslateSidecarBestEffort("/vault/paper-b", key, [doneItem]);
 		vi.advanceTimersByTime(LAYOUT_TRANSLATE_WRITE_DEBOUNCE_MS + 1);
 		expect(vault.writeVaultFile).toHaveBeenCalledTimes(2);
+	});
+});
+
+describe("translateServiceKey custom prompt fingerprint", () => {
+	const base = {
+		...DEFAULT_TRANSLATE_SETTINGS,
+		provider: "googleapi" as const,
+	};
+
+	it("empty prompt keeps the prompt-less key byte-identical", () => {
+		expect(translateServiceKey({ ...base, customPrompt: "" })).toBe(
+			"googleapi",
+		);
+		expect(translateServiceKey({ ...base, customPrompt: "   " })).toBe(
+			"googleapi",
+		);
+	});
+
+	it("non-empty prompt appends a stable fingerprint", () => {
+		const a = translateServiceKey({ ...base, customPrompt: "Be terse." });
+		const b = translateServiceKey({ ...base, customPrompt: "Be terse." });
+		const c = translateServiceKey({ ...base, customPrompt: "Be verbose." });
+		expect(a).not.toBe("googleapi");
+		expect(a).toBe(b);
+		expect(a).not.toBe(c);
+	});
+
+	it("works for the agent provider too", () => {
+		const agentBase = {
+			...DEFAULT_TRANSLATE_SETTINGS,
+			provider: "agent" as const,
+			agentId: "claude-1",
+			modelId: "",
+		};
+		expect(translateServiceKey({ ...agentBase, customPrompt: "" })).toBe(
+			"agent:claude-1:default",
+		);
+		expect(
+			translateServiceKey({ ...agentBase, customPrompt: "Be terse." }),
+		).not.toBe("agent:claude-1:default");
 	});
 });

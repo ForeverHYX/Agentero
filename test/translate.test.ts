@@ -210,4 +210,47 @@ describe("translate prompts", () => {
 		expect(p).toContain("page 3");
 		expect(p).toContain("attention");
 	});
+
+	it("custom prompt replaces instructions but keeps app-composed parts", () => {
+		const p = buildTranslatePrompt({
+			text: "[[1]] alpha\n\n[[2]] beta",
+			targetLangName: "Chinese",
+			page: 7,
+			surface: "pdf-selection",
+			customPrompt:
+				"Terse literary translator. {{targetLang}} from {{sourceLang}}, no preamble.",
+		});
+		expect(p).toContain(
+			"Terse literary translator. Chinese from the source language, no preamble.",
+		);
+		// Built-in rules are gone.
+		expect(p).not.toContain("Rules:");
+		expect(p).not.toContain("academic translator");
+		// Page line, [[n]] batch rules and the text payload stay app-composed.
+		expect(p).toContain("page 7");
+		expect(p).toContain("[[n]] marker");
+		expect(p).toContain("Do not merge paragraphs.");
+		expect(p.endsWith("Text:\n\n[[1]] alpha\n\n[[2]] beta")).toBe(true);
+	});
+
+	it("empty custom prompt falls back to the built-in template byte-identically", () => {
+		const base = {
+			text: "Hello world",
+			targetLangName: "Chinese",
+			page: 2,
+			surface: "pdf-selection" as const,
+		};
+		expect(buildTranslatePrompt({ ...base, customPrompt: "" })).toBe(
+			buildTranslatePrompt(base),
+		);
+		// The rendered default interpolates every placeholder.
+		const rendered = buildTranslatePrompt(base);
+		expect(rendered).toContain("Translate the text below into Chinese.");
+		expect(rendered).not.toContain("{{targetLang}}");
+		expect(rendered).not.toContain("{{sourceLang}}");
+	});
+
+	it("default translate settings ship an empty custom prompt", () => {
+		expect(DEFAULT_TRANSLATE_SETTINGS.customPrompt).toBe("");
+	});
 });

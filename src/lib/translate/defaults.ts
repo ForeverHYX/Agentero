@@ -10,4 +10,5 @@ export const DEFAULT_TRANSLATE_SETTINGS: TranslateSettings = {
 	dualPaneTranslate: false,
 	agentId: "",
 	modelId: "",
+	customPrompt: "",
 };

@@ -72,6 +72,7 @@ pub async fn free_mt_to_zh(text: &str) -> Option<String> {
                 base_url: None,
                 region: None,
                 model: None,
+                custom_prompt: None,
                 timeout_ms: Some(FREE_MT_ZH_TIMEOUT_MS),
             })
             .await
@@ -130,6 +131,11 @@ pub struct TranslateTextArgs {
     /// OpenAI-compatible model id.
     #[serde(default)]
     pub model: Option<String>,
+    /// Custom translate instruction (settings `translate.customPrompt`); empty →
+    /// built-in academic prompt. Injected by the Host command; replaces the
+    /// system+rules block on the OpenAI-compatible path only.
+    #[serde(default)]
+    pub custom_prompt: Option<String>,
     /// Optional request timeout in milliseconds (clamped 1s–30s). Default 30s.
     /// Settings probe uses a shorter value for snappy parallel checks.
     #[serde(default)]
@@ -247,6 +253,7 @@ pub async fn translate_text(args: TranslateTextArgs) -> Result<TranslateTextResu
                 args.api_key.as_deref(),
                 args.base_url.as_deref(),
                 args.model.as_deref(),
+                args.custom_prompt.as_deref(),
             )
             .await?
         }

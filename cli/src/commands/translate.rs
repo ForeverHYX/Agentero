@@ -52,6 +52,7 @@ pub async fn run_raw(
                 base_url: None,
                 region: None,
                 model: None,
+                custom_prompt: None,
                 timeout_ms: None,
             })
             .await

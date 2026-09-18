@@ -449,6 +449,14 @@
 			"label": "Model",
 			"followAgent": "Follow agent default",
 			"needWarm": "Open this agent in Chat once to list models here."
+		},
+		"customPrompt": {
+			"label": "Translation prompt",
+			"placeholder": "Empty = built-in academic prompt. Insert the default to edit a copy.",
+			"seed": "Insert default",
+			"reset": "Reset",
+			"appliesTo": "Replaces the built-in instructions for the Agent and OpenAI-compatible providers; free MT engines and the built-in provider ignore prompts.",
+			"variablesHint": "The source text and [[n]] batch rules are always appended automatically."
 		}
 	},
 	"layout": {

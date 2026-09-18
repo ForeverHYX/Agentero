@@ -25,11 +25,13 @@ vi.mock("@/lib/core/notify", () => ({
 }));
 
 vi.mock("@/lib/translate", () => ({
-	buildTranslatePrompt: (opts: { text: string }) => `PROMPT:${opts.text}`,
+	buildTranslatePrompt: (opts: { text: string; customPrompt?: string }) =>
+		`PROMPT:${opts.customPrompt ?? ""}:${opts.text}`,
 	displayTranslateError: (message: string) => `displayed:${message}`,
 	prepareTranslateTask: () => ({
 		providerId,
 		targetLangName: "Chinese",
+		customPrompt: "CUSTOM",
 		task: {},
 	}),
 	resolveConfiguredTranslateAgent: () => resolveAgent(),
@@ -162,7 +164,7 @@ describe("runSelectionTranslate", () => {
 
 		expect(runOnce).toHaveBeenCalledTimes(1);
 		expect(runOnce.mock.calls[0]?.[0]).toMatchObject({
-			prompt: "PROMPT:the text",
+			prompt: "PROMPT:CUSTOM:the text",
 			agentId: "agent-1",
 			modelId: "model-1",
 			sessionId: "prov-old",

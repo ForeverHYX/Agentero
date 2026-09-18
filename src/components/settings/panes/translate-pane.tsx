@@ -22,6 +22,7 @@ import {
 	SelectValue,
 } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
+import { Textarea } from "@/components/ui/textarea";
 import {
 	Tooltip,
 	TooltipContent,
@@ -43,6 +44,7 @@ import {
 	COMMERCIAL_MT_DOCS_URLS,
 	COMMERCIAL_MT_PROVIDER_IDS,
 	type CommercialMtProbeMap,
+	DEFAULT_TRANSLATE_PROMPT_TEMPLATE,
 	FREE_MT_PROVIDER_IDS,
 	type FreeMtProbeMap,
 	type FreeMtProbeStatus,
@@ -682,6 +684,78 @@ export function TranslatePane({
 						);
 					})}
 				</div>
+			</div>
+
+			<div className="mb-5">
+				<div className="mb-2 flex items-center justify-between gap-2 px-0.5">
+					<h3 className="font-medium text-sm">
+						{t("translate.customPrompt.label")}
+					</h3>
+					<div className="flex items-center gap-1.5">
+						<Button
+							type="button"
+							variant="outline"
+							size="xs"
+							disabled={tr.customPrompt === DEFAULT_TRANSLATE_PROMPT_TEMPLATE}
+							onClick={() =>
+								patchTranslate({
+									customPrompt: DEFAULT_TRANSLATE_PROMPT_TEMPLATE,
+								})
+							}
+						>
+							{t("translate.customPrompt.seed")}
+						</Button>
+						<Button
+							type="button"
+							variant="outline"
+							size="xs"
+							disabled={!tr.customPrompt}
+							onClick={() => patchTranslate({ customPrompt: "" })}
+						>
+							{t("translate.customPrompt.reset")}
+						</Button>
+					</div>
+				</div>
+				<SettingsGroup>
+					<div className="flex flex-col gap-1.5 px-3.5 py-2.5">
+						<Textarea
+							id="translate-custom-prompt"
+							value={tr.customPrompt}
+							onChange={(e) =>
+								patchTranslate({
+									customPrompt: e.target.value.slice(0, 8000),
+								})
+							}
+							onBlur={() => {
+								const trimmed = tr.customPrompt.trim();
+								if (trimmed !== tr.customPrompt) {
+									patchTranslate({ customPrompt: trimmed });
+								}
+							}}
+							placeholder={t("translate.customPrompt.placeholder")}
+							rows={5}
+							className="min-h-[110px] resize-y font-mono text-xs placeholder:text-muted-foreground/50"
+							spellCheck={true}
+						/>
+						<p className="text-muted-foreground text-xs leading-relaxed">
+							{t("translate.customPrompt.appliesTo")}
+						</p>
+						<p className="text-muted-foreground text-xs leading-relaxed">
+							{/* Variable names are JSX literals on purpose: react-i18next
+							    would treat a literal {{…}} inside a translation as
+							    interpolation and render it empty. */}
+							<code className="rounded bg-muted px-1 py-0.5 font-mono">
+								{"{{targetLang}}"}
+							</code>
+							{" / "}
+							<code className="rounded bg-muted px-1 py-0.5 font-mono">
+								{"{{sourceLang}}"}
+							</code>
+							{" — "}
+							{t("translate.customPrompt.variablesHint")}
+						</p>
+					</div>
+				</SettingsGroup>
 			</div>
 
 			{showAgent && (

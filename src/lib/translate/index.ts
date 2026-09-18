@@ -19,7 +19,10 @@ export {
 	probeCommercialMtProvider,
 	probeFreeMtProviders,
 } from "@/lib/translate/probe";
-export { buildTranslatePrompt } from "@/lib/translate/prompt";
+export {
+	buildTranslatePrompt,
+	DEFAULT_TRANSLATE_PROMPT_TEMPLATE,
+} from "@/lib/translate/prompt";
 export {
 	listAvailableAgents,
 	resolveConfiguredTranslateAgent,

@@ -85,7 +85,7 @@ export async function runSelectionTranslate({
 	sessionRef,
 	activeSessionRef,
 }: RunSelectionTranslateOptions): Promise<void> {
-	const { providerId, targetLangName } = prepareTranslateTask({
+	const { providerId, targetLangName, customPrompt } = prepareTranslateTask({
 		text,
 		context,
 	});
@@ -96,6 +96,7 @@ export async function runSelectionTranslate({
 			targetLangName,
 			page: context.page,
 			surface: context.surface,
+			customPrompt,
 		});
 		try {
 			const resolved = await resolveConfiguredTranslateAgent();

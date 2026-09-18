@@ -50,6 +50,7 @@ export async function runTranslate(
 			(isCommercialTranslateProvider(providerId)
 				? settings.translate.providerConfigs[providerId]
 				: undefined),
+		customPrompt: opts.customPrompt ?? settings.translate.customPrompt,
 	};
 
 	try {
@@ -75,12 +76,15 @@ export function prepareTranslateTask(
 	task: TranslateTask;
 	providerId: TranslateProviderId;
 	targetLangName: string;
+	/** Settings-level custom prompt (empty = built-in instructions). */
+	customPrompt: string;
 } {
 	const settings = loadSettings();
 	const langs = langsFromSettings(settings.translate, i18n.language ?? "en");
 	return {
 		providerId: settings.translate.provider,
 		targetLangName: langs.targetLangName,
+		customPrompt: settings.translate.customPrompt,
 		task: {
 			text: partial.text,
 			sourceLang: partial.sourceLang ?? langs.sourceLang,

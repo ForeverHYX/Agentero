@@ -32,6 +32,7 @@ export const AgentTranslateService: TranslateService = {
 			targetLangName: targetLangDisplayName(task.targetLang),
 			page: task.context?.page,
 			surface: task.context?.surface,
+			customPrompt: opts.customPrompt,
 		});
 		const result = await opts.agent.runOnce(prompt);
 		task.result = result.trim();

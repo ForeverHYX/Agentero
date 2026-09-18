@@ -631,6 +631,10 @@ function normalizeTranslateSettings(
 	if (typeof raw.modelId === "string") {
 		base.modelId = raw.modelId.trim();
 	}
+	if (typeof raw.customPrompt === "string") {
+		// Cap extreme values from hand-edited storage (the UI slices to 8000).
+		base.customPrompt = raw.customPrompt.slice(0, 8000);
+	}
 	return base;
 }
 

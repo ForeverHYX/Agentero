@@ -29,10 +29,22 @@ pub async fn agent_resolve_citation(
             "citation resolution for remote vaults is not supported yet",
         )));
     }
+    // Citations are vault-relative; without a valid local vault there is no
+    // meaningful root, so fail instead of falling back to the process cwd
+    // (which is `/` for a Finder-launched macOS GUI app).
     let vault = vault_path
         .map(PathBuf::from)
         .filter(|p| p.is_dir())
-        .unwrap_or_else(|| std::env::current_dir().unwrap_or_else(|_| PathBuf::from(".")));
+        .ok_or_else(|| {
+            AppError::domain(
+                "citation_vault_unavailable",
+                "a valid local vault is required to resolve citations",
+            )
+        });
+    let vault = match vault {
+        Ok(vault) => vault,
+        Err(e) => return Ok(map_err(e)),
+    };
 
     match resolve_citation(&vault, &source) {
         Ok(target) => Ok(ApiResult::ok(target)),

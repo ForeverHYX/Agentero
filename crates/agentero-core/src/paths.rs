@@ -13,7 +13,7 @@
 //! iOS: `Library/Application Support` / `Library/Caches` — the container root
 //! itself is not writable, so `~/.config` would fail with EPERM).
 
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 /// Resolve XDG config home (`$XDG_CONFIG_HOME` or platform default).
 pub fn xdg_config_home() -> PathBuf {
@@ -109,6 +109,43 @@ pub fn agents_path() -> PathBuf {
 /// Long-lived desktop Bridge identity and paired-device registry.
 pub fn bridge_config_dir() -> PathBuf {
     agentero_config_dir().join("bridge")
+}
+
+/// Private working directory for a spawned ACP agent when no Vault is known
+/// (initialize probe, warm before a Vault opens, history listing).
+///
+/// Never fall back to the process working directory: a macOS GUI app launched
+/// by LaunchServices has `/` as its cwd, so an agent that inspects its process
+/// cwd treats the whole filesystem as its workspace and enumerates `$HOME`.
+/// That trips macOS TCC prompts for Music / Desktop / Downloads / iCloud Drive
+/// / other apps' data (#570).
+///
+/// Created on demand; if the data dir is not writable, try an Agentero-only
+/// subdirectory of the OS temp dir. If both locations fail, return an error
+/// rather than use the process cwd or the whole temp directory.
+pub fn agent_scratch_dir() -> std::io::Result<PathBuf> {
+    agent_scratch_dir_in(&agentero_data_dir(), &std::env::temp_dir())
+}
+
+fn agent_scratch_dir_in(data_dir: &Path, temp_dir: &Path) -> std::io::Result<PathBuf> {
+    let dir = data_dir.join("agent-cwd");
+    match std::fs::create_dir_all(&dir) {
+        Ok(()) => Ok(dir),
+        Err(primary_error) => {
+            let fallback = temp_dir.join("agentero").join("agent-cwd");
+            std::fs::create_dir_all(&fallback).map_err(|fallback_error| {
+                std::io::Error::new(
+                    fallback_error.kind(),
+                    format!(
+                        "cannot create agent scratch directory at {} ({primary_error}) or {} ({fallback_error})",
+                        dir.display(),
+                        fallback.display(),
+                    ),
+                )
+            })?;
+            Ok(fallback)
+        }
+    }
 }
 
 /// Pre-XDG path used by older builds (`dirs::config_dir()/agentero`).
@@ -209,6 +246,55 @@ mod tests {
     fn data_dir_ends_with_agentero() {
         let p = agentero_data_dir();
         assert_eq!(p.file_name().and_then(|s| s.to_str()), Some("agentero"));
+    }
+
+    #[test]
+    fn agent_scratch_dir_prefers_and_reuses_the_data_directory() {
+        let root = tempfile::tempdir().unwrap();
+        let data_dir = root.path().join("data");
+        let temp_dir = root.path().join("temp");
+        let expected = data_dir.join("agent-cwd");
+
+        for _ in 0..2 {
+            let cwd = agent_scratch_dir_in(&data_dir, &temp_dir).unwrap();
+            assert_eq!(cwd, expected);
+            assert!(cwd.is_dir());
+        }
+        assert!(!temp_dir.exists());
+    }
+
+    #[test]
+    fn agent_scratch_fallback_stays_in_a_dedicated_subdirectory() {
+        let root = tempfile::tempdir().unwrap();
+        let blocked_data_dir = root.path().join("data-file");
+        std::fs::write(&blocked_data_dir, b"not a directory").unwrap();
+        let temp_dir = root.path().join("temp");
+        std::fs::create_dir(&temp_dir).unwrap();
+
+        let cwd = agent_scratch_dir_in(&blocked_data_dir, &temp_dir).unwrap();
+        assert_eq!(cwd, temp_dir.join("agentero").join("agent-cwd"));
+        assert!(cwd.is_dir());
+    }
+
+    #[test]
+    fn agent_scratch_dir_errors_when_both_locations_are_unavailable() {
+        let root = tempfile::tempdir().unwrap();
+        let data_dir = root.path().join("data-file");
+        let temp_dir = root.path().join("temp-file");
+        std::fs::write(&data_dir, b"not a directory").unwrap();
+        std::fs::write(&temp_dir, b"not a directory").unwrap();
+
+        let error = agent_scratch_dir_in(&data_dir, &temp_dir).unwrap_err();
+        let message = error.to_string();
+        assert!(message.contains("cannot create agent scratch directory"));
+        assert!(message.contains(&data_dir.join("agent-cwd").display().to_string()));
+        assert!(message.contains(
+            &temp_dir
+                .join("agentero")
+                .join("agent-cwd")
+                .display()
+                .to_string()
+        ));
     }
 
     #[test]

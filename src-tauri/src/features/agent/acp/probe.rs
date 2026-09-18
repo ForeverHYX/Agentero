@@ -1,6 +1,6 @@
 use crate::features::agent::acp::client::{
-    acp_err, acp_terminals, agentero_acp_builder, client_initialize_request, to_acp_agent,
-    ACP_INITIALIZE_TIMEOUT,
+    acp_err, acp_terminals, agent_spawn_cwd, agentero_acp_builder, client_initialize_request,
+    to_acp_agent, ACP_INITIALIZE_TIMEOUT,
 };
 use crate::features::agent::acp::interaction::permission_response;
 use crate::features::agent::doctor::{diagnose_claude_auth, diagnose_codex_auth, CodexAuthStatus};
@@ -18,7 +18,15 @@ pub async fn probe_agent(
     remote: Option<&dyn crate::features::agent::remote_host::RemoteAgentLaunch>,
 ) -> ProbeResult {
     let agent_id = desc.id.clone();
-    let acp = match to_acp_agent(desc, None, remote) {
+    // Unix probes use scratch (or the remote vault) instead of inheriting `/`
+    // from LaunchServices. Windows probes keep their original direct launch:
+    // an added cmd layer would become the only process the SDK can kill.
+    let cwd = if cfg!(windows) {
+        Ok(None)
+    } else {
+        agent_spawn_cwd(remote, None).map(Some)
+    };
+    let acp = match cwd.and_then(|cwd| to_acp_agent(desc, cwd.as_deref(), remote)) {
         Ok(a) => a,
         Err(e) => {
             return ProbeResult {

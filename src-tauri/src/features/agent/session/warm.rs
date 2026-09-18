@@ -8,7 +8,7 @@
 //! starts do not pile up empty threads in agent history.
 
 use crate::features::agent::acp::client::{
-    acp_terminals, client_initialize_request, simplified_agent_cwd, timed_acp_initialize,
+    acp_terminals, agent_spawn_cwd, client_initialize_request, timed_acp_initialize,
     timed_acp_request, to_acp_agent,
 };
 use crate::features::agent::acp::updates::{
@@ -51,14 +51,19 @@ pub async fn warm_agent(
 ) -> WarmResult {
     let agent_id = desc.id.clone();
     let session_id = Uuid::new_v4().to_string();
-    let cwd = simplified_agent_cwd(&if let Some(ref r) = remote {
-        r.agent_cwd()
-    } else {
-        vault_path
-            .map(PathBuf::from)
-            .filter(|p| p.is_dir())
-            .unwrap_or_else(|| std::env::current_dir().unwrap_or_else(|_| PathBuf::from(".")))
-    });
+    let cwd = match agent_spawn_cwd(remote.as_deref(), vault_path.as_deref()) {
+        Ok(cwd) => cwd,
+        Err(e) => {
+            return WarmResult {
+                agent_id,
+                ok: false,
+                models: None,
+                usage_used: None,
+                usage_size: None,
+                error: Some(e.to_string()),
+            };
+        }
+    };
     let key: PoolKey = pool_key(&agent_id, cwd.clone(), remote.as_ref());
 
     // Healthy pooled slot from an earlier warm: reuse its cached models /

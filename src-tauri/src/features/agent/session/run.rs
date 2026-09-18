@@ -2,7 +2,7 @@
 
 use crate::core::error::AppError;
 use crate::features::agent::acp::client::{
-    acp_err, acp_terminals, cancelled_payload, client_initialize_request, simplified_agent_cwd,
+    acp_err, acp_terminals, agent_spawn_cwd, cancelled_payload, client_initialize_request,
     timed_acp_initialize, timed_acp_request, to_acp_agent, wait_for_cancellation,
 };
 use crate::features::agent::acp::interaction::PermissionPolicy;
@@ -145,7 +145,7 @@ fn emit_run_failed(app: &AgentEventEmitter, session_id: &str, error: &impl std::
 
 /// Prompt-assembly phase: resolve skill instructions, template the prompt, and
 /// pick the working directory. Emits `agent:failed` and errors when a selected
-/// local skill cannot be loaded.
+/// local skill cannot be loaded or the spawn cwd cannot be resolved.
 async fn prepare_run_turn(params: &RunOnceParams) -> Result<RunTurnPrep, AppError> {
     let skill_style = skill_mention_style(&params.desc.template);
     let skill_instructions = if params.is_acp_command {
@@ -195,16 +195,13 @@ async fn prepare_run_turn(params: &RunOnceParams) -> Result<RunTurnPrep, AppErro
         )
     };
     let prompt_images = params.images.clone();
-    let cwd = simplified_agent_cwd(&if let Some(ref r) = params.remote {
-        r.agent_cwd()
-    } else {
-        params
-            .vault_path
-            .as_ref()
-            .map(PathBuf::from)
-            .filter(|p| p.is_dir())
-            .unwrap_or_else(|| std::env::current_dir().unwrap_or_else(|_| PathBuf::from(".")))
-    });
+    let cwd = match agent_spawn_cwd(params.remote.as_deref(), params.vault_path.as_deref()) {
+        Ok(cwd) => cwd,
+        Err(error) => {
+            emit_run_failed(&params.app, &params.session_id, &error);
+            return Err(error);
+        }
+    };
     Ok(RunTurnPrep {
         full_prompt,
         prompt_images,

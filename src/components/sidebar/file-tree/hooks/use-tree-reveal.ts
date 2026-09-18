@@ -56,24 +56,57 @@ export function useTreeReveal({
 		useAnimationFrameWithResizeObserver: true,
 	});
 
-	// Remeasure when the flattened set changes (create draft, expand, refresh).
-	// biome-ignore lint/correctness/useExhaustiveDependencies: keys encode flatRows identity
+	// Re-estimate rows only when the height estimate itself changes (ui scale).
+	// The flattened set changes on expand/collapse/refresh, but stable row keys
+	// keep measured heights valid — a full measure() there re-estimates every
+	// row and re-fires first-measure scroll adjustments, which WebKit (no
+	// native scroll anchoring) shows as row jitter on each toggle.
+	// biome-ignore lint/correctness/useExhaustiveDependencies: measure() must re-run when the estimate changes
 	useEffect(() => {
 		rowVirtualizer.measure();
-	}, [flatRowKeys, uiScale, rowVirtualizer]);
+	}, [uiScale, rowVirtualizer]);
 
-	// When the tree viewport shrinks (Paper Info opens) or grows, WebKit may
-	// clamp scrollTop without firing `scroll`. The virtualizer then keeps a
-	// stale offset and getVirtualItems() can return an empty window → blank
-	// sidebar until the user scrolls. Re-sync from the DOM on resize.
+	// WebKit may clamp scrollTop without firing `scroll` when the tree viewport
+	// HEIGHT changes (Paper Info opens/closes); re-sync the virtualizer from
+	// the DOM then, or it keeps a stale offset and getVirtualItems() returns an
+	// empty window → blank sidebar until the user scrolls.
+	// Width-only changes (left-rail collapse/expand animation, manual sidebar
+	// resize) must NOT write scrollTop: reading geometry mid-transition returns
+	// clamped values, and a per-frame scrollToOffset + reconcile fight shows as
+	// jitter. A rail collapse parks the tree at 0px width, where WebKit can
+	// also drop scrollTop outright — remember the live position and restore it
+	// when the rail reopens so the tree does not jump back to the top.
 	useEffect(() => {
 		const el = treeScrollRef.current;
 		if (!el || typeof ResizeObserver === "undefined") return;
+		let lastWidth = el.clientWidth;
+		let lastHeight = el.clientHeight;
+		let savedScrollTop = el.scrollTop;
+		const onScroll = () => {
+			savedScrollTop = el.scrollTop;
+		};
+		el.addEventListener("scroll", onScroll, { passive: true });
 		const ro = new ResizeObserver(() => {
-			rowVirtualizer.scrollToOffset(el.scrollTop);
+			const width = el.clientWidth;
+			const height = el.clientHeight;
+			const reopened = lastWidth <= 0 && width > 0;
+			const heightChanged = height !== lastHeight;
+			lastWidth = width;
+			lastHeight = height;
+			if (width <= 0) return;
+			if (reopened && el.scrollTop < savedScrollTop) {
+				el.scrollTop = savedScrollTop;
+			}
+			if (heightChanged || reopened) {
+				savedScrollTop = el.scrollTop;
+				rowVirtualizer.scrollToOffset(el.scrollTop);
+			}
 		});
 		ro.observe(el);
-		return () => ro.disconnect();
+		return () => {
+			ro.disconnect();
+			el.removeEventListener("scroll", onScroll);
+		};
 	}, [rowVirtualizer]);
 
 	const pendingRevealPathRef = useRef<string | null>(null);
@@ -128,8 +161,12 @@ export function useTreeReveal({
 		// Double rAF: first for expand→flatRows layout, second for virtualizer measure.
 		requestAnimationFrame(() => {
 			requestAnimationFrame(() => {
+				// VS Code `List.reveal` semantics: scroll the minimum needed and
+				// leave rows that are already (partly) visible untouched — never
+				// center. Centering makes every selection near the tree top drag
+				// the whole list back to scrollTop 0.
 				rowVirtualizer.scrollToIndex(idx, {
-					align: "center",
+					align: "auto",
 					behavior: scrollBehavior(),
 				});
 			});

@@ -419,7 +419,7 @@ export const FileTree = memo(
 									selectedPath={treeSelectedPath}
 									selectedPaths={selection.selected}
 									expanded={expansion.expanded}
-									onExpandedChange={expansion.setExpanded}
+									onExpandedChange={expansion.setExpandedFromTree}
 									onContextMenuPath={handleContextMenuPath}
 									onSelectRow={selection.handleSelectRow}
 								>
@@ -439,7 +439,7 @@ export const FileTree = memo(
 								selectedPath={treeSelectedPath}
 								selectedPaths={selection.selected}
 								expanded={expansion.expanded}
-								onExpandedChange={expansion.setExpanded}
+								onExpandedChange={expansion.setExpandedFromTree}
 								onContextMenuPath={handleContextMenuPath}
 								onSelectRow={selection.handleSelectRow}
 								dropTargetPath={dragDrop.dropTarget}

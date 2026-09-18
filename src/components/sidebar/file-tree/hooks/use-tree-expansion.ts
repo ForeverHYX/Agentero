@@ -27,6 +27,13 @@ import type { TreeCreateDraft } from "../types";
 export type TreeExpansion = {
 	expanded: Set<string>;
 	setExpanded: Dispatch<SetStateAction<Set<string>>>;
+	/**
+	 * `onExpandedChange` for AiFileTree (chevron / folder-row clicks). A shrink
+	 * is a user collapse: arm reveal suppression so the flatRows-driven
+	 * auto-reveal does not instantly re-expand the folder (VS Code semantics:
+	 * an intentional collapse always wins over reveal).
+	 */
+	setExpandedFromTree: (next: Set<string>) => void;
 	/** Paths currently being listed (lazy expand). */
 	loadingDirs: ReadonlySet<string>;
 	/** Only expand papers/ (list direct children; do not expand subfolders). */
@@ -234,9 +241,18 @@ export function useTreeExpansion({
 		});
 	}, []);
 
+	const setExpandedFromTree = useCallback(
+		(next: Set<string>) => {
+			if (next.size < expanded.size) suppressAutoRevealRef.current = true;
+			setExpanded(next);
+		},
+		[expanded],
+	);
+
 	return {
 		expanded,
 		setExpanded,
+		setExpandedFromTree,
 		loadingDirs,
 		collapseToDefault,
 		collapsePaths,

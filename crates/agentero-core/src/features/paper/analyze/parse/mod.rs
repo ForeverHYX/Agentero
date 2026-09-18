@@ -102,7 +102,7 @@ fn pdf_parse_in_flight() -> &'static Mutex<HashSet<PathBuf>> {
 
 #[cfg(not(any(target_os = "ios", target_os = "android")))]
 fn pdf_parse_key(pdf_path: &Path) -> PathBuf {
-    fs::canonicalize(pdf_path).unwrap_or_else(|_| pdf_path.to_path_buf())
+    crate::fs::canonicalize_best_effort(pdf_path)
 }
 
 #[cfg(not(any(target_os = "ios", target_os = "android")))]

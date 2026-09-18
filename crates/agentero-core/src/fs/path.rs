@@ -56,14 +56,45 @@ pub struct FsFileMeta {
     pub is_file: bool,
 }
 
+/// Minimal vault-relative cleanup: `\` → `/` and strip leading/trailing `/`.
+/// Interior `//`, `.`/`..` segments and whitespace are kept untouched — use for
+/// strings that must round-trip against on-disk names or persisted state,
+/// where the stronger [`normalize_rel`] would alter legitimate paths.
+pub fn normalize_rel_separators(raw: &str) -> String {
+    raw.replace('\\', "/").trim_matches('/').to_string()
+}
+
 /// Normalize a vault-relative path to UNIX style without leading `/`.
-/// Drops `.` segments and collapses duplicate slashes.
+/// Trims surrounding whitespace, collapses duplicate slashes, and drops `.`
+/// segments (but keeps `..`; see [`path_escapes_root`] / [`sanitize_vault_rel`]
+/// for escape guards, and [`normalize_rel_lexical`] for `..` resolution).
 pub fn normalize_rel(rel: &str) -> String {
     let s = rel.trim().replace('\\', "/");
     let parts: Vec<&str> = s
         .split('/')
         .filter(|p| !p.is_empty() && *p != ".")
         .collect();
+    parts.join("/")
+}
+
+/// Lexically normalized vault-relative path: `\` → `/`, drop empty and `.`
+/// segments, and resolve each `..` against the preceding segment (a `..` with
+/// nothing to pop is kept). Unlike [`normalize_rel`] it does not trim
+/// whitespace — wiki link targets may contain meaningful spaces.
+pub fn normalize_rel_lexical(path: &str) -> String {
+    let normalized = path.replace('\\', "/");
+    let mut parts = Vec::new();
+    for component in normalized.split('/') {
+        match component {
+            "" | "." => {}
+            ".." => {
+                if parts.pop().is_none() {
+                    parts.push("..");
+                }
+            }
+            value => parts.push(value),
+        }
+    }
     parts.join("/")
 }
 
@@ -121,6 +152,13 @@ pub fn resolve_vault(vault_path: &str) -> Result<PathBuf, AppError> {
     Ok(vault)
 }
 
+/// Best-effort canonicalization used to key vault roots (job dedup, capability
+/// caches): returns the canonical absolute path, or the input unchanged when
+/// `canonicalize` fails (missing directory, permissions, exotic filesystems).
+pub fn canonicalize_best_effort(path: &Path) -> PathBuf {
+    std::fs::canonicalize(path).unwrap_or_else(|_| path.to_path_buf())
+}
+
 /// Validate that `root` is an existing directory — shared vault guard for
 /// callers that already hold a resolved vault `&Path`.
 pub fn ensure_vault_dir(root: &Path) -> Result<(), AppError> {
@@ -153,6 +191,25 @@ mod tests {
         assert_eq!(normalize_rel("./notes/x.md"), "notes/x.md");
         assert_eq!(normalize_rel("a/./b"), "a/b");
         assert_eq!(normalize_rel("papers\\x\\NOTES.md"), "papers/x/NOTES.md");
+    }
+
+    #[test]
+    fn normalize_family_semantics_distinct() {
+        // Separators-only: keeps whitespace, interior `//` and `.` segments so
+        // walked/persisted paths round-trip byte-for-byte.
+        assert_eq!(normalize_rel_separators("/a//b/"), "a//b");
+        assert_eq!(normalize_rel_separators(" papers\\x\\ "), " papers/x/ ");
+        // Lexical: no whitespace trim, `..` pops the preceding segment and a
+        // leading `..` with nothing to pop is kept.
+        assert_eq!(normalize_rel_lexical("a/../b"), "b");
+        assert_eq!(normalize_rel_lexical("../a"), "../a");
+        assert_eq!(normalize_rel_lexical(" a/./b "), " a/b ");
+    }
+
+    #[test]
+    fn canonicalize_best_effort_falls_back_to_input() {
+        let missing = Path::new("/agentero-no-such-dir-xyz");
+        assert_eq!(canonicalize_best_effort(missing), missing.to_path_buf());
     }
 
     #[test]

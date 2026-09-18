@@ -12,10 +12,9 @@ use crate::features::wiki::models::{
     WikiCheckResult, WikiDocument, WikiEmbedContentKind, WikiEmbedResponse, WikiLinkEdge,
     WikiResolveResponse, WikiSearchCandidate, WikiSearchCandidateKind,
 };
-use crate::features::wiki::resolve::{
-    normalize_rel, resolve_occurrence, resolve_occurrence_with, DocumentLookup,
-};
+use crate::features::wiki::resolve::{resolve_occurrence, resolve_occurrence_with, DocumentLookup};
 use crate::features::wiki::util::{stem_of, without_markdown_extension};
+use crate::fs::normalize_rel_lexical;
 use std::collections::{BTreeSet, HashMap, HashSet};
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -171,7 +170,7 @@ fn walk_wiki_targets(
             walk_wiki_targets(vault_root, &path, depth + 1, out)?;
         } else if ft.is_file() && is_wiki_target(&path) {
             if let Ok(rel) = path.strip_prefix(vault_root) {
-                out.push(normalize_rel(&rel.to_string_lossy()));
+                out.push(normalize_rel_lexical(&rel.to_string_lossy()));
             }
         }
     }
@@ -181,9 +180,9 @@ fn walk_wiki_targets(
 fn to_vault_rel(vault_root: &Path, path: &str) -> String {
     let p = PathBuf::from(path);
     if let Ok(rel) = p.strip_prefix(vault_root) {
-        return normalize_rel(&rel.to_string_lossy());
+        return normalize_rel_lexical(&rel.to_string_lossy());
     }
-    normalize_rel(path)
+    normalize_rel_lexical(path)
 }
 
 #[derive(Debug, Default)]

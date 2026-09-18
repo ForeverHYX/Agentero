@@ -1,6 +1,8 @@
 pub mod discover;
 
-pub use discover::{path_entries, resolve_command, resolve_command_in_paths};
+pub use discover::{
+    path_entries, probe_command, resolve_command, resolve_command_in_paths,
+};
 
 /// Remove the extended-length prefix from local Windows drive paths before
 /// handing them to cmd.exe or MSYS2 shells. UNC/device paths retain their own

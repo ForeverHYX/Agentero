@@ -9,10 +9,11 @@ use crate::features::wiki::models::{
     InternalLinkSyntax, LinkFragment, LinkResolutionStatus, ResolvedLink, SourceRange,
 };
 use crate::features::wiki::rename::content_hash;
-use crate::features::wiki::resolve::{heading_path_ends_with, normalize_rel};
+use crate::features::wiki::resolve::heading_path_ends_with;
 use crate::features::wiki::util::{
     normalize_key, replacement_target, stem_of, strip_markdown_extension,
 };
+use crate::fs::{normalize_rel_lexical, normalize_rel_separators};
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 use std::fs;
@@ -710,13 +711,13 @@ pub fn apply_wikilink_repairs(
 
     let dirty = dirty_paths
         .iter()
-        .map(|path| path.replace('\\', "/").trim_matches('/').to_string())
+        .map(|path| normalize_rel_separators(path))
         .collect::<HashSet<_>>();
 
     // Group edits by source path.
     let mut by_source: HashMap<String, Vec<&WikilinkRepairChange>> = HashMap::new();
     for change in changes {
-        let path = normalize_rel(&change.source.replace('\\', "/"));
+        let path = normalize_rel_lexical(&change.source.replace('\\', "/"));
         if !safe_relative_path(&path) {
             return Err(DoctorRepairError::new(
                 "invalidPath",

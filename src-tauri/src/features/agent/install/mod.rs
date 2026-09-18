@@ -165,7 +165,7 @@ pub(crate) fn resolve_local_cli<R: Runtime>(app: &AppHandle<R>) -> Option<Resolv
     if is_runnable_cli(&managed) {
         let version = read_cli_version(&managed);
         return Some(ResolvedCli {
-            path: managed.canonicalize().unwrap_or(managed),
+            path: crate::core::fs::canonicalize_best_effort(&managed),
             source: "managed",
             version,
         });
@@ -225,7 +225,7 @@ pub(crate) fn resolve_local_cli<R: Runtime>(app: &AppHandle<R>) -> Option<Resolv
         if is_runnable_cli(&path) {
             let version = read_cli_version(&path);
             return Some(ResolvedCli {
-                path: path.canonicalize().unwrap_or(path),
+                path: crate::core::fs::canonicalize_best_effort(&path),
                 source,
                 version,
             });
@@ -336,7 +336,7 @@ fn brew_available() -> bool {
 }
 
 fn is_on_path(dir: &Path) -> bool {
-    let dir_canon = dir.canonicalize().unwrap_or_else(|_| dir.to_path_buf());
+    let dir_canon = crate::core::fs::canonicalize_best_effort(dir);
     path_env_dirs().iter().any(|p| {
         p.canonicalize()
             .map(|c| c == dir_canon)
@@ -360,10 +360,8 @@ fn shim_points_to(shim: &Path, target: Option<&Path>) -> bool {
             } else {
                 shim.parent().unwrap_or_else(|| Path::new(".")).join(link)
             };
-            let a = resolved.canonicalize().unwrap_or(resolved);
-            let b = target
-                .canonicalize()
-                .unwrap_or_else(|_| target.to_path_buf());
+            let a = crate::core::fs::canonicalize_best_effort(&resolved);
+            let b = crate::core::fs::canonicalize_best_effort(target);
             return a == b;
         }
     }

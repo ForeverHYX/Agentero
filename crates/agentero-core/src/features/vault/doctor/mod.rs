@@ -17,6 +17,7 @@ use crate::features::wiki::frontmatter::{inspect_aliases, patch_aliases, AliasEd
 use crate::features::wiki::index::WikiIndex;
 use crate::features::wiki::models::{WikiCheckCounts, WikiCheckResult};
 use crate::features::wiki::rename::content_hash;
+use crate::fs::normalize_rel_separators;
 use rusqlite::{Connection, OpenFlags};
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
@@ -100,10 +101,6 @@ pub struct DoctorVaultState {
 
 const DOCTOR_STATE_REL: &str = ".agentero/doctor.json";
 
-fn normalize_rel_path(raw: &str) -> String {
-    raw.replace('\\', "/").trim_matches('/').to_string()
-}
-
 fn doctor_state_path(vault: &Path) -> PathBuf {
     vault.join(DOCTOR_STATE_REL)
 }
@@ -128,7 +125,7 @@ pub fn save_doctor_state(vault: &Path, state: &DoctorVaultState) -> Result<(), A
     let mut normalized = state
         .ignored_alias_paths
         .iter()
-        .map(|path| normalize_rel_path(path))
+        .map(|path| normalize_rel_separators(path))
         .filter(|path| !path.is_empty() && safe_relative_path(path))
         .collect::<Vec<_>>();
     normalized.sort();
@@ -154,11 +151,11 @@ pub fn set_ignored_alias_paths(
     let mut set = state
         .ignored_alias_paths
         .into_iter()
-        .map(|path| normalize_rel_path(&path))
+        .map(|path| normalize_rel_separators(&path))
         .filter(|path| !path.is_empty())
         .collect::<HashSet<_>>();
     for raw in paths {
-        let path = normalize_rel_path(raw);
+        let path = normalize_rel_separators(raw);
         if path.is_empty() || !safe_relative_path(&path) {
             return Err(AppError::message(format!("invalid ignore path: {raw}")));
         }
@@ -209,7 +206,7 @@ impl DoctorDirtyPathsState {
     pub fn set(&self, vault_path: &str, paths: &[String]) -> Result<(), String> {
         let normalized = paths
             .iter()
-            .map(|path| path.replace('\\', "/").trim_matches('/').to_string())
+            .map(|path| normalize_rel_separators(path))
             .collect();
         self.inner
             .lock()
@@ -468,7 +465,7 @@ fn alias_section(vault: &Path, papers: &[PaperRecord], index: &WikiIndex) -> Ali
     let ignored = load_doctor_state(vault)
         .ignored_alias_paths
         .into_iter()
-        .map(|path| normalize_rel_path(&path))
+        .map(|path| normalize_rel_separators(&path))
         .collect::<HashSet<_>>();
     let mut report = AliasDoctorSection {
         ok: true,
@@ -796,7 +793,7 @@ pub fn apply_alias_repairs(
         .collect::<HashSet<_>>();
     let dirty = dirty_paths
         .iter()
-        .map(|path| path.replace('\\', "/").trim_matches('/').to_string())
+        .map(|path| normalize_rel_separators(path))
         .collect::<HashSet<_>>();
 
     let mut index = WikiIndex::default();
@@ -809,7 +806,7 @@ pub fn apply_alias_repairs(
     let mut selected_shorts = HashSet::new();
 
     for change in changes {
-        let path = change.path.replace('\\', "/").trim_matches('/').to_string();
+        let path = normalize_rel_separators(&change.path);
         if !safe_relative_path(&path)
             || !allowed.contains(&path)
             || !selected_paths.insert(path.clone())

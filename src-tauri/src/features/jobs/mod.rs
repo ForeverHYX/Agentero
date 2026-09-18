@@ -1,6 +1,7 @@
 pub mod commands;
 
 use crate::core::error::AppError;
+use crate::core::fs::canonicalize_best_effort;
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, VecDeque};
 use std::path::{Path, PathBuf};
@@ -889,21 +890,22 @@ impl JobCenter {
         task_id: Option<String>,
         params: Option<serde_json::Value>,
     ) -> JobSnapshot {
-        // `normalize_vault_path` does a synchronous `fs::canonicalize`; run it on
-        // the blocking pool so a slow filesystem never stalls a tokio worker.
-        // This happens before the center lock is taken, so no lock is held
-        // across the await. On the (practically impossible) blocking join error
-        // fall back to the raw path, mirroring `normalize_vault_path`'s own
-        // `unwrap_or(path)`.
+        // `canonicalize_best_effort` does a synchronous `fs::canonicalize`; run
+        // it on the blocking pool so a slow filesystem never stalls a tokio
+        // worker. This happens before the center lock is taken, so no lock is
+        // held across the await. On the (practically impossible) blocking join
+        // error fall back to the raw path, mirroring `canonicalize_best_effort`'s
+        // own `unwrap_or` fallback.
         let raw_vault = vault.into();
         let vault_for_blocking = raw_vault.clone();
-        let vault_path =
-            match tokio::task::spawn_blocking(move || normalize_vault_path(vault_for_blocking))
-                .await
-            {
-                Ok(normalized) => normalized,
-                Err(_) => raw_vault,
-            };
+        let vault_path = match tokio::task::spawn_blocking(move || {
+            canonicalize_best_effort(&vault_for_blocking)
+        })
+        .await
+        {
+            Ok(normalized) => normalized,
+            Err(_) => raw_vault,
+        };
         let paper_path = path.into();
         let fingerprint = kind.fingerprint(force, params.as_ref());
         let key = JobKey {
@@ -948,7 +950,7 @@ impl JobCenter {
     }
 
     pub async fn promote_paper(&self, vault: &Path, path: &str) -> Vec<JobSnapshot> {
-        let vault = normalize_vault_path(vault.to_path_buf());
+        let vault = canonicalize_best_effort(vault);
         let mut snapshots = Vec::new();
         let mut inner = self.inner.lock().await;
         let ids: Vec<JobId> = inner
@@ -1016,7 +1018,7 @@ impl JobCenter {
     /// Returns the snapshots of the cancelled jobs so callers can emit
     /// `job:changed` and drain freed slots.
     pub async fn cancel_for_paper(&self, vault: &Path, rel: &str) -> Vec<JobSnapshot> {
-        let vault = normalize_vault_path(vault.to_path_buf());
+        let vault = canonicalize_best_effort(vault);
         let prefix = format!("{rel}/");
         let ids: Vec<JobId> = {
             let inner = self.inner.lock().await;
@@ -1049,7 +1051,7 @@ impl JobCenter {
     /// Returns the snapshots of the cancelled jobs so callers can emit
     /// `job:changed` and drain freed slots.
     pub async fn cancel_for_vault(&self, vault: &Path) -> Vec<JobSnapshot> {
-        let vault = normalize_vault_path(vault.to_path_buf());
+        let vault = canonicalize_best_effort(vault);
         let ids: Vec<JobId> = {
             let inner = self.inner.lock().await;
             inner
@@ -1076,7 +1078,7 @@ impl JobCenter {
     /// Returns true if there is an active (Queued or Running) job of `kind`
     /// targeting `path` in `vault`.
     pub async fn has_active_job_of_kind(&self, vault: &Path, path: &str, kind: JobKind) -> bool {
-        let vault = normalize_vault_path(vault.to_path_buf());
+        let vault = canonicalize_best_effort(vault);
         let inner = self.inner.lock().await;
         inner.jobs.values().any(|j| {
             j.vault_path == vault
@@ -1096,7 +1098,7 @@ impl JobCenter {
     }
 
     pub async fn list(&self, vault: Option<&Path>, path: Option<&str>) -> Vec<JobSnapshot> {
-        let vault = vault.map(|vault| normalize_vault_path(vault.to_path_buf()));
+        let vault = vault.map(canonicalize_best_effort);
         let inner = self.inner.lock().await;
         inner
             .jobs
@@ -1518,7 +1520,7 @@ impl JobCenter {
             id: id.clone(),
             kind,
             lane: JobLane::Normal,
-            vault_path: normalize_vault_path(vault),
+            vault_path: canonicalize_best_effort(&vault),
             paper_path: Some(path.to_string()),
             fingerprint: format!("test:{}", id.0),
             depends_on,
@@ -1744,10 +1746,6 @@ impl Drop for TaskCancelRegistration {
 
 fn release_active_key(inner: &mut JobCenterInner, job_id: &JobId) {
     inner.active_keys.retain(|_, id| id != job_id);
-}
-
-fn normalize_vault_path(path: PathBuf) -> PathBuf {
-    std::fs::canonicalize(&path).unwrap_or(path)
 }
 
 #[cfg(test)]

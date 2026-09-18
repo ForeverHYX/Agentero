@@ -61,7 +61,7 @@ impl CapsCache {
     /// on miss. If the paper path cannot be normalized, the value is computed
     /// but not cached.
     pub fn caps_for(&self, vault: &Path, paper_path: &str) -> PaperCaps {
-        let vault = normalize_vault_path(vault);
+        let vault = crate::fs::canonicalize_best_effort(vault);
         let Ok(paper) = crate::fs::sanitize_vault_rel(paper_path) else {
             return probe_paper_caps(&vault.join(paper_path));
         };
@@ -83,7 +83,7 @@ impl CapsCache {
 
     /// Drop the cached entry for a single paper so the next `caps_for` re-probes.
     pub fn invalidate(&self, vault: &Path, paper_path: &str) {
-        let vault = normalize_vault_path(vault);
+        let vault = crate::fs::canonicalize_best_effort(vault);
         let Ok(paper) = crate::fs::sanitize_vault_rel(paper_path) else {
             return;
         };
@@ -103,10 +103,6 @@ impl Default for CapsCache {
     fn default() -> Self {
         Self::new()
     }
-}
-
-fn normalize_vault_path(path: &Path) -> PathBuf {
-    std::fs::canonicalize(path).unwrap_or_else(|_| path.to_path_buf())
 }
 
 pub fn probe_paper_caps(paper_dir: &Path) -> PaperCaps {
@@ -331,7 +327,7 @@ mod tests {
     #[test]
     fn caps_cache_uses_cached_pdf_path() {
         let root = temp_paper_dir("cache-pdf");
-        let root = std::fs::canonicalize(&root).unwrap_or(root);
+        let root = crate::fs::canonicalize_best_effort(&root);
         let paper = root.join("papers/test");
         fs::create_dir_all(&paper).expect("create paper dir");
         let pdf = paper.join("paper.pdf");

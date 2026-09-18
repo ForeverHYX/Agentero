@@ -22,6 +22,7 @@ export {
 export { buildTranslatePrompt } from "@/lib/translate/prompt";
 export {
 	listAvailableAgents,
+	resolveConfiguredTranslateAgent,
 	resolveTranslateAgent,
 } from "@/lib/translate/resolve-agent";
 export { prepareTranslateTask, runTranslate } from "@/lib/translate/run";

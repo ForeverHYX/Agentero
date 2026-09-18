@@ -5,8 +5,10 @@
 import {
 	type AgentDescriptor,
 	type AgentListResponse,
+	listAgents,
 	loadModelPref,
 } from "@/lib/agent";
+import { loadSettings } from "@/lib/settings";
 import type { TranslateSettings } from "@/lib/translate/types";
 
 export type ResolvedTranslateAgent = {
@@ -57,4 +59,13 @@ export function listAvailableAgents(
 ): AgentDescriptor[] {
 	if (!registry?.agents?.length) return [];
 	return registry.agents.filter((a) => a.available);
+}
+
+/**
+ * Resolve the translate-settings agent seat against the live registry (a
+ * failed registry fetch degrades to settings-only resolution).
+ */
+export async function resolveConfiguredTranslateAgent(): Promise<ResolvedTranslateAgent> {
+	const registry = await listAgents().catch(() => null);
+	return resolveTranslateAgent(loadSettings().translate, registry);
 }

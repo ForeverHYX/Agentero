@@ -5,8 +5,10 @@
  * bridge (`features/web/proxy.rs`) reports selections / shortcuts / external
  * links over postMessage, and this hook turns them into the same floating
  * chrome the PDF and plaza surfaces have: auto-copy + toolbar, ephemeral
- * streaming translate card, ⌘K quick chat, ⌘L add-to-chat. Nothing persists —
- * web papers have no marks/ sidecar (known limitation, docs/frontend/web-view).
+ * streaming translate card (run by the shared engine
+ * `lib/pdf/translate/run-selection.ts`), ⌘K quick chat, ⌘L add-to-chat.
+ * Nothing persists — web papers have no marks/ sidecar (known limitation,
+ * docs/frontend/web-view).
  */
 
 import type { UnlistenFn } from "@tauri-apps/api/event";
@@ -28,40 +30,22 @@ import {
 	bridgeSelectionScreen,
 	parseWebBridgeMessage,
 } from "@/components/viewer/web-view/bridge-message";
-import {
-	attachAgentRun,
-	cancelAgentRun,
-	disposeAgentRun,
-	listAgents,
-	runOnce,
-} from "@/lib/agent";
+import { cancelAgentRun, disposeAgentRun } from "@/lib/agent";
 import { registerSelectionQuickChat } from "@/lib/agent/selection-quick-chat";
 import {
 	pinActiveSelection,
 	publishSelection,
 } from "@/lib/agent/selection-store";
 import { copyTextToClipboard } from "@/lib/core/clipboard";
-import { errorText } from "@/lib/core/error";
-import { notifyError } from "@/lib/core/notify";
 import { openExternalUrl } from "@/lib/core/open-external";
-import { createTranslateRecord } from "@/lib/pdf/translate";
 import {
-	evictAgentTranslateSessionId,
-	getAgentTranslateSessionId,
-	setAgentTranslateSessionId,
-} from "@/lib/pdf/translate/agent-session-cache";
+	createTranslateRecord,
+	runSelectionTranslate,
+} from "@/lib/pdf/translate";
 import type { PdfTranslateRecord } from "@/lib/pdf/translate/types";
 import { buildPlazaAskPrompt } from "@/lib/plaza/ask-prompt";
-import { loadSettings } from "@/lib/settings";
 import { openSettingsWindow } from "@/lib/shell/settings-window";
 import { openRightTab } from "@/lib/shell/ui-window-actions";
-import {
-	buildTranslatePrompt,
-	displayTranslateError,
-	prepareTranslateTask,
-	resolveTranslateAgent,
-	runTranslate,
-} from "@/lib/translate";
 import { getVaultPath } from "@/lib/vault/store";
 import { webViewProxyOrigins } from "@/lib/web-view/proxy-url";
 
@@ -235,141 +219,64 @@ export function useWebViewSelection({
 		translateStreamingRef.current = true;
 		setTranslateError(null);
 
-		const { providerId, targetLangName } = prepareTranslateTask({
+		void runSelectionTranslate({
 			text: quote,
 			context: { surface: "web-selection" },
-		});
-
-		if (providerId === "agent") {
-			const prompt = buildTranslatePrompt({
-				text: quote,
-				targetLangName,
-				surface: "web-selection",
-			});
-			void (async () => {
-				try {
-					const registry = await listAgents().catch(() => null);
-					const resolved = resolveTranslateAgent(
-						loadSettings().translate,
-						registry,
-					);
-					if (!resolved.agentId) {
-						const msg = t("selection.translateNoAgent");
-						notifyError(msg);
-						setTranslateRec((prev) =>
-							prev && prev.id === rec.id
-								? { ...prev, error: msg, updatedAt: new Date().toISOString() }
-								: prev,
-						);
-						return;
-					}
-					const agentId = resolved.agentId;
-					const modelId = resolved.modelId;
-					const accepted = await runOnce({
-						prompt,
-						agentId,
-						modelId,
-						sessionId:
-							getAgentTranslateSessionId(srcUrl, agentId, modelId) ?? undefined,
-						vaultPath: getVaultPath() ?? undefined,
-						workflow: "translate",
-						permissionMode: "auto",
-						hideFromChatHistory: true,
-					});
-					await attachAgentRun({
-						accepted,
-						disposedRef: translateDisposedRef,
-						unsubsRef: translateUnsubsRef,
-						sessionRef: translateSessionRef,
-						activeSessionRef,
-						onStream: (ev) => {
-							const latest = translateRecRef.current;
-							if (latest?.id !== rec.id) return;
-							setTranslateRec({
-								...latest,
-								result: (latest.result ?? "") + ev.chunk,
-								updatedAt: new Date().toISOString(),
-								error: undefined,
-							});
-						},
-						onCompleted: (ev) => {
-							const latest = translateRecRef.current;
-							if (latest?.id !== rec.id) return;
-							setTranslateRec({
-								...latest,
-								result: (ev.content || latest.result || "").trim(),
-								updatedAt: new Date().toISOString(),
-								error: undefined,
-							});
-							setTranslateError(null);
-							if (ev.providerSessionId && ev.stopReason !== "cancelled") {
-								setAgentTranslateSessionId(
-									srcUrl,
-									agentId,
-									modelId,
-									ev.providerSessionId,
-								);
-							}
-						},
-						onFailed: (ev) => {
-							evictAgentTranslateSessionId(srcUrl, agentId, modelId);
-							const msg = ev.error || t("pdfAsk.agentFailed");
-							notifyError(msg);
-							setTranslateRec((prev) =>
-								prev && prev.id === rec.id
-									? { ...prev, error: msg, updatedAt: new Date().toISOString() }
-									: prev,
-							);
-						},
-						onSettled: () => {
-							translateStreamingRef.current = false;
-							setTranslateStreaming(false);
-						},
-					});
-				} catch (e) {
-					const message = errorText(e);
-					notifyError(message);
-					setTranslateRec((prev) =>
-						prev && prev.id === rec.id
-							? { ...prev, error: message, updatedAt: new Date().toISOString() }
-							: prev,
-					);
-					translateStreamingRef.current = false;
-					setTranslateStreaming(false);
-				}
-			})();
-			return;
-		}
-
-		void (async () => {
-			try {
-				const result = await runTranslate(
-					{ text: quote, context: { surface: "web-selection" } },
-					{ providerId },
-				);
+			paperKey: srcUrl,
+			vaultPath: getVaultPath(),
+			noAgentText: () => t("selection.translateNoAgent"),
+			agentFailedText: () => t("pdfAsk.agentFailed"),
+			disposedRef: translateDisposedRef,
+			unsubsRef: translateUnsubsRef,
+			sessionRef: translateSessionRef,
+			activeSessionRef,
+			appendChunk: (chunk) => {
 				const latest = translateRecRef.current;
 				if (latest?.id !== rec.id) return;
 				setTranslateRec({
 					...latest,
-					result: result.trim(),
+					result: (latest.result ?? "") + chunk,
+					updatedAt: new Date().toISOString(),
+					error: undefined,
+				});
+			},
+			commitAgentResult: (ev) => {
+				const latest = translateRecRef.current;
+				if (latest?.id !== rec.id) return false;
+				setTranslateRec({
+					...latest,
+					result: (ev.content || latest.result || "").trim(),
+					updatedAt: new Date().toISOString(),
+					error: undefined,
+				});
+				setTranslateError(null);
+				return true;
+			},
+			commitProviderResult: (result) => {
+				const latest = translateRecRef.current;
+				if (latest?.id !== rec.id) return;
+				setTranslateRec({
+					...latest,
+					result,
 					updatedAt: new Date().toISOString(),
 					error: undefined,
 				});
 				translateStreamingRef.current = false;
 				setTranslateStreaming(false);
 				setTranslateError(null);
-			} catch (e) {
-				const message = displayTranslateError(errorText(e));
-				notifyError(message);
+			},
+			markFailed: (message) => {
 				setTranslateRec((prev) =>
 					prev && prev.id === rec.id
 						? { ...prev, error: message, updatedAt: new Date().toISOString() }
 						: prev,
 				);
+			},
+			stopStreaming: () => {
 				translateStreamingRef.current = false;
 				setTranslateStreaming(false);
-			}
-		})();
+			},
+		});
 	}, [menu, srcUrl, t, stopTranslateSession, clearCopiedLabel]);
 
 	const hideTranslate = useCallback(() => {

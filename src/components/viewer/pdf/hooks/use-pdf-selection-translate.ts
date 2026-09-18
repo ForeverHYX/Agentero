@@ -5,11 +5,12 @@
  * whole run lifecycle (`translateStreaming`, its cancel token, its error chrome)
  * plus the record write to `marks/<id>.json`.
  *
- * Its own hook because the run has two providers behind one UI contract: an ACP
- * Agent (streamed through the three agent listeners, cancellable) and a plain
- * translate provider (single await). Both funnel into `upsertTranslate` /
- * `persistTranslate` / `markTranslateFailure`, and nothing outside translate
- * touches them.
+ * Its own hook for the record container and card chrome around one run: the
+ * two providers behind the UI contract (an ACP Agent streamed through the
+ * three agent listeners, cancellable; a plain translate provider, single
+ * await) execute in the shared engine {@link runSelectionTranslate}, which
+ * funnels back through `upsertTranslate` / `persistTranslate` /
+ * `markTranslateFailure`, and nothing outside translate touches them.
  *
  * Boundaries:
  * - the persisted array lives in {@link usePdfMarksIo}: setters and the mirror
@@ -34,36 +35,16 @@ import {
 } from "react";
 import { useTranslation } from "react-i18next";
 import type { PdfViewerProps } from "@/components/viewer/pdf/types";
-import {
-	attachAgentRun,
-	cancelAgentRun,
-	disposeAgentRun,
-	listAgents,
-	runOnce,
-} from "@/lib/agent";
-import { errorText } from "@/lib/core/error";
-import { notifyError } from "@/lib/core/notify";
+import { cancelAgentRun, disposeAgentRun } from "@/lib/agent";
 import type { PdfAskAnchor } from "@/lib/pdf/ask/types";
 import type { ActiveSelectionCard } from "@/lib/pdf/selection";
 import {
 	createTranslateRecord,
 	deletePdfTranslate,
+	runSelectionTranslate,
 	writePdfTranslate,
 } from "@/lib/pdf/translate";
-import {
-	evictAgentTranslateSessionId,
-	getAgentTranslateSessionId,
-	setAgentTranslateSessionId,
-} from "@/lib/pdf/translate/agent-session-cache";
 import type { PdfTranslateRecord } from "@/lib/pdf/translate/types";
-import { loadSettings } from "@/lib/settings";
-import {
-	buildTranslatePrompt,
-	displayTranslateError,
-	prepareTranslateTask,
-	resolveTranslateAgent,
-	runTranslate,
-} from "@/lib/translate";
 
 export type UsePdfSelectionTranslateOptions = {
 	/** Sidecar root for `marks/<id>.json` (null for loose PDFs — nothing persists). */
@@ -242,116 +223,47 @@ export function usePdfSelectionTranslate({
 			setTranslateStreaming(true);
 			setTranslateError(null);
 
-			const { providerId, targetLangName } = prepareTranslateTask({
+			void runSelectionTranslate({
 				text: quote,
 				context: { page: anchor.page, surface: "pdf-selection" },
-			});
-
-			if (providerId === "agent") {
-				const prompt = buildTranslatePrompt({
-					text: quote,
-					targetLangName,
-					page: anchor.page,
-					surface: "pdf-selection",
-				});
-				void (async () => {
-					try {
-						const registry = await listAgents().catch(() => null);
-						const resolved = resolveTranslateAgent(
-							loadSettings().translate,
-							registry,
-						);
-						if (!resolved.agentId) {
-							const msg = t("selection.translateNoAgent");
-							notifyError(msg);
-							markTranslateFailure(rec.id, msg);
-							return;
-						}
-						const agentId = resolved.agentId;
-						const modelId = resolved.modelId;
-						const accepted = await runOnce({
-							prompt,
-							agentId,
-							modelId,
-							sessionId:
-								getAgentTranslateSessionId(paperKey, agentId, modelId) ??
-								undefined,
-							vaultPath: vaultPath ?? undefined,
-							workflow: "translate",
-							permissionMode: "auto",
-							hideFromChatHistory: true,
-						});
-						await attachAgentRun({
-							accepted,
-							disposedRef: translateDisposedRef,
-							unsubsRef: translateUnsubsRef,
-							sessionRef: translateSessionRef,
-							activeSessionRef,
-							onStream: (ev) => {
-								const latest =
-									translatesRef.current.find((r) => r.id === rec.id) ?? rec;
-								upsertTranslate({
-									...latest,
-									result: (latest.result ?? "") + ev.chunk,
-									updatedAt: new Date().toISOString(),
-									error: undefined,
-								});
-							},
-							onCompleted: (ev) => {
-								const latest =
-									translatesRef.current.find((r) => r.id === rec.id) ?? rec;
-								const next = {
-									...latest,
-									result: (ev.content || latest.result || "").trim(),
-									updatedAt: new Date().toISOString(),
-									error: undefined,
-								};
-								upsertTranslate(next);
-								void persistTranslate(next);
-								setTranslateError(null);
-								if (ev.providerSessionId && ev.stopReason !== "cancelled") {
-									setAgentTranslateSessionId(
-										paperKey,
-										agentId,
-										modelId,
-										ev.providerSessionId,
-									);
-								}
-							},
-							onFailed: (ev) => {
-								evictAgentTranslateSessionId(paperKey, agentId, modelId);
-								const msg = ev.error || t("pdfAsk.agentFailed");
-								notifyError(msg);
-								markTranslateFailure(rec.id, msg);
-							},
-							onSettled: () => {
-								translateStreamingRef.current = false;
-								setTranslateStreaming(false);
-							},
-						});
-					} catch (e) {
-						const message = errorText(e);
-						notifyError(message);
-						markTranslateFailure(rec.id, message);
-					}
-				})();
-				return;
-			}
-
-			void (async () => {
-				try {
-					const result = await runTranslate(
-						{
-							text: quote,
-							context: { page: anchor.page, surface: "pdf-selection" },
-						},
-						{ providerId },
-					);
+				paperKey,
+				vaultPath,
+				noAgentText: () => t("selection.translateNoAgent"),
+				agentFailedText: () => t("pdfAsk.agentFailed"),
+				disposedRef: translateDisposedRef,
+				unsubsRef: translateUnsubsRef,
+				sessionRef: translateSessionRef,
+				activeSessionRef,
+				appendChunk: (chunk) => {
+					const latest =
+						translatesRef.current.find((r) => r.id === rec.id) ?? rec;
+					upsertTranslate({
+						...latest,
+						result: (latest.result ?? "") + chunk,
+						updatedAt: new Date().toISOString(),
+						error: undefined,
+					});
+				},
+				commitAgentResult: (ev) => {
 					const latest =
 						translatesRef.current.find((r) => r.id === rec.id) ?? rec;
 					const next = {
 						...latest,
-						result: result.trim(),
+						result: (ev.content || latest.result || "").trim(),
+						updatedAt: new Date().toISOString(),
+						error: undefined,
+					};
+					upsertTranslate(next);
+					void persistTranslate(next);
+					setTranslateError(null);
+					return true;
+				},
+				commitProviderResult: (result) => {
+					const latest =
+						translatesRef.current.find((r) => r.id === rec.id) ?? rec;
+					const next = {
+						...latest,
+						result,
 						updatedAt: new Date().toISOString(),
 						error: undefined,
 					};
@@ -360,12 +272,13 @@ export function usePdfSelectionTranslate({
 					translateStreamingRef.current = false;
 					setTranslateStreaming(false);
 					setTranslateError(null);
-				} catch (e) {
-					const message = displayTranslateError(errorText(e));
-					notifyError(message);
-					markTranslateFailure(rec.id, message);
-				}
-			})();
+				},
+				markFailed: (message) => markTranslateFailure(rec.id, message),
+				stopStreaming: () => {
+					translateStreamingRef.current = false;
+					setTranslateStreaming(false);
+				},
+			});
 		},
 		[
 			t,

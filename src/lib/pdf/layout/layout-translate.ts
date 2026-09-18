@@ -4,12 +4,7 @@
  */
 
 import i18n from "@/i18n";
-import {
-	listAgents,
-	listenAgentCompleted,
-	listenAgentFailed,
-	runOnce,
-} from "@/lib/agent";
+import { listenAgentCompleted, listenAgentFailed, runOnce } from "@/lib/agent";
 import { errorText } from "@/lib/core/error";
 import { logger } from "@/lib/core/logger";
 import { LAYOUT_SIDEBAR_MIN_SCORE } from "@/lib/pdf/layout/constants";
@@ -43,7 +38,7 @@ import {
 	maskInlineTokens,
 	restoreInlineTokens,
 } from "@/lib/translate/mask";
-import { resolveTranslateAgent } from "@/lib/translate/resolve-agent";
+import { resolveConfiguredTranslateAgent } from "@/lib/translate/resolve-agent";
 import type {
 	CommercialTranslateProviderId,
 	TranslateProviderId,
@@ -566,8 +561,7 @@ async function resolveLayoutTranslateAgentOpts(options: {
 }): Promise<TranslateRunOptions | undefined> {
 	const settings = loadSettings();
 	if (settings.translate.provider !== "agent") return undefined;
-	const registry = await listAgents().catch(() => null);
-	const resolved = resolveTranslateAgent(settings.translate, registry);
+	const resolved = await resolveConfiguredTranslateAgent();
 	if (!resolved.agentId) {
 		throw new Error("No Agent configured for translation");
 	}

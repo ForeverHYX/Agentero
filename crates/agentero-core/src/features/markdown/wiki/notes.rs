@@ -5,11 +5,7 @@
 use std::fs;
 use std::path::Path;
 
-/// Append the new title to NOTES.md frontmatter aliases (best-effort; keeps
-/// old aliases so existing `[[...]]` links keep resolving).
-pub fn append_title_alias_best_effort(vault_root: &Path, rel_path: &str, title: &str) {
-    sync_notes_title_and_alias(vault_root, rel_path, "", title);
-}
+use crate::features::paper::import::strip_pdf_ext;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct NotesPatchReport {
@@ -110,133 +106,13 @@ pub(crate) fn patch_notes_title_and_alias_with_report(
         );
     }
 
-    let (frontmatter_end, existing) = fm::parse_frontmatter_aliases(body);
-    let mut updated = body.to_string();
-    let mut alias_added = None;
-
     let trimmed_old = old_title.trim();
-    let mut merged = existing.clone();
-    if !trimmed_old.is_empty()
-        && !merged.iter().any(|a| a == trimmed_old)
-        && trimmed_old != new_title
-    {
-        merged.push(trimmed_old.to_string());
-    }
-    if !merged.iter().any(|a| a == new_title) {
-        merged.push(new_title.to_string());
-        alias_added = Some(new_title.to_string());
-    }
-
-    if merged != existing {
-        let next = if frontmatter_end == 0 {
-            fm::prepend_new_aliases(&updated, &merged)
-        } else if merged.len() >= 2 {
-            fm::patch_aliases(&updated, &merged)
-        } else {
-            Err("cannot patch aliases".into())
-        };
-        if let Ok(next) = next {
-            updated = next;
-        }
-    }
+    let (updated, alias_added) = merge_aliases(body, trimmed_old, new_title);
 
     let (fm_end, _) = fm::parse_frontmatter_aliases(&updated);
     let (frontmatter_part, content_part) = updated.split_at(fm_end);
 
-    let has_user_content = has_user_notes(content_part, trimmed_old);
-    let mut h1_action = H1Action::Unchanged;
-
-    let lines: Vec<&str> = content_part.lines().collect();
-    let mut h1_line_idx = None;
-    for (idx, line) in lines.iter().enumerate() {
-        if line.starts_with("# ") {
-            h1_line_idx = Some(idx);
-            break;
-        }
-    }
-
-    let mut new_lines = Vec::with_capacity(lines.len() + 1);
-
-    if let Some(idx) = h1_line_idx {
-        let existing_h1 = lines[idx][2..].trim();
-        let (should_replace, reason) = if !trimmed_old.is_empty() && existing_h1 == trimmed_old {
-            (true, "exact match with old title")
-        } else if !trimmed_old.is_empty() && matches_old_title(existing_h1, trimmed_old) {
-            (true, "stem / filename / URL match with old title")
-        } else if is_generic_placeholder(existing_h1) {
-            (true, "generic placeholder heading")
-        } else if !has_user_content {
-            (true, "untouched placeholder note")
-        } else {
-            (false, "user custom heading preserved")
-        };
-
-        if should_replace {
-            if existing_h1 != new_title {
-                h1_action = H1Action::Replaced {
-                    old_h1: existing_h1.to_string(),
-                    new_h1: new_title.to_string(),
-                    reason,
-                };
-                for (i, line) in lines.iter().enumerate() {
-                    if i == idx {
-                        new_lines.push(format!("# {new_title}"));
-                    } else {
-                        new_lines.push(line.to_string());
-                    }
-                }
-            } else {
-                h1_action = H1Action::Unchanged;
-                for line in &lines {
-                    new_lines.push(line.to_string());
-                }
-            }
-        } else {
-            h1_action = H1Action::Preserved {
-                h1: existing_h1.to_string(),
-                reason,
-            };
-            for line in &lines {
-                new_lines.push(line.to_string());
-            }
-        }
-    } else if !has_user_content {
-        let mut replaced_raw = false;
-        for line in &lines {
-            let trimmed = line.trim();
-            if !replaced_raw
-                && !trimmed.is_empty()
-                && (matches_old_title(trimmed, trimmed_old)
-                    || is_generic_placeholder(trimmed)
-                    || strip_pdf_ext(trimmed) == strip_pdf_ext(trimmed_old))
-            {
-                new_lines.push(format!("# {new_title}"));
-                replaced_raw = true;
-                h1_action = H1Action::Replaced {
-                    old_h1: trimmed.to_string(),
-                    new_h1: new_title.to_string(),
-                    reason: "raw placeholder line replaced",
-                };
-            } else {
-                new_lines.push(line.to_string());
-            }
-        }
-        if !replaced_raw {
-            new_lines.insert(0, format!("# {new_title}"));
-            h1_action = H1Action::Inserted {
-                new_h1: new_title.to_string(),
-            };
-        }
-    } else {
-        for line in &lines {
-            new_lines.push(line.to_string());
-        }
-    }
-
-    let mut new_content = new_lines.join("\n");
-    if content_part.ends_with('\n') || (content_part.is_empty() && !new_content.is_empty()) {
-        new_content.push('\n');
-    }
+    let (new_content, h1_action) = patch_h1(content_part, trimmed_old, new_title);
 
     (
         format!("{frontmatter_part}{new_content}"),
@@ -247,15 +123,134 @@ pub(crate) fn patch_notes_title_and_alias_with_report(
     )
 }
 
-fn strip_pdf_ext(s: &str) -> &str {
-    let trimmed = s.trim();
-    if let Some(stripped) = trimmed.strip_suffix(".pdf") {
-        stripped.trim()
-    } else if let Some(stripped) = trimmed.strip_suffix(".PDF") {
-        stripped.trim()
-    } else {
-        trimmed
+/// Merge `old_title` (when non-empty and distinct) and `new_title` into the
+/// frontmatter aliases, keeping existing entries so old `[[...]]` links keep
+/// resolving. Returns the patched body plus which alias was added, if any.
+fn merge_aliases(body: &str, old_title: &str, new_title: &str) -> (String, Option<String>) {
+    use crate::features::wiki::frontmatter as fm;
+    let (frontmatter_end, existing) = fm::parse_frontmatter_aliases(body);
+
+    let mut merged = existing.clone();
+    if !old_title.is_empty() && !merged.iter().any(|a| a == old_title) && old_title != new_title {
+        merged.push(old_title.to_string());
     }
+    let alias_added = if merged.iter().any(|a| a == new_title) {
+        None
+    } else {
+        merged.push(new_title.to_string());
+        Some(new_title.to_string())
+    };
+
+    if merged == existing {
+        return (body.to_string(), alias_added);
+    }
+    let next = if frontmatter_end == 0 {
+        fm::prepend_new_aliases(body, &merged)
+    } else if merged.len() >= 2 {
+        fm::patch_aliases(body, &merged)
+    } else {
+        Err("cannot patch aliases".into())
+    };
+    match next {
+        Ok(next) => (next, alias_added),
+        Err(_) => (body.to_string(), alias_added),
+    }
+}
+
+/// Patch the note body's H1 to `new_title` when it still carries a placeholder
+/// (the old title, a filename/URL stem of it, or a generic placeholder). User
+/// headings are always preserved — an H1 that matches nothing is treated as
+/// intentional even when the note has no other user content, since replacing
+/// it is lossy while keeping it is not. Returns the patched body plus the
+/// action taken.
+fn patch_h1(content_part: &str, old_title: &str, new_title: &str) -> (String, H1Action) {
+    let lines: Vec<&str> = content_part.lines().collect();
+    let h1_line_idx = lines.iter().position(|line| line.starts_with("# "));
+
+    let mut new_lines = Vec::with_capacity(lines.len() + 1);
+
+    let h1_action = match h1_line_idx {
+        Some(idx) => {
+            let existing_h1 = lines[idx][2..].trim();
+            let (should_replace, reason) = if !old_title.is_empty() && existing_h1 == old_title {
+                (true, "exact match with old title")
+            } else if !old_title.is_empty() && matches_old_title(existing_h1, old_title) {
+                (true, "stem / filename / URL match with old title")
+            } else if is_generic_placeholder(existing_h1) {
+                (true, "generic placeholder heading")
+            } else {
+                (false, "user custom heading preserved")
+            };
+
+            if should_replace && existing_h1 != new_title {
+                for (i, line) in lines.iter().enumerate() {
+                    if i == idx {
+                        new_lines.push(format!("# {new_title}"));
+                    } else {
+                        new_lines.push(line.to_string());
+                    }
+                }
+                H1Action::Replaced {
+                    old_h1: existing_h1.to_string(),
+                    new_h1: new_title.to_string(),
+                    reason,
+                }
+            } else if should_replace {
+                new_lines.extend(lines.iter().map(|l| l.to_string()));
+                H1Action::Unchanged
+            } else {
+                new_lines.extend(lines.iter().map(|l| l.to_string()));
+                H1Action::Preserved {
+                    h1: existing_h1.to_string(),
+                    reason,
+                }
+            }
+        }
+        None => {
+            // No H1 yet: without user content the note is a raw placeholder —
+            // promote a matching line (or insert one) to `# {new_title}`. With
+            // user content the note is intentionally heading-less; keep it.
+            if has_user_notes(content_part, old_title) {
+                new_lines.extend(lines.iter().map(|l| l.to_string()));
+                H1Action::Unchanged
+            } else {
+                let mut replaced_raw = None;
+                for line in &lines {
+                    let trimmed = line.trim();
+                    if replaced_raw.is_none()
+                        && !trimmed.is_empty()
+                        && (matches_old_title(trimmed, old_title)
+                            || is_generic_placeholder(trimmed)
+                            || strip_pdf_ext(trimmed) == strip_pdf_ext(old_title))
+                    {
+                        replaced_raw = Some(trimmed.to_string());
+                        new_lines.push(format!("# {new_title}"));
+                    } else {
+                        new_lines.push(line.to_string());
+                    }
+                }
+                match replaced_raw {
+                    Some(old_line) => H1Action::Replaced {
+                        old_h1: old_line,
+                        new_h1: new_title.to_string(),
+                        reason: "raw placeholder line replaced",
+                    },
+                    None => {
+                        new_lines.insert(0, format!("# {new_title}"));
+                        H1Action::Inserted {
+                            new_h1: new_title.to_string(),
+                        }
+                    }
+                }
+            }
+        }
+    };
+
+    let mut new_content = new_lines.join("\n");
+    if content_part.ends_with('\n') || (content_part.is_empty() && !new_content.is_empty()) {
+        new_content.push('\n');
+    }
+    (new_content, h1_action)
 }
 
 fn file_stem_from_url_or_path(s: &str) -> &str {
@@ -396,6 +391,25 @@ Notes.
         let result = patch_notes_title_and_alias(original, "old title", "New Title");
         assert!(result.contains("# My Custom Analysis Header"));
         assert!(result.contains("New Title"));
+    }
+
+    /// Regression guard: a custom H1 must survive even when the note body is
+    /// blockquote-only (which `has_user_notes` does not count as user content);
+    /// only placeholder-looking headings may be replaced.
+    #[test]
+    fn test_patch_notes_preserves_custom_h1_with_blockquote_only_body() {
+        let original = r#"---
+aliases:
+  - "old title"
+---
+# My Reading Plan
+
+> Quoted notes only, no plain prose.
+"#;
+        let result = patch_notes_title_and_alias(original, "old title", "New Title");
+        assert!(result.contains("# My Reading Plan"));
+        assert!(result.contains("> Quoted notes only, no plain prose."));
+        assert!(result.contains("- \"New Title\""));
     }
 
     #[test]

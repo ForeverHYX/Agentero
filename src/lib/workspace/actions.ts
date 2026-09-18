@@ -44,6 +44,7 @@ import {
 	paperAbsFromWikiTarget,
 } from "@/lib/pdf/annotation-ref";
 import { removeTabAnnotations } from "@/lib/pdf/annotations-store";
+import { stripEmbedPdfRevision } from "@/lib/pdf/document-id";
 import {
 	buildLayoutDocumentResult,
 	getLayoutDocumentResult,
@@ -783,8 +784,13 @@ export function openTranslationTab(
 ): void {
 	if (!paperAbsPath) return;
 	const tabs = getTabs();
-	const paperTab = tabs.find((t) => t.id === paperTabId);
+	// The caller passes the viewer's document id; bytes-backed viewers suffix a
+	// per-buffer revision (`tab::r<n>`), so fall back to the stripped form.
+	const paperTab =
+		tabs.find((t) => t.id === paperTabId) ??
+		tabs.find((t) => t.id === stripEmbedPdfRevision(paperTabId));
 	if (!paperTab) return;
+	paperTabId = paperTab.id;
 
 	const existing = tabs.find(
 		(t) => t.id === `${tabIdForPath(paperAbsPath)}::translation`,

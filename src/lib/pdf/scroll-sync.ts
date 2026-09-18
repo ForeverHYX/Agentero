@@ -8,6 +8,8 @@
  * panes with different viewport sizes still show the same region.
  */
 
+import { stripEmbedPdfRevision } from "@/lib/pdf/document-id";
+
 type ScrollSyncPair = { source: string; target: string };
 
 export type SyncScrollMetrics = {
@@ -38,21 +40,32 @@ function notify(listeners: Set<() => void>): void {
 	for (const listener of listeners) listener();
 }
 
+/**
+ * Registry keys use the revision-stripped base id: the pair is registered
+ * with tab ids while each viewer mounts its own `tab::r<n>` (bytes-backed
+ * documents get a fresh revision per ArrayBuffer read), and the same base id
+ * has at most one live viewer instance, so stripping cannot collide.
+ */
+function syncKey(docId: string): string {
+	return stripEmbedPdfRevision(docId);
+}
+
 export function registerScrollSyncPeer(
 	docId: string,
 	peer: ScrollSyncPeer,
 ): () => void {
-	peers.set(docId, peer);
+	const key = syncKey(docId);
+	peers.set(key, peer);
 	notify(peerListeners);
 	return () => {
-		if (peers.get(docId) !== peer) return;
-		peers.delete(docId);
+		if (peers.get(key) !== peer) return;
+		peers.delete(key);
 		notify(peerListeners);
 	};
 }
 
 export function getScrollSyncPeer(docId: string): ScrollSyncPeer | null {
-	return peers.get(docId) ?? null;
+	return peers.get(syncKey(docId)) ?? null;
 }
 
 /**
@@ -69,14 +82,15 @@ export function registerScrollSyncElement(
 	docId: string,
 	element: HTMLElement,
 ): () => void {
-	scrollElements.set(docId, element);
+	const key = syncKey(docId);
+	scrollElements.set(key, element);
 	return () => {
-		if (scrollElements.get(docId) === element) scrollElements.delete(docId);
+		if (scrollElements.get(key) === element) scrollElements.delete(key);
 	};
 }
 
 export function getScrollSyncElement(docId: string): HTMLElement | null {
-	return scrollElements.get(docId) ?? null;
+	return scrollElements.get(syncKey(docId)) ?? null;
 }
 
 export function subscribeScrollSyncPeers(listener: () => void): () => void {
@@ -93,20 +107,24 @@ export function registerScrollSyncPair(
 	sourceDocId: string,
 	targetDocId: string,
 ): string {
+	const source = syncKey(sourceDocId);
+	const target = syncKey(targetDocId);
 	// Remove any stale pairing that involves either docId so reopening the
-	// translation pane does not accumulate duplicate listeners.
+	// translation pane does not accumulate duplicate listeners. Comparing on
+	// the stripped ids also retires pairs left behind by earlier buffer
+	// revisions of the same documents.
 	for (const [id, pair] of pairs) {
 		if (
-			pair.source === sourceDocId ||
-			pair.target === targetDocId ||
-			pair.source === targetDocId ||
-			pair.target === sourceDocId
+			pair.source === source ||
+			pair.target === target ||
+			pair.source === target ||
+			pair.target === source
 		) {
 			pairs.delete(id);
 		}
 	}
 	const groupId = `pdf-scroll-sync-${groupSequence++}`;
-	pairs.set(groupId, { source: sourceDocId, target: targetDocId });
+	pairs.set(groupId, { source, target });
 	notify(pairListeners);
 	return groupId;
 }
@@ -117,17 +135,19 @@ export function unregisterScrollSyncPair(groupId: string): void {
 }
 
 export function getScrollSyncPartner(docId: string): string | null {
+	const key = syncKey(docId);
 	for (const pair of pairs.values()) {
-		if (pair.source === docId) return pair.target;
-		if (pair.target === docId) return pair.source;
+		if (pair.source === key) return pair.target;
+		if (pair.target === key) return pair.source;
 	}
 	return null;
 }
 
 export function getScrollSyncRole(docId: string): "source" | "target" | null {
+	const key = syncKey(docId);
 	for (const pair of pairs.values()) {
-		if (pair.source === docId) return "source";
-		if (pair.target === docId) return "target";
+		if (pair.source === key) return "source";
+		if (pair.target === key) return "target";
 	}
 	return null;
 }

@@ -181,6 +181,7 @@ export {
 	getLayoutDocumentResult,
 	isLayoutOverlayVisible,
 	layoutAnalysisStore,
+	layoutDocumentKey,
 	layoutKindFromCitationFragment,
 	layoutKindFromRegionId,
 	normalizeLayoutPaperKey,

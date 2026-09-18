@@ -27,3 +27,15 @@ export function embedPdfDocumentId(
 	}
 	return `${baseDocId}::r${revision}`;
 }
+
+/**
+ * Remove the trailing per-buffer revision (`base::r<n>` → `base`). Single
+ * layer: never stack calls — a base id that legitimately ends in `::r<digits>`
+ * (a path is allowed to contain `::`) would be over-stripped. Cross-module
+ * state keys (layout store, scroll-sync pairs) use the stripped base id so
+ * writer and reader agree regardless of which buffer revision each viewer
+ * mounted; the engine itself keeps the full id.
+ */
+export function stripEmbedPdfRevision(id: string): string {
+	return id.replace(/::r\d+$/, "");
+}

@@ -13,6 +13,7 @@ import { EMPTY_LAYOUT_REGIONS_BY_PAGE } from "@/components/viewer/pdf/constants"
 import {
 	hoverableLayoutRegionsByPage,
 	layoutAnalysisStore,
+	layoutDocumentKey,
 	type PdfLayoutRegion,
 	rawLayoutRegionsByPage,
 } from "@/lib/pdf/layout";
@@ -31,6 +32,10 @@ export type PdfLayoutRegions = {
 };
 
 export function usePdfLayoutRegions(docId: string): PdfLayoutRegions {
+	// `byDocument` is keyed by the revision-stripped base id (the translation
+	// pane seeds it from the source pane while each viewer mounts its own
+	// `tab::r<n>`); `overlayVisible` stays raw — same-viewer writers only.
+	const documentKey = layoutDocumentKey(docId);
 	/** Figures rail header toggles this; mirror into EmbedPDF plugin. */
 	const layoutOverlayVisible = useStore(
 		layoutAnalysisStore,
@@ -39,13 +44,15 @@ export function usePdfLayoutRegions(docId: string): PdfLayoutRegions {
 	/** Post-merge layout regions for hover hit targets (figures rail source). */
 	const layoutDocRegions = useStore(
 		layoutAnalysisStore,
-		(s) => s.byDocument[docId]?.regions ?? null,
+		(s) => s.byDocument[documentKey]?.regions ?? null,
 	);
 	/** Pre-merge detections for the debug Eye overlay (all model boxes). */
 	const layoutRawRegions = useStore(
 		layoutAnalysisStore,
 		(s) =>
-			s.byDocument[docId]?.rawRegions ?? s.byDocument[docId]?.regions ?? null,
+			s.byDocument[documentKey]?.rawRegions ??
+			s.byDocument[documentKey]?.regions ??
+			null,
 	);
 	/**
 	 * Hover hit targets and debug boxes, bucketed by page. Both passes are

@@ -1,9 +1,11 @@
 import { describe, expect, it } from "vitest";
 import {
+	getScrollSyncElement,
 	getScrollSyncPartner,
 	getScrollSyncPeer,
 	getScrollSyncRole,
 	mapScrollByContent,
+	registerScrollSyncElement,
 	registerScrollSyncPair,
 	registerScrollSyncPeer,
 	type ScrollSyncPeer,
@@ -135,5 +137,46 @@ describe("scroll sync registry", () => {
 		expect(getScrollSyncPeer("paper-a")).toBe(peer);
 		dispose();
 		expect(getScrollSyncPeer("paper-a")).toBeNull();
+	});
+});
+
+describe("scroll sync across buffer revision suffixes", () => {
+	// Bytes-backed viewers mount as `tab::r<n>` (fresh revision per ArrayBuffer
+	// read) while pairs are registered with tab ids; every registry key strips
+	// the revision so both forms resolve to the same entry.
+	it("resolves a pair queried with either revision form", () => {
+		registerScrollSyncPair("paper-a", "paper-a::translation");
+		expect(getScrollSyncPartner("paper-a::r1")).toBe("paper-a::translation");
+		expect(getScrollSyncPartner("paper-a::translation::r2")).toBe("paper-a");
+		expect(getScrollSyncRole("paper-a::r1")).toBe("source");
+		expect(getScrollSyncRole("paper-a::translation::r2")).toBe("target");
+	});
+
+	it("retires pairs left behind by earlier buffer revisions", () => {
+		registerScrollSyncPair("paper-a::r1", "paper-a::translation::r2");
+		registerScrollSyncPair("paper-a", "paper-a::translation");
+		expect(getScrollSyncPartner("paper-a::r3")).toBe("paper-a::translation");
+		expect(getScrollSyncPartner("paper-a::translation::r4")).toBe("paper-a");
+	});
+
+	it("stores peers and elements under the base id", () => {
+		const peer = createPeer({});
+		const disposePeer = registerScrollSyncPeer(
+			"paper-a::translation::r2",
+			peer,
+		);
+		expect(getScrollSyncPeer("paper-a::translation")).toBe(peer);
+		expect(getScrollSyncPeer("paper-a::translation::r5")).toBe(peer);
+		const element = {} as HTMLElement;
+		const disposeElement = registerScrollSyncElement(
+			"paper-a::translation::r2",
+			element,
+		);
+		expect(getScrollSyncElement("paper-a::translation")).toBe(element);
+		expect(getScrollSyncElement("paper-a::r1")).toBeNull();
+		disposePeer();
+		disposeElement();
+		expect(getScrollSyncPeer("paper-a::translation")).toBeNull();
+		expect(getScrollSyncElement("paper-a::translation")).toBeNull();
 	});
 });

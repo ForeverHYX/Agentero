@@ -40,6 +40,7 @@ import {
 	isTableLayoutKind,
 	LAYOUT_SIDEBAR_MIN_SCORE,
 	layoutAnalysisStore,
+	layoutDocumentKey,
 	normalizeLayoutPaperKey,
 	type PdfLayoutKind,
 	type PdfLayoutRegion,
@@ -239,8 +240,11 @@ export function FiguresPanel({
 	compact,
 }: FiguresPanelProps) {
 	const { t } = useTranslation("viewer");
+	// byDocument is keyed by the revision-stripped base id (bytes-backed
+	// viewers mount as `tab::r<n>`); focused/overlay stay raw form.
+	const documentKey = documentId ? layoutDocumentKey(documentId) : null;
 	const result = useStore(layoutAnalysisStore, (s) =>
-		documentId ? (s.byDocument[documentId] ?? null) : null,
+		documentKey ? (s.byDocument[documentKey] ?? null) : null,
 	);
 	const focusedId = useStore(layoutAnalysisStore, (s) =>
 		documentId && s.focused?.documentId === documentId

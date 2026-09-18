@@ -28,6 +28,7 @@ import {
 	useRef,
 	useState,
 } from "react";
+import { useCopiedLabel } from "@/components/selection/use-copied-label";
 import {
 	anchorFromEmbedSelection,
 	pageElByIndex,
@@ -113,8 +114,6 @@ export type PdfTextSelection = {
 	copiedLabelPos: { x: number; y: number } | null;
 };
 
-const COPIED_LABEL_DURATION_MS = 1000;
-
 export function usePdfTextSelection({
 	selectionCap,
 	docCap,
@@ -129,20 +128,9 @@ export function usePdfTextSelection({
 		null,
 	);
 	const [isSelecting, setIsSelecting] = useState(false);
-	const [copiedLabelPos, setCopiedLabelPos] = useState<{
-		x: number;
-		y: number;
-	} | null>(null);
-	const labelTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+	const { copiedLabelPos, showCopiedLabel, clearCopiedLabel } =
+		useCopiedLabel();
 	const mouseUpPosRef = useRef<{ x: number; y: number } | null>(null);
-
-	const clearCopiedLabel = useCallback(() => {
-		if (labelTimerRef.current) {
-			clearTimeout(labelTimerRef.current);
-			labelTimerRef.current = null;
-		}
-		setCopiedLabelPos(null);
-	}, []);
 
 	const closeSelectionMenu = useCallback(() => {
 		setSelectionMenu(null);
@@ -239,15 +227,7 @@ export function usePdfTextSelection({
 				if (quote) {
 					try {
 						selectionCap.copyToClipboard(docId);
-						clearCopiedLabel();
-						const pos = mouseUpPosRef.current;
-						if (pos) {
-							setCopiedLabelPos(pos);
-							labelTimerRef.current = setTimeout(() => {
-								labelTimerRef.current = null;
-								setCopiedLabelPos(null);
-							}, COPIED_LABEL_DURATION_MS);
-						}
+						showCopiedLabel(mouseUpPosRef.current);
 					} catch {
 						// auto-copy is best-effort
 					}
@@ -288,6 +268,7 @@ export function usePdfTextSelection({
 		hostRef,
 		zoomRef,
 		clearCopiedLabel,
+		showCopiedLabel,
 	]);
 
 	// PDFium selections are invisible to the browser: intercept copy so ⌘/Ctrl+C

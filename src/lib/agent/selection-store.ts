@@ -55,8 +55,7 @@ export const selectionStore = createStore<SelectionStore>(() => ({
 
 let nextSelectionId = 0;
 
-/** Replace the live selection chip (empty text clears it instead). */
-export function publishSelection(input: {
+export type PublishSelectionInput = {
 	text: string;
 	sourcePath: string;
 	origin: SelectionOrigin;
@@ -65,7 +64,10 @@ export function publishSelection(input: {
 	lineTo?: number;
 	rects?: PdfVisualNormalizedRect[];
 	paperAbsPath?: string;
-}): void {
+};
+
+/** Replace the live selection chip (empty text clears it instead). */
+export function publishSelection(input: PublishSelectionInput): void {
 	const text = stripSystemReminder(input.text.trim())
 		.trim()
 		.slice(0, MAX_SELECTION_CHARS);

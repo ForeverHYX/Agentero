@@ -20,10 +20,13 @@ import {
 	useState,
 } from "react";
 import { useTranslation } from "react-i18next";
+import { addSelectionToChat } from "@/components/selection/add-selection-to-chat";
+import { useCopiedLabel } from "@/components/selection/use-copied-label";
 import {
 	createSelectionAskThread,
 	useSelectionAsk,
 } from "@/components/selection/use-selection-ask";
+import { useSelectionQuickChat } from "@/components/selection/use-selection-quick-chat";
 import type { ScreenPoint } from "@/components/viewer/pdf/types";
 import {
 	bridgeSelectionBottomRight,
@@ -31,11 +34,6 @@ import {
 	parseWebBridgeMessage,
 } from "@/components/viewer/web-view/bridge-message";
 import { cancelAgentRun, disposeAgentRun } from "@/lib/agent";
-import { registerSelectionQuickChat } from "@/lib/agent/selection-quick-chat";
-import {
-	pinActiveSelection,
-	publishSelection,
-} from "@/lib/agent/selection-store";
 import { copyTextToClipboard } from "@/lib/core/clipboard";
 import { openExternalUrl } from "@/lib/core/open-external";
 import {
@@ -45,11 +43,8 @@ import {
 import type { PdfTranslateRecord } from "@/lib/pdf/translate/types";
 import { buildPlazaAskPrompt } from "@/lib/plaza/ask-prompt";
 import { openSettingsWindow } from "@/lib/shell/settings-window";
-import { openRightTab } from "@/lib/shell/ui-window-actions";
 import { getVaultPath } from "@/lib/vault/store";
 import { webViewProxyOrigins } from "@/lib/web-view/proxy-url";
-
-const COPIED_LABEL_DURATION_MS = 1000;
 
 export type WebViewSelectionMenu = {
 	text: string;
@@ -81,10 +76,8 @@ export function useWebViewSelection({
 }) {
 	const { t } = useTranslation("viewer");
 	const [menu, setMenu] = useState<WebViewSelectionMenu | null>(null);
-	const [copiedLabelPos, setCopiedLabelPos] = useState<ScreenPoint | null>(
-		null,
-	);
-	const labelTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+	const { copiedLabelPos, showCopiedLabel, clearCopiedLabel } =
+		useCopiedLabel();
 
 	// Ephemeral single translate card (no marks/ to write into).
 	const [translateRec, setTranslateRec] = useState<PdfTranslateRecord | null>(
@@ -115,14 +108,6 @@ export function useWebViewSelection({
 		activeSessionRef,
 	});
 	const { ask, streaming, askError, resetAsk, setAsk } = askCtl;
-
-	const clearCopiedLabel = useCallback(() => {
-		if (labelTimerRef.current) {
-			clearTimeout(labelTimerRef.current);
-			labelTimerRef.current = null;
-		}
-		setCopiedLabelPos(null);
-	}, []);
 
 	const closeMenu = useCallback(() => {
 		setMenu(null);
@@ -173,13 +158,7 @@ export function useWebViewSelection({
 		clearCopiedLabel();
 		// Focus sits in the frame; ask its bridge to clear the selection.
 		postToFrame(iframeRef.current, "clearSelection");
-		publishSelection({
-			text,
-			sourcePath: srcUrl,
-			origin: "markdown",
-		});
-		pinActiveSelection();
-		openRightTab("agent");
+		addSelectionToChat({ text, sourcePath: srcUrl, origin: "markdown" });
 	}, [menu, srcUrl, iframeRef, clearCopiedLabel]);
 
 	const handleAsk = useCallback(() => {
@@ -288,19 +267,11 @@ export function useWebViewSelection({
 
 	// ⌘K Quick chat — while this web selection toolbar is armed. ⌘L arrives
 	// from the bridge (keyboard focus never leaves the frame).
-	const menuRef = useRef(menu);
-	menuRef.current = menu;
+	useSelectionQuickChat(() => menu != null, handleAsk);
 	const handleAskRef = useRef(handleAsk);
 	handleAskRef.current = handleAsk;
 	const handleAddToChatRef = useRef(handleAddToChat);
 	handleAddToChatRef.current = handleAddToChat;
-	useEffect(() => {
-		return registerSelectionQuickChat(() => {
-			if (!menuRef.current) return false;
-			handleAskRef.current();
-			return true;
-		});
-	}, []);
 
 	// Bridge messages: selections position the toolbar, scroll hides it,
 	// shortcuts trigger the actions, external links go to the system browser.
@@ -329,12 +300,7 @@ export function useWebViewSelection({
 					// app-side write can be refused while focus sits there — try
 					// anyway so the label only shows on a real copy.
 					void copyTextToClipboard(msg.text);
-					clearCopiedLabel();
-					setCopiedLabelPos(screen);
-					labelTimerRef.current = setTimeout(() => {
-						labelTimerRef.current = null;
-						setCopiedLabelPos(null);
-					}, COPIED_LABEL_DURATION_MS);
+					showCopiedLabel(screen);
 					return;
 				}
 				case "scroll":
@@ -351,7 +317,7 @@ export function useWebViewSelection({
 		};
 		window.addEventListener("message", onMessage);
 		return () => window.removeEventListener("message", onMessage);
-	}, [iframeRef, clearCopiedLabel]);
+	}, [iframeRef, showCopiedLabel]);
 
 	return {
 		menu,

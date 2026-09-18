@@ -12,25 +12,15 @@ import type {
 	FormattedSelection,
 	useSelectionCapability,
 } from "@embedpdf/plugin-selection/react";
-import {
-	type Dispatch,
-	type SetStateAction,
-	useCallback,
-	useEffect,
-	useRef,
-} from "react";
+import { type Dispatch, type SetStateAction, useCallback, useRef } from "react";
+import { addSelectionToChat } from "@/components/selection/add-selection-to-chat";
+import { useSelectionQuickChat } from "@/components/selection/use-selection-quick-chat";
 import type { SelectionMenuState } from "@/components/viewer/pdf/types";
-import { registerSelectionQuickChat } from "@/lib/agent/selection-quick-chat";
-import {
-	pinActiveSelection,
-	publishSelection,
-} from "@/lib/agent/selection-store";
 import type { PdfAskAnchor } from "@/lib/pdf/ask/types";
 import {
 	DEFAULT_HIGHLIGHT_COLOR,
 	type HighlightColor,
 } from "@/lib/pdf/highlight/palette";
-import { openRightTab } from "@/lib/shell/ui-window-actions";
 
 type SelectionCapabilityProvides = ReturnType<
 	typeof useSelectionCapability
@@ -148,13 +138,7 @@ export function usePdfSelectionActions({
 	}, [startFromAnchor, selectionCap, docId, setSelectionMenu]);
 
 	// ⌘K Quick chat — only while this viewer's selection toolbar is armed.
-	useEffect(() => {
-		return registerSelectionQuickChat(() => {
-			if (!selectionMenuRef.current) return false;
-			handleMenuAsk();
-			return true;
-		});
-	}, [handleMenuAsk]);
+	useSelectionQuickChat(() => selectionMenuRef.current != null, handleMenuAsk);
 
 	const handleMenuAddToChat = useCallback(() => {
 		const menu = selectionMenuRef.current;
@@ -166,7 +150,7 @@ export function usePdfSelectionActions({
 		if (!quote) return;
 		// Re-publish after clear: clearing the PDF selection also drops the live chip.
 		// Keep page geometry so the next Agent turn can write a conversation card pin.
-		publishSelection({
+		addSelectionToChat({
 			text: quote,
 			sourcePath: paperRelPath ?? paperAbsPath ?? "PDF",
 			origin: "pdf",
@@ -174,8 +158,6 @@ export function usePdfSelectionActions({
 			rects: anchor.rects,
 			paperAbsPath: paperAbsPath ?? undefined,
 		});
-		pinActiveSelection();
-		openRightTab("agent");
 	}, [selectionCap, docId, paperRelPath, paperAbsPath, setSelectionMenu]);
 
 	const handleMenuTranslate = useCallback(() => {

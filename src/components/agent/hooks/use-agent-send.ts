@@ -53,6 +53,7 @@ import {
 } from "@/lib/agent/composer-inline-tokens";
 import type { AgentComposerState } from "@/lib/agent/composer-state";
 import { isPlazaMentionPath } from "@/lib/agent/plaza-mention";
+import { preparePlazaScratch } from "@/lib/agent/plaza-scratch";
 import {
 	consumeSelections,
 	currentSelections,
@@ -407,6 +408,17 @@ export function useAgentSend({
 			const priorLines = forceNewSessionEarly
 				? (options?.baseLines ?? [])
 				: (options?.baseLines ?? lines);
+			// Scratch full text for @-mentioned plaza papers: the host downloads +
+			// converts them outside the vault so the agent never imports papers
+			// just to read them. Best-effort with a timeout; falls back to
+			// abstract-only context.
+			const plazaContextPaths = resolvedContextPaths.filter((path) =>
+				isPlazaMentionPath(path),
+			);
+			const plazaScratchByPath =
+				plazaContextPaths.length > 0 && !isAcpCommand
+					? await preparePlazaScratch(plazaContextPaths)
+					: new Map<string, string>();
 			const { prompt, images, visualAnnotations, historyTitle } =
 				assembleTurnPrompt({
 					text,
@@ -415,6 +427,7 @@ export function useAgentSend({
 					visualDrafts: resolvedVisualDrafts,
 					attachedImages,
 					isAcpCommand,
+					plazaScratchByPath,
 					t,
 				});
 			// Workflow suggestions act on the focused paper / mentioned paths so

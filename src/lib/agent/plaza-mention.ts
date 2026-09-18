@@ -51,6 +51,33 @@ export function plazaMentionSource(
 }
 
 /**
+ * arXiv id behind a plaza mention: taken from the rec path itself, or parsed
+ * from the feed entry's paper URL (`https://arxiv.org/abs/2409.12345`).
+ * Version suffixes are stripped so the same paper referenced from different
+ * plaza sections (rec ids keep `v1`, feed urls don't) shares one scratch
+ * cache entry; `arxiv.org/pdf/{bare-id}` always serves the latest version.
+ * Null when the entry has no arXiv full text (non-paper feed articles).
+ */
+export function plazaMentionArxivId(
+	path: string | null | undefined,
+): string | null {
+	if (!isPlazaMentionPath(path)) return null;
+	const p = path as string;
+	const raw = p.startsWith(`${PLAZA_MENTION_PREFIX}${ARXIV_REC_SEGMENT}/`)
+		? p.slice(`${PLAZA_MENTION_PREFIX}${ARXIV_REC_SEGMENT}/`.length).trim()
+		: (() => {
+				const url = lookupPlazaMention(p)?.url;
+				if (!url) return "";
+				return (
+					url.match(
+						/arxiv\.org\/(?:abs|pdf)\/([0-9]{4}\.[0-9]{4,5}(?:v[0-9]+)?)/i,
+					)?.[1] ?? ""
+				);
+			})();
+	return raw.replace(/v[0-9]+$/, "") || null;
+}
+
+/**
  * Module-level registry: candidates registered by the composer data source
  * before they can show in the `@` menu, so send-time expansion never needs IO.
  * `registerPlazaMentionEntries` replaces the whole set (vault switch reload).
@@ -97,11 +124,19 @@ export function splitContextPaths(paths: readonly string[]): SplitContextPaths {
 	return { vaultPaths, plazaPaths };
 }
 
-function entryBlock(entry: PlazaMentionEntry): string {
+function entryBlock(
+	entry: PlazaMentionEntry,
+	markdownPath: string | undefined,
+): string {
 	const lines = [`### ${entry.title || entry.path}`];
 	lines.push(`- Source: ${entry.sourceLabel}`);
 	if (entry.url) lines.push(`- URL: ${entry.url}`);
 	if (entry.publishedAt) lines.push(`- Published: ${entry.publishedAt}`);
+	if (markdownPath) {
+		lines.push(
+			`- Full text (scratch copy outside the vault, read-only): ${markdownPath}`,
+		);
+	}
 	if (entry.abstract) {
 		lines.push("Abstract:", entry.abstract);
 	}
@@ -110,20 +145,27 @@ function entryBlock(entry: PlazaMentionEntry): string {
 
 /**
  * Prompt block for @-mentioned plaza entries. Registered entries expand to
- * their metadata; stale paths (e.g. a draft restored after a daily refresh)
- * degrade to an explicit unavailable note instead of silently dropping.
+ * their metadata — plus a scratch full-text path when the host prepared one —
+ * while stale paths (e.g. a draft restored after a daily refresh) degrade to
+ * an explicit unavailable note instead of silently dropping.
  */
 export function plazaMentionPromptBlock(options: {
 	plazaPaths: readonly string[];
+	/** Mention path → absolute scratch markdown path (full text). */
+	scratchByPath?: ReadonlyMap<string, string> | null;
 	t: TFunction<"agent", undefined>;
 }): string {
 	const paths = options.plazaPaths.filter(Boolean);
 	if (paths.length === 0) return "";
+	const scratch = options.scratchByPath ?? null;
 	const blocks = paths.map((path) => {
 		const entry = lookupPlazaMention(path);
 		return entry
-			? entryBlock(entry)
+			? entryBlock(entry, scratch?.get(path))
 			: `### ${path}\n- ${options.t("composer.plazaEntryUnavailable")}`;
 	});
-	return `${options.t("composer.plazaContextInstruction")}\n\n${blocks.join("\n\n")}`;
+	const header = options.t("composer.plazaContextInstruction");
+	const body = `${header}\n\n${blocks.join("\n\n")}`;
+	if (!paths.some((path) => scratch?.has(path))) return body;
+	return `${body}\n\n${options.t("composer.plazaScratchInstruction")}`;
 }

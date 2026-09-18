@@ -7,6 +7,7 @@ import {
 	isPlazaMentionPath,
 	lookupPlazaMention,
 	type PlazaMentionEntry,
+	plazaMentionArxivId,
 	plazaMentionPromptBlock,
 	plazaMentionSource,
 	registerPlazaMentionEntries,
@@ -131,6 +132,73 @@ describe("plaza mention prompt expansion", () => {
 	it("returns an empty block for no plaza paths", () => {
 		expect(plazaMentionPromptBlock({ plazaPaths: [], t })).toBe("");
 	});
+
+	it("appends scratch full-text paths with the no-import instruction", () => {
+		registerPlazaMentionEntries([recEntry, feedEntry]);
+		const scratch = new Map([
+			[recEntry.path, "/cache/agentero/plaza-scratch/2409.12345/PAPER.md"],
+		]);
+		const block = plazaMentionPromptBlock({
+			plazaPaths: [recEntry.path, feedEntry.path],
+			scratchByPath: scratch,
+			t,
+		});
+		expect(block).toContain(
+			`- Full text (scratch copy outside the vault, read-only): ${scratch.get(recEntry.path)}`,
+		);
+		expect(block).toContain("composer.plazaScratchInstruction");
+		registerPlazaMentionEntries([]);
+	});
+
+	it("omits the scratch instruction when no full text is attached", () => {
+		registerPlazaMentionEntries([recEntry]);
+		const block = plazaMentionPromptBlock({
+			plazaPaths: [recEntry.path],
+			t,
+		});
+		expect(block).not.toContain("Full text (scratch copy");
+		expect(block).not.toContain("composer.plazaScratchInstruction");
+		registerPlazaMentionEntries([]);
+	});
+});
+
+describe("plaza mention arxiv ids", () => {
+	it("reads the id from a rec path and from feed entry urls", () => {
+		registerPlazaMentionEntries([
+			recEntry,
+			{
+				...feedEntry,
+				url: "https://arxiv.org/abs/2501.00003",
+			},
+		]);
+		expect(plazaMentionArxivId(recEntry.path)).toBe("2409.12345");
+		expect(plazaMentionArxivId(feedEntry.path)).toBe("2501.00003");
+		registerPlazaMentionEntries([]);
+	});
+
+	it("strips version suffixes so rec and feed refs share one cache id", () => {
+		registerPlazaMentionEntries([
+			{ ...recEntry, path: arxivRecMentionPath("2409.12345v1") },
+			{
+				...feedEntry,
+				url: "https://arxiv.org/pdf/2409.12345v2",
+			},
+		]);
+		expect(plazaMentionArxivId(arxivRecMentionPath("2409.12345v1"))).toBe(
+			"2409.12345",
+		);
+		expect(plazaMentionArxivId(feedEntry.path)).toBe("2409.12345");
+		registerPlazaMentionEntries([]);
+	});
+
+	it("returns null for non-arxiv urls and vault paths", () => {
+		registerPlazaMentionEntries([
+			{ ...feedEntry, url: "https://blog.example.com/posts/gpu" },
+		]);
+		expect(plazaMentionArxivId(feedEntry.path)).toBeNull();
+		expect(plazaMentionArxivId("papers/a")).toBeNull();
+		registerPlazaMentionEntries([]);
+	});
 });
 
 describe("assembleTurnPrompt with plaza mentions", () => {
@@ -165,6 +233,24 @@ describe("assembleTurnPrompt with plaza mentions", () => {
 		});
 		expect(prompt).not.toContain("composer.contextInstruction");
 		expect(prompt).toContain(`### ${recEntry.title}`);
+		registerPlazaMentionEntries([]);
+	});
+
+	it("threads scratch full-text paths into the final prompt", () => {
+		registerPlazaMentionEntries([recEntry]);
+		const markdownPath = "/cache/agentero/plaza-scratch/2409.12345/PAPER.md";
+		const { prompt } = assembleTurnPrompt({
+			text: "summarize",
+			contextPaths: [recEntry.path],
+			selections: [],
+			visualDrafts: [],
+			attachedImages: [],
+			isAcpCommand: false,
+			plazaScratchByPath: new Map([[recEntry.path, markdownPath]]),
+			t,
+		});
+		expect(prompt).toContain(`read-only): ${markdownPath}`);
+		expect(prompt).toContain("composer.plazaScratchInstruction");
 		registerPlazaMentionEntries([]);
 	});
 });

@@ -23,6 +23,8 @@ export type AssembleTurnPromptInput = {
 	visualDrafts: PdfVisualDraft[];
 	attachedImages: PromptImage[];
 	isAcpCommand: boolean;
+	/** Mention path → scratch full-text markdown path (plaza entries). */
+	plazaScratchByPath?: ReadonlyMap<string, string> | null;
 	t: TFunction<"agent", undefined>;
 };
 
@@ -40,6 +42,7 @@ export function assembleTurnPrompt({
 	visualDrafts,
 	attachedImages,
 	isAcpCommand,
+	plazaScratchByPath,
 	t,
 }: AssembleTurnPromptInput): AssembledTurnPrompt {
 	const hasVisualDrafts = visualDrafts.length > 0;
@@ -57,7 +60,13 @@ export function assembleTurnPrompt({
 		);
 	}
 	if (plazaPaths.length) {
-		contextBlocks.push(plazaMentionPromptBlock({ plazaPaths, t }));
+		contextBlocks.push(
+			plazaMentionPromptBlock({
+				plazaPaths,
+				scratchByPath: plazaScratchByPath,
+				t,
+			}),
+		);
 	}
 	if (selections.length) {
 		contextBlocks.push(selectionsPromptBlock(selections));

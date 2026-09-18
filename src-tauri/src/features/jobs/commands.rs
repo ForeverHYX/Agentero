@@ -1,3 +1,4 @@
+use crate::app::command_util::try_vault_ok;
 use crate::core::error::{map_err, ApiResult, AppError};
 use serde::{Deserialize, Serialize};
 use std::io::ErrorKind;
@@ -5,9 +6,19 @@ use std::path::{Path, PathBuf};
 use tauri::State;
 
 use super::{
-    emit_job_changed, parse_lane, validate_job_paper, JobCenter, JobKind, JobLane, JobSnapshot,
-    JobState, StartOutcome,
+    emit_job_changed, parse_lane, JobCenter, JobKind, JobLane, JobSnapshot, JobState, StartOutcome,
 };
+
+/// Validate the command's (vault, paper) pair or early-return the IPC error
+/// object. Module-local: only job commands validate against the catalog.
+macro_rules! try_job_paper {
+    ($args:expr) => {
+        match $crate::features::jobs::validate_job_paper(&$args.vault_path, &$args.path) {
+            Ok(valid) => valid,
+            Err(err) => return Ok($crate::core::error::map_err(err)),
+        }
+    };
+}
 
 /// Shared enqueue args for kinds that take no extra parameters
 /// (ParseRefs / LayoutAnalyze / DownloadAssets).
@@ -81,6 +92,16 @@ async fn start_or_hold(
     snapshot
 }
 
+/// Shared enqueue tail: await the enqueue future, then announce the snapshot
+/// and start it when its kind has a free slot and dependencies are ready.
+async fn start_enqueued(
+    app: &tauri::AppHandle,
+    center: &JobCenter,
+    enqueue: impl std::future::Future<Output = JobSnapshot>,
+) -> ApiResult<JobSnapshot> {
+    ApiResult::ok(start_or_hold(app, center, enqueue.await).await)
+}
+
 /// While metadata recognition is queued or running for a paper, non-forced
 /// parse / layout enqueues are deferred: recognition may rename the paper
 /// folder, and the recognize runner re-orchestrates those jobs against the
@@ -121,10 +142,7 @@ pub async fn job_parse_refs_enqueue(
     center: State<'_, JobCenter>,
     args: JobEnqueueArgs,
 ) -> Result<ApiResult<JobSnapshot>, String> {
-    let (vault, path) = match validate_job_paper(&args.vault_path, &args.path) {
-        Ok(valid) => valid,
-        Err(e) => return Ok(map_err(e)),
-    };
+    let (vault, path) = try_job_paper!(args);
     if let Some(snapshot) = deferred_if_recognizing(
         &center,
         &vault,
@@ -137,10 +155,12 @@ pub async fn job_parse_refs_enqueue(
     {
         return Ok(ApiResult::ok(snapshot));
     }
-    let snapshot = center
-        .enqueue_parse_refs(&vault, &path, parse_lane(args.lane), args.force)
-        .await;
-    Ok(ApiResult::ok(start_or_hold(&app, &center, snapshot).await))
+    Ok(start_enqueued(
+        &app,
+        &center,
+        center.enqueue_parse_refs(&vault, &path, parse_lane(args.lane), args.force),
+    )
+    .await)
 }
 
 #[tauri::command]
@@ -150,10 +170,7 @@ pub async fn job_parse_body_enqueue(
     center: State<'_, JobCenter>,
     args: JobParseBodyEnqueueArgs,
 ) -> Result<ApiResult<JobSnapshot>, String> {
-    let (vault, path) = match validate_job_paper(&args.vault_path, &args.path) {
-        Ok(valid) => valid,
-        Err(e) => return Ok(map_err(e)),
-    };
+    let (vault, path) = try_job_paper!(args);
     if let Some(snapshot) = deferred_if_recognizing(
         &center,
         &vault,
@@ -166,16 +183,18 @@ pub async fn job_parse_body_enqueue(
     {
         return Ok(ApiResult::ok(snapshot));
     }
-    let snapshot = center
-        .enqueue_parse_body(
+    Ok(start_enqueued(
+        &app,
+        &center,
+        center.enqueue_parse_body(
             &vault,
             &path,
             parse_lane(args.lane),
             args.force,
             args.task_id,
-        )
-        .await;
-    Ok(ApiResult::ok(start_or_hold(&app, &center, snapshot).await))
+        ),
+    )
+    .await)
 }
 
 #[derive(Debug, Deserialize, specta::Type)]
@@ -213,10 +232,7 @@ pub async fn job_reconcile_paper(
     caps: State<'_, crate::features::paper::catalog::CapsCache>,
     args: JobReconcilePaperArgs,
 ) -> Result<ApiResult<Vec<JobSnapshot>>, String> {
-    let (vault, path) = match validate_job_paper(&args.vault_path, &args.path) {
-        Ok(valid) => valid,
-        Err(e) => return Ok(map_err(e)),
-    };
+    let (vault, path) = try_job_paper!(args);
     // Reconcile defers unconditionally: the recognize runner orchestrates the
     // same backfills against the post-rename path when recognition lands.
     if deferred_if_recognizing(
@@ -275,10 +291,7 @@ pub async fn job_reconcile_vault(
     caps: State<'_, crate::features::paper::catalog::CapsCache>,
     args: JobReconcileVaultArgs,
 ) -> Result<ApiResult<u32>, String> {
-    let vault = match crate::core::fs::resolve_vault(&args.vault_path) {
-        Ok(vault) => vault,
-        Err(err) => return Ok(map_err(err)),
-    };
+    let vault = try_vault_ok!(&args.vault_path);
     let caps_handle = (*caps).clone();
     let scan_vault = vault.clone();
     let needing = tauri::async_runtime::spawn_blocking(move || {
@@ -321,10 +334,7 @@ pub async fn job_papers_needing_assets(
     caps: State<'_, crate::features::paper::catalog::CapsCache>,
     args: JobPapersNeedingAssetsArgs,
 ) -> Result<ApiResult<Vec<String>>, String> {
-    let vault = match crate::core::fs::resolve_vault(&args.vault_path) {
-        Ok(vault) => vault,
-        Err(err) => return Ok(map_err(err)),
-    };
+    let vault = try_vault_ok!(&args.vault_path);
     let caps_handle = (*caps).clone();
     let scan_vault = vault.clone();
     let needing = tauri::async_runtime::spawn_blocking(move || {
@@ -352,10 +362,7 @@ pub async fn job_layout_analyze_enqueue(
     center: State<'_, JobCenter>,
     args: JobEnqueueArgs,
 ) -> Result<ApiResult<JobSnapshot>, String> {
-    let (vault, path) = match validate_job_paper(&args.vault_path, &args.path) {
-        Ok(valid) => valid,
-        Err(e) => return Ok(map_err(e)),
-    };
+    let (vault, path) = try_job_paper!(args);
     if let Some(snapshot) = deferred_if_recognizing(
         &center,
         &vault,
@@ -369,10 +376,12 @@ pub async fn job_layout_analyze_enqueue(
         return Ok(ApiResult::ok(snapshot));
     }
     center.refresh_layout_backend().await;
-    let snapshot = center
-        .enqueue_layout_analyze(&vault, &path, parse_lane(args.lane), args.force)
-        .await;
-    Ok(ApiResult::ok(start_or_hold(&app, &center, snapshot).await))
+    Ok(start_enqueued(
+        &app,
+        &center,
+        center.enqueue_layout_analyze(&vault, &path, parse_lane(args.lane), args.force),
+    )
+    .await)
 }
 
 #[derive(Debug, Deserialize, specta::Type)]
@@ -396,10 +405,7 @@ pub async fn job_latex_compile_enqueue(
     center: State<'_, JobCenter>,
     args: JobLatexCompileEnqueueArgs,
 ) -> Result<ApiResult<JobSnapshot>, String> {
-    let vault = match crate::core::fs::resolve_vault(&args.vault_path) {
-        Ok(vault) => vault,
-        Err(e) => return Ok(map_err(e)),
-    };
+    let vault = try_vault_ok!(&args.vault_path);
     // The .tex source is addressed by absolute path (it can live anywhere in
     // the vault, including outside papers/); resolve vault-relative input.
     let raw = Path::new(&args.tex_path);
@@ -416,16 +422,18 @@ pub async fn job_latex_compile_enqueue(
     }
     let tex_path = tex_path.to_string_lossy().to_string();
     let params = serde_json::json!({ "texPath": tex_path, "engine": args.engine });
-    let snapshot = center
-        .enqueue_latex_compile(
+    Ok(start_enqueued(
+        &app,
+        &center,
+        center.enqueue_latex_compile(
             &vault,
             &tex_path,
             parse_lane(args.lane),
             args.force,
             Some(params),
-        )
-        .await;
-    Ok(ApiResult::ok(start_or_hold(&app, &center, snapshot).await))
+        ),
+    )
+    .await)
 }
 
 #[tauri::command]
@@ -435,14 +443,13 @@ pub async fn job_download_assets_enqueue(
     center: State<'_, JobCenter>,
     args: JobEnqueueArgs,
 ) -> Result<ApiResult<JobSnapshot>, String> {
-    let (vault, path) = match validate_job_paper(&args.vault_path, &args.path) {
-        Ok(valid) => valid,
-        Err(e) => return Ok(map_err(e)),
-    };
-    let snapshot = center
-        .enqueue_download_assets(&vault, &path, parse_lane(args.lane), args.force)
-        .await;
-    Ok(ApiResult::ok(start_or_hold(&app, &center, snapshot).await))
+    let (vault, path) = try_job_paper!(args);
+    Ok(start_enqueued(
+        &app,
+        &center,
+        center.enqueue_download_assets(&vault, &path, parse_lane(args.lane), args.force),
+    )
+    .await)
 }
 
 #[derive(Debug, Deserialize, specta::Type)]
@@ -473,20 +480,19 @@ pub async fn job_import_enqueue(
     center: State<'_, JobCenter>,
     args: JobImportEnqueueArgs,
 ) -> Result<ApiResult<JobSnapshot>, String> {
-    let vault = match crate::core::fs::resolve_vault(&args.vault_path) {
-        Ok(vault) => vault,
-        Err(e) => return Ok(map_err(e)),
-    };
-    let snapshot = center
-        .enqueue_import(
+    let vault = try_vault_ok!(&args.vault_path);
+    Ok(start_enqueued(
+        &app,
+        &center,
+        center.enqueue_import(
             &vault,
             args.path.unwrap_or_default(),
             parse_lane(args.lane),
             args.force,
             args.params,
-        )
-        .await;
-    Ok(ApiResult::ok(start_or_hold(&app, &center, snapshot).await))
+        ),
+    )
+    .await)
 }
 
 #[derive(Debug, Deserialize, specta::Type)]
@@ -518,20 +524,19 @@ pub async fn job_connector_sync_enqueue(
     center: State<'_, JobCenter>,
     args: JobConnectorSyncEnqueueArgs,
 ) -> Result<ApiResult<JobSnapshot>, String> {
-    let vault = match crate::core::fs::resolve_vault(&args.vault_path) {
-        Ok(vault) => vault,
-        Err(e) => return Ok(map_err(e)),
-    };
-    let snapshot = center
-        .enqueue_connector_sync(
+    let vault = try_vault_ok!(&args.vault_path);
+    Ok(start_enqueued(
+        &app,
+        &center,
+        center.enqueue_connector_sync(
             &vault,
             args.path.unwrap_or_default(),
             parse_lane(args.lane),
             args.force,
             args.params,
-        )
-        .await;
-    Ok(ApiResult::ok(start_or_hold(&app, &center, snapshot).await))
+        ),
+    )
+    .await)
 }
 
 /// Shared args for the vault-scope renderer kinds (`CitingScan` / `LibraryIo`
@@ -560,14 +565,13 @@ pub async fn job_citing_scan_enqueue(
     center: State<'_, JobCenter>,
     args: JobVaultScopeEnqueueArgs,
 ) -> Result<ApiResult<JobSnapshot>, String> {
-    let vault = match crate::core::fs::resolve_vault(&args.vault_path) {
-        Ok(vault) => vault,
-        Err(err) => return Ok(map_err(err)),
-    };
-    let snapshot = center
-        .enqueue_citing_scan(&vault, parse_lane(args.lane), args.force, args.params)
-        .await;
-    Ok(ApiResult::ok(start_or_hold(&app, &center, snapshot).await))
+    let vault = try_vault_ok!(&args.vault_path);
+    Ok(start_enqueued(
+        &app,
+        &center,
+        center.enqueue_citing_scan(&vault, parse_lane(args.lane), args.force, args.params),
+    )
+    .await)
 }
 
 /// Enqueue a bibliography import / export (`params.op`); dialog-driven, so the
@@ -579,14 +583,13 @@ pub async fn job_library_io_enqueue(
     center: State<'_, JobCenter>,
     args: JobVaultScopeEnqueueArgs,
 ) -> Result<ApiResult<JobSnapshot>, String> {
-    let vault = match crate::core::fs::resolve_vault(&args.vault_path) {
-        Ok(vault) => vault,
-        Err(err) => return Ok(map_err(err)),
-    };
-    let snapshot = center
-        .enqueue_library_io(&vault, parse_lane(args.lane), args.force, args.params)
-        .await;
-    Ok(ApiResult::ok(start_or_hold(&app, &center, snapshot).await))
+    let vault = try_vault_ok!(&args.vault_path);
+    Ok(start_enqueued(
+        &app,
+        &center,
+        center.enqueue_library_io(&vault, parse_lane(args.lane), args.force, args.params),
+    )
+    .await)
 }
 
 /// Enqueue a bulk metadata refresh; `params.papers` (`[{ path, query }]`)
@@ -598,14 +601,13 @@ pub async fn job_metadata_refresh_enqueue(
     center: State<'_, JobCenter>,
     args: JobVaultScopeEnqueueArgs,
 ) -> Result<ApiResult<JobSnapshot>, String> {
-    let vault = match crate::core::fs::resolve_vault(&args.vault_path) {
-        Ok(vault) => vault,
-        Err(err) => return Ok(map_err(err)),
-    };
-    let snapshot = center
-        .enqueue_metadata_refresh(&vault, parse_lane(args.lane), args.force, args.params)
-        .await;
-    Ok(ApiResult::ok(start_or_hold(&app, &center, snapshot).await))
+    let vault = try_vault_ok!(&args.vault_path);
+    Ok(start_enqueued(
+        &app,
+        &center,
+        center.enqueue_metadata_refresh(&vault, parse_lane(args.lane), args.force, args.params),
+    )
+    .await)
 }
 
 #[derive(Debug, Deserialize, specta::Type)]
@@ -627,10 +629,12 @@ pub async fn job_model_download_enqueue(
     center: State<'_, JobCenter>,
     args: JobModelDownloadEnqueueArgs,
 ) -> Result<ApiResult<JobSnapshot>, String> {
-    let snapshot = center
-        .enqueue_model_download(parse_lane(args.lane), args.force)
-        .await;
-    Ok(ApiResult::ok(start_or_hold(&app, &center, snapshot).await))
+    Ok(start_enqueued(
+        &app,
+        &center,
+        center.enqueue_model_download(parse_lane(args.lane), args.force),
+    )
+    .await)
 }
 
 #[derive(Debug, Deserialize, specta::Type)]
@@ -656,10 +660,7 @@ pub async fn job_paper_assets_status(
     caps: State<'_, crate::features::paper::catalog::CapsCache>,
     args: JobPaperAssetsStatusArgs,
 ) -> Result<ApiResult<PaperAssetsStatus>, String> {
-    let (vault, path) = match validate_job_paper(&args.vault_path, &args.path) {
-        Ok(valid) => valid,
-        Err(e) => return Ok(map_err(e)),
-    };
+    let (vault, path) = try_job_paper!(args);
     let caps_handle = (*caps).clone();
     let status = match tauri::async_runtime::spawn_blocking(move || {
         let paper_caps = caps_handle.caps_for(&vault, &path);
@@ -688,10 +689,7 @@ pub async fn job_focus_paper(
     center: State<'_, JobCenter>,
     args: JobFocusPaperArgs,
 ) -> Result<ApiResult<Vec<JobSnapshot>>, String> {
-    let (vault, path) = match validate_job_paper(&args.vault_path, &args.path) {
-        Ok(valid) => valid,
-        Err(e) => return Ok(map_err(e)),
-    };
+    let (vault, path) = try_job_paper!(args);
     let promoted = center.promote_paper(&vault, &path).await;
     for snapshot in &promoted {
         emit_job_changed(&app, snapshot.clone());
@@ -926,10 +924,7 @@ pub async fn clear_and_reparse(
     caps: State<'_, crate::features::paper::catalog::CapsCache>,
     args: ClearParseResultsArgs,
 ) -> Result<ApiResult<ClearAndReparseResult>, String> {
-    let vault = match crate::core::fs::resolve_vault(&args.vault_path) {
-        Ok(vault) => vault,
-        Err(err) => return Ok(map_err(err)),
-    };
+    let vault = try_vault_ok!(&args.vault_path);
 
     let (papers_scanned, files_removed, affected_paths) =
         match clear_parse_results_core(&args.vault_path, args.scope, &caps, &app, &center).await {

@@ -4,6 +4,7 @@ use super::{
     last_result, probe_embedding_endpoint, recommend, ProbeEmbeddingResult, RecommendResult,
     ERR_NO_EMBEDDING,
 };
+use crate::app::command_util::try_vault;
 use crate::core::blocking::run_blocking;
 use crate::core::error::{map_err, ApiResult, AppError};
 use crate::features::system::settings::AppSettingsStore;
@@ -34,10 +35,7 @@ pub async fn recommend_arxiv(
     app: AppHandle,
     args: RecommendArxivArgs,
 ) -> ApiResult<RecommendResult> {
-    let vault = match crate::core::fs::resolve_vault(&args.vault_path) {
-        Ok(vault) => vault,
-        Err(e) => return map_err(e),
-    };
+    let vault = try_vault!(&args.vault_path);
     // Read managed state before awaiting: the guard must not cross an await.
     let embedding = app.state::<AppSettingsStore>().embedding_config();
     match recommend(&vault, args.categories, args.top_n, args.force, embedding).await {
@@ -59,10 +57,7 @@ pub async fn recommend_arxiv_last(
     args: RecommendArxivLastArgs,
 ) -> ApiResult<Option<RecommendResult>> {
     run_blocking(move || {
-        let vault = match crate::core::fs::resolve_vault(&args.vault_path) {
-            Ok(vault) => vault,
-            Err(e) => return map_err(e),
-        };
+        let vault = try_vault!(&args.vault_path);
         match last_result(&vault) {
             Ok(result) => ApiResult::ok(result),
             Err(e) => map_err(e),

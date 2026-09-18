@@ -4,6 +4,7 @@
 //! inside `run_blocking`, keeping the main thread (Windows UI message pump)
 //! free.
 
+use crate::app::command_util::try_vault;
 use crate::core::blocking::run_blocking;
 use crate::core::error::{map_err, ApiResult, AppError};
 use crate::core::fs::{ensure_vault_dir, resolve_paper_dir, resolve_vault};
@@ -32,10 +33,7 @@ pub struct PaperGetArgs {
 #[specta::specta]
 pub async fn paper_get(args: PaperGetArgs) -> ApiResult<PaperRecord> {
     run_blocking(move || {
-        let vault = match resolve_vault(&args.vault_path) {
-            Ok(vault) => vault,
-            Err(e) => return map_err(e),
-        };
+        let vault = try_vault!(&args.vault_path);
 
         let result = if let Some(path) = args
             .path
@@ -155,10 +153,7 @@ pub async fn paper_list(
 ) -> Result<ApiResult<Vec<PaperListRow>>, String> {
     let cache = cache.inner().clone();
     Ok(run_blocking(move || {
-        let vault = match resolve_vault(&args.vault_path) {
-            Ok(vault) => vault,
-            Err(e) => return map_err(e),
-        };
+        let vault = try_vault!(&args.vault_path);
         match papers::list_all_unique_by_id(&vault) {
             Ok(rows) => ApiResult::ok(
                 rows.into_iter()
@@ -189,10 +184,7 @@ pub struct PaperSetIsReadArgs {
 #[specta::specta]
 pub async fn paper_set_is_read(args: PaperSetIsReadArgs) -> ApiResult<PaperRecord> {
     run_blocking(move || {
-        let vault = match resolve_vault(&args.vault_path) {
-            Ok(vault) => vault,
-            Err(e) => return map_err(e),
-        };
+        let vault = try_vault!(&args.vault_path);
         let path = args.path.trim().trim_matches('/').replace('\\', "/");
         if path.is_empty() {
             return map_err(AppError::message("path is required"));
@@ -220,10 +212,7 @@ pub struct PaperUpdateMetaArgs {
 #[specta::specta]
 pub async fn paper_update_meta(args: PaperUpdateMetaArgs) -> ApiResult<PaperRecord> {
     run_blocking(move || {
-        let vault = match resolve_vault(&args.vault_path) {
-            Ok(vault) => vault,
-            Err(e) => return map_err(e),
-        };
+        let vault = try_vault!(&args.vault_path);
         let path = args.path.trim().trim_matches('/').replace('\\', "/");
         if path.is_empty() {
             return map_err(AppError::message("path is required"));
@@ -355,10 +344,7 @@ pub struct PaperSetTagsArgs {
 #[specta::specta]
 pub async fn paper_set_tags(args: PaperSetTagsArgs) -> ApiResult<PaperRecord> {
     run_blocking(move || {
-        let vault = match resolve_vault(&args.vault_path) {
-            Ok(vault) => vault,
-            Err(e) => return map_err(e),
-        };
+        let vault = try_vault!(&args.vault_path);
         let path = args.path.trim().trim_matches('/').replace('\\', "/");
         if path.is_empty() {
             return map_err(AppError::message("path is required"));
@@ -393,13 +379,7 @@ pub async fn paper_rescan(args: PaperRescanArgs) -> ApiResult<PaperRescanResult>
         use crate::core::log_util::OpTimer;
 
         let op = OpTimer::start("paper_rescan");
-        let vault = match resolve_vault(&args.vault_path) {
-            Ok(vault) => vault,
-            Err(err) => {
-                op.finish_err(&err);
-                return map_err(err);
-            }
-        };
+        let vault = try_vault!(&args.vault_path, op);
         match papers::rebuild_from_disk(&vault) {
             Ok(count) => {
                 op.finish_ok_extra(format!("count={count}"));
@@ -427,10 +407,7 @@ pub async fn paper_page_counts(
     args: PaperPageCountsArgs,
 ) -> ApiResult<std::collections::HashMap<String, i64>> {
     run_blocking(move || {
-        let vault = match resolve_vault(&args.vault_path) {
-            Ok(vault) => vault,
-            Err(e) => return map_err(e),
-        };
+        let vault = try_vault!(&args.vault_path);
         match papers::list_page_counts(&vault) {
             Ok(counts) => ApiResult::ok(counts),
             Err(e) => map_err(e),
@@ -462,13 +439,7 @@ pub async fn paper_reading_activity_batch(
             "paper_reading_activity_batch",
             format!("papers={}", args.paths.len()),
         );
-        let vault = match resolve_vault(&args.vault_path) {
-            Ok(vault) => vault,
-            Err(err) => {
-                op.finish_err(&err);
-                return map_err(err);
-            }
-        };
+        let vault = try_vault!(&args.vault_path, op);
         let out = reading_activity::collect_reading_activity(&vault, &args.paths);
         let points: usize = out.values().map(Vec::len).sum();
         op.finish_ok_extra(format!("points={points}"));
@@ -490,10 +461,7 @@ pub struct PaperSetPageCountsArgs {
 #[specta::specta]
 pub async fn paper_set_page_counts(args: PaperSetPageCountsArgs) -> ApiResult<()> {
     run_blocking(move || {
-        let vault = match resolve_vault(&args.vault_path) {
-            Ok(vault) => vault,
-            Err(e) => return map_err(e),
-        };
+        let vault = try_vault!(&args.vault_path);
         let counts: Vec<(String, i64)> = args
             .counts
             .into_iter()
@@ -621,10 +589,7 @@ pub struct PaperRepathResult {
 #[specta::specta]
 pub async fn paper_repath(args: PaperRepathArgs) -> ApiResult<PaperRepathResult> {
     run_blocking(move || {
-        let vault = match resolve_vault(&args.vault_path) {
-            Ok(vault) => vault,
-            Err(e) => return map_err(e),
-        };
+        let vault = try_vault!(&args.vault_path);
         match crate::features::paper::catalog::papers::move_under_path(
             &vault,
             &args.from_rel,

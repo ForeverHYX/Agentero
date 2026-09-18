@@ -1,3 +1,4 @@
+use crate::app::command_util::{lock_wiki_index, try_vault};
 use crate::core::blocking::run_blocking;
 use crate::core::error::{map_err, ApiResult, AppError};
 use crate::features::markdown::wiki::heading_rename::run_heading_rename_transaction;
@@ -34,13 +35,7 @@ pub async fn graph_get_backlinks(
 ) -> Result<ApiResult<BacklinksResponse>, String> {
     let index = index.handle();
     Ok(run_blocking(move || {
-        let mut guard = match index.lock() {
-            Ok(g) => g,
-            Err(e) => return map_err(AppError::message(format!("wiki index lock: {e}"))),
-        };
-        if let Err(e) = guard.ensure_vault(&vault_path) {
-            return map_err(AppError::message(e));
-        }
+        let guard = lock_wiki_index!(index, &vault_path);
         ApiResult::ok(guard.get_backlinks(&vault_path, &path))
     })
     .await)
@@ -57,13 +52,7 @@ pub async fn wiki_resolve(
 ) -> Result<ApiResult<WikiResolveResponse>, String> {
     let index = index.handle();
     Ok(run_blocking(move || {
-        let mut guard = match index.lock() {
-            Ok(g) => g,
-            Err(e) => return map_err(AppError::message(format!("wiki index lock: {e}"))),
-        };
-        if let Err(e) = guard.ensure_vault(&vault_path) {
-            return map_err(AppError::message(e));
-        }
+        let guard = lock_wiki_index!(index, &vault_path);
         ApiResult::ok(guard.resolve_text(
             &vault_path,
             &source_path,
@@ -85,13 +74,7 @@ pub async fn wiki_embed_read(
 ) -> Result<ApiResult<WikiEmbedResponse>, String> {
     let index = index.handle();
     Ok(run_blocking(move || {
-        let mut guard = match index.lock() {
-            Ok(g) => g,
-            Err(e) => return map_err(AppError::message(format!("wiki index lock: {e}"))),
-        };
-        if let Err(e) = guard.ensure_vault(&vault_path) {
-            return map_err(AppError::message(e));
-        }
+        let guard = lock_wiki_index!(index, &vault_path);
         match guard.read_embed(&vault_path, &source_path, &link_text) {
             Ok(response) => ApiResult::ok(response),
             Err(error) => map_err(AppError::message(error)),
@@ -111,13 +94,7 @@ pub async fn wiki_search(
 ) -> Result<ApiResult<Vec<WikiSearchCandidate>>, String> {
     let index = index.handle();
     Ok(run_blocking(move || {
-        let mut guard = match index.lock() {
-            Ok(g) => g,
-            Err(e) => return map_err(AppError::message(format!("wiki index lock: {e}"))),
-        };
-        if let Err(e) = guard.ensure_vault(&vault_path) {
-            return map_err(AppError::message(e));
-        }
+        let guard = lock_wiki_index!(index, &vault_path);
         ApiResult::ok(guard.search_scoped(&query, path.as_deref(), kind.as_ref()))
     })
     .await)
@@ -133,14 +110,8 @@ pub async fn wiki_rename_heading(
 ) -> Result<ApiResult<WikiRenameHeadingResult>, String> {
     let index = index.handle();
     Ok(run_blocking(move || {
-        let vault = match crate::core::fs::resolve_vault(&args.vault_path) {
-            Ok(vault) => vault,
-            Err(error) => return map_err(error),
-        };
-        let mut guard = match index.lock() {
-            Ok(guard) => guard,
-            Err(error) => return map_err(AppError::message(format!("wiki index lock: {error}"))),
-        };
+        let vault = try_vault!(&args.vault_path);
+        let mut guard = lock_wiki_index!(index);
         match run_heading_rename_transaction(
             &vault,
             &mut guard,
@@ -176,14 +147,7 @@ pub async fn graph_rebuild(
     let index = index.handle();
     Ok(run_blocking(move || {
         let op = OpTimer::start("graph_rebuild");
-        let mut guard = match index.lock() {
-            Ok(g) => g,
-            Err(e) => {
-                let err = AppError::message(format!("wiki index lock: {e}"));
-                op.finish_err(&err);
-                return map_err(err);
-            }
-        };
+        let mut guard = lock_wiki_index!(index; op);
         match guard.rebuild(&vault_path) {
             Ok(r) => {
                 op.finish_ok();
@@ -208,12 +172,7 @@ pub async fn wiki_cache_rebuild(
 ) -> Result<ApiResult<RebuildResult>, String> {
     let index = index.handle();
     Ok(run_blocking(move || {
-        let mut guard = match index.lock() {
-            Ok(guard) => guard,
-            Err(error) => {
-                return map_err(AppError::message(format!("wiki index lock: {error}")));
-            }
-        };
+        let mut guard = lock_wiki_index!(index);
         match guard.rebuild_fresh(&vault_path) {
             Ok(result) => ApiResult::ok(result),
             Err(error) => map_err(AppError::message(error)),

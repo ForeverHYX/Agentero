@@ -320,8 +320,10 @@ pub fn apply_visual_mark_repairs(
     dirty_paths: &[String],
 ) -> Result<VisualMarkRepairResult, AppError> {
     crate::fs::ensure_vault_dir(vault)?;
-    let dirty: std::collections::HashSet<String> =
-        dirty_paths.iter().map(|p| normalize_rel_separators(p)).collect();
+    let dirty: std::collections::HashSet<String> = dirty_paths
+        .iter()
+        .map(|p| normalize_rel_separators(p))
+        .collect();
     let mut updated = Vec::new();
     for change in changes {
         let rel = normalize_rel_separators(&change.path);

@@ -1,3 +1,4 @@
+use crate::app::command_util::try_vault;
 use crate::core::blocking::run_blocking;
 use crate::core::error::{map_err, ApiResult, AppError};
 use crate::core::log_util::{trunc, OpTimer};
@@ -68,13 +69,7 @@ pub async fn vault_tree_build(
             "vault_tree_build",
             format!("vault={}", trunc(&vault_path, 200)),
         );
-        let root = match crate::core::fs::resolve_vault(&vault_path) {
-            Ok(root) => root,
-            Err(err) => {
-                op.finish_err(&err);
-                return map_err(err);
-            }
-        };
+        let root = try_vault!(&vault_path, op);
         op.finish_result(Ok(tree::build_tree(&root, &caps)))
     })
     .await)

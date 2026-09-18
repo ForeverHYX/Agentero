@@ -25,10 +25,6 @@
 		"thinking": "Thinking...",
 		"thought": "Thought process"
 	},
-	"sources": {
-		"used_one": "Used {{count}} source",
-		"used_other": "Used {{count}} sources"
-	},
 	"conversation": {
 		"empty": {
 			"title": "No messages yet",
@@ -40,17 +36,8 @@
 		"nextBranch": "Next branch",
 		"branchIndicator": "{{current}} of {{total}}"
 	},
-	"inlineCitation": {
-		"previous": "Previous",
-		"next": "Next",
-		"unknown": "unknown"
-	},
 	"attachments": {
-		"source": "Source",
-		"image": "Image",
-		"attachment": "Attachment",
-		"remove": "Remove",
-		"empty": "No attachments"
+		"remove": "Remove"
 	},
 	"modelSelector": {
 		"label": "Model Selector",

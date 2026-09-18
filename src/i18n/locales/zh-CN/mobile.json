@@ -16,9 +16,7 @@
 		"cancel": "取消",
 		"cameraHint": "将相机对准电脑上的配对二维码。",
 		"cameraUnavailable": "无法使用相机，请改为粘贴配对链接。",
-		"offline": "电脑离线",
 		"pending": "请在电脑上确认验证码",
-		"code": "确认码",
 		"progress": {
 			"relayConnecting": "正在连接中转服务器…",
 			"e2eeHandshake": "正在建立加密连接…",
@@ -28,7 +26,6 @@
 		}
 	},
 	"library": {
-		"title": "论文库",
 		"search": "搜索论文",
 		"loading": "正在加载论文…",
 		"empty": "暂无论文"
@@ -47,7 +44,6 @@
 	"agent": {
 		"title": "Agent",
 		"placeholder": "向 Agent 提问",
-		"send": "发送",
 		"empty": "开始一段对话",
 		"thinking": "思考中...",
 		"starting": "启动 Agent 中…",
@@ -62,20 +58,14 @@
 		"restoring": "正在恢复会话…"
 	},
 	"settings": {
-		"title": "连接",
 		"menu": "打开菜单",
 		"closeMenu": "关闭菜单",
 		"connected": "已连接",
 		"offline": "离线",
-		"addDesktop": "连接另一台电脑",
 		"addDevice": "添加设备",
-		"disconnect": "断开连接",
-		"computer": "电脑",
-		"vault": "知识库",
-		"vaults": "知识库"
+		"disconnect": "断开连接"
 	},
 	"errors": {
-		"load": "无法加载远程数据",
 		"connect": "无法连接",
 		"networkPermission": "iOS 阻止了 Agentero 的网络访问。请在「设置 > Agentero > 无线数据」中选择「WLAN 与蜂窝数据」，然后重试。"
 	}

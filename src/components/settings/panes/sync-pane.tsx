@@ -119,7 +119,7 @@ const SYNC_PROVIDER_LINKS: SyncProviderLink[] = [
 const WEBDAV_PROVIDER_LINKS: SyncProviderLink[] = [
 	{
 		id: "jianguoyun",
-		name: "坚果云",
+		name: "Jianguoyun",
 		docsUrl: "https://help.jianguoyun.com/?p=2064",
 		icon: Cloud,
 		iconClassName: "text-[#2E7CF6]",

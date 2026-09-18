@@ -16,9 +16,7 @@
 		"cancel": "Cancel",
 		"cameraHint": "Point the camera at the pairing code on your computer.",
 		"cameraUnavailable": "Camera access is unavailable. Paste the pairing link instead.",
-		"offline": "Desktop offline",
 		"pending": "Confirm the code on your desktop",
-		"code": "Confirmation code",
 		"progress": {
 			"relayConnecting": "Connecting to relay…",
 			"e2eeHandshake": "Securing the connection…",
@@ -28,7 +26,6 @@
 		}
 	},
 	"library": {
-		"title": "Library",
 		"search": "Search papers",
 		"loading": "Loading papers…",
 		"empty": "No papers"
@@ -47,7 +44,6 @@
 	"agent": {
 		"title": "Agent",
 		"placeholder": "Ask about your research",
-		"send": "Send",
 		"empty": "Start a conversation",
 		"thinking": "Thinking...",
 		"starting": "Starting agent…",
@@ -62,20 +58,14 @@
 		"restoring": "Restoring session…"
 	},
 	"settings": {
-		"title": "Connection",
 		"menu": "Open menu",
 		"closeMenu": "Close menu",
 		"connected": "Connected",
 		"offline": "Offline",
-		"addDesktop": "Connect another desktop",
 		"addDevice": "Add device",
-		"disconnect": "Disconnect",
-		"computer": "Computer",
-		"vault": "Vault",
-		"vaults": "Vaults"
+		"disconnect": "Disconnect"
 	},
 	"errors": {
-		"load": "Could not load remote data",
 		"connect": "Could not connect",
 		"networkPermission": "iOS is blocking network access for Agentero. Open Settings > Agentero and allow Wireless Data (WLAN & Cellular), then try again."
 	}

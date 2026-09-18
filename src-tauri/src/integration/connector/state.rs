@@ -355,7 +355,7 @@ impl ConnectorController {
                 .await
                 .map_err(|e| {
                     if e.kind() == std::io::ErrorKind::AddrInUse {
-                        AppError::message("请先退出本地Zotero".to_string())
+                        AppError::message("Please quit the local Zotero app first".to_string())
                     } else {
                         AppError::message(format!("Failed to bind 127.0.0.1:{port}: {e}"))
                     }

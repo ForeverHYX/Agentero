@@ -20,11 +20,6 @@
 			"rejectAlways": "Always reject"
 		}
 	},
-	"elicitation": {
-		"title": "Agent needs your input",
-		"submit": "Submit answers",
-		"cancel": "Cancel"
-	},
 	"missing": " (missing)",
 	"switchAgent": "Switch ACP agent",
 	"configBar": {
@@ -43,8 +38,6 @@
 		"description": "Recent ACP sessions in this chat.",
 		"empty": "No sessions yet.",
 		"restoring": "Restoring session…",
-		"includeExternal": "External",
-		"includeExternalToggle": "Include all sessions",
 		"status": {
 			"running": "Running",
 			"completed": "Completed",
@@ -63,7 +56,6 @@
 	},
 	"composer": {
 		"placeholder": "How can I help you today?",
-		"interruptHint": "Press Esc to interrupt",
 		"queueLabel": "Queued",
 		"queueRemove": "Remove from queue",
 		"contextInstruction": "Read these Vault files before answering when relevant:",
@@ -162,7 +154,6 @@
 		"expand": "Expand questionnaire"
 	},
 	"citation": {
-		"vaultPath": "Vault path referenced by agent",
 		"resolveFailed": "Could not open citation: {{source}}",
 		"figureNotFound": "Figure not found: {{source}}",
 		"sectionNotFound": "Section not found: {{source}}",
@@ -180,11 +171,9 @@
 		"addToFavorites": "Add to favorites",
 		"removeFromFavorites": "Remove from favorites",
 		"selectTooltip": "Select model (ACP)",
-		"reportedTooltip": "Models appear after your agent reports them",
 		"customOrReportedTooltip": "Search or type a custom model id (third-party / gateway)",
 		"loading": "Loading…",
 		"button": "Model",
-		"searchPlaceholder": "Search models…",
 		"searchOrCustomPlaceholder": "Search or type a model id…",
 		"customGroup": "Custom",
 		"useCustom": "Use “{{id}}”",

@@ -13,7 +13,6 @@
 		"copyPathFailed": "Could not copy path",
 		"downloadAssets": "Download paper assets",
 		"downloadAllMissing": "Download all incomplete paper assets",
-		"downloadFailed": "Failed to download paper assets.",
 		"downloadReason": {
 			"noPdf": "Missing PDF",
 			"noBody": "Missing TeX and PAPER.md (either is enough; TeX preferred)"
@@ -203,11 +202,6 @@
 			"add": "Add subscription",
 			"urlPlaceholder": "Feed URL",
 			"all": "All",
-			"filter": {
-				"all": "All",
-				"paper": "Papers",
-				"other": "Other"
-			},
 			"refresh": "Refresh",
 			"refreshOne": "Refresh now",
 			"rename": "Rename",
@@ -255,10 +249,6 @@
 			}
 		}
 	},
-	"connector": {
-		"saved": "Saved “{{title}}” from browser",
-		"deduped": "Already in library: “{{title}}”"
-	},
 	"zoteroMigrate": {
 		"button": "Migrate from Zotero",
 		"title": "Migrate from Zotero",
@@ -279,7 +269,6 @@
 		"allFolders": "All folders",
 		"selectedCount": "{{sel}} / {{total}} selected",
 		"progressLabel": "Migrating {{current}} / {{total}}",
-		"parseProgressLabel": "Parsing PDFs {{current}} / {{total}}",
 		"copyPdfs": "Copy PDFs into the vault",
 		"migrateNotes": "Migrate Zotero notes",
 		"migrateAnnotations": "Migrate PDF annotations",
@@ -340,7 +329,6 @@
 		"fetchFailed": "Failed to fetch metadata.",
 		"needsVault": "Open a vault first.",
 		"batchEmpty": "No valid identifiers found.",
-		"batchSummary": "Imported {{imported}} papers and {{skills}} skills, skipped {{skipped}}, failed {{failed}}",
 		"skillImportTitle": "Choose Skills to install",
 		"skillImportCancel": "Cancel",
 		"skillImportConfirm": "Install {{count}}",

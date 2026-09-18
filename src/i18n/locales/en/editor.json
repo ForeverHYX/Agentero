@@ -165,7 +165,6 @@
 		"title": "Properties",
 		"yamlLabel": "YAML frontmatter",
 		"placeholder": "aliases:\n  - Full paper title\n  - Short title",
-		"hint": "Obsidian-compatible YAML. aliases help wikilink search find this note by title.",
 		"sourceMode": "Edit as YAML source",
 		"formMode": "Edit as form",
 		"sourceOnly": "Complex YAML — source only",

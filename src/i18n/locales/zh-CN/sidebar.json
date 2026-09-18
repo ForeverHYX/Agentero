@@ -13,7 +13,6 @@
 		"copyPathFailed": "无法复制路径",
 		"downloadAssets": "下载论文资源",
 		"downloadAllMissing": "下载全部不完整的论文资源",
-		"downloadFailed": "下载论文资源失败。",
 		"downloadReason": {
 			"noPdf": "缺少 PDF",
 			"noBody": "缺少 TeX 与 PAPER.md（有其一即可，优先 TeX）"
@@ -203,11 +202,6 @@
 			"add": "添加订阅",
 			"urlPlaceholder": "Feed URL",
 			"all": "全部",
-			"filter": {
-				"all": "全部",
-				"paper": "论文",
-				"other": "其它"
-			},
 			"refresh": "刷新",
 			"refreshOne": "立即刷新",
 			"rename": "重命名",
@@ -255,10 +249,6 @@
 			}
 		}
 	},
-	"connector": {
-		"saved": "已从浏览器保存「{{title}}」",
-		"deduped": "库中已有：「{{title}}」"
-	},
 	"zoteroMigrate": {
 		"button": "从 Zotero 迁移",
 		"title": "从 Zotero 迁移",
@@ -279,7 +269,6 @@
 		"allFolders": "全部文件夹",
 		"selectedCount": "已选 {{sel}} / {{total}}",
 		"progressLabel": "迁移中 {{current}} / {{total}}",
-		"parseProgressLabel": "正在解析 PDF {{current}} / {{total}}",
 		"copyPdfs": "把 PDF 复制进知识库",
 		"migrateNotes": "迁移 Zotero 笔记",
 		"migrateAnnotations": "迁移 PDF 高亮批注",
@@ -340,7 +329,6 @@
 		"fetchFailed": "获取元数据失败。",
 		"needsVault": "请先打开知识库。",
 		"batchEmpty": "未识别到有效标识符。",
-		"batchSummary": "已导入 {{imported}} 篇论文、{{skills}} 个 Skill，跳过 {{skipped}} 条，失败 {{failed}} 条",
 		"skillImportTitle": "选择要安装的 Skill",
 		"skillImportCancel": "取消",
 		"skillImportConfirm": "安装 {{count}} 个",

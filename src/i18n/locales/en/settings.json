@@ -25,7 +25,6 @@
 			"label": "Computer name"
 		},
 		"status": {
-			"label": "Relay status",
 			"online": "Online",
 			"offline": "Offline"
 		},
@@ -147,8 +146,7 @@
 				"copyCommand": "Copy install command",
 				"copied": "Copied",
 				"openTunnels": "Open tunnels",
-				"openApiKeys": "Open API keys",
-				"mcpOff": "Turn on the MCP server first."
+				"openApiKeys": "Open API keys"
 			}
 		},
 		"export": {
@@ -230,9 +228,6 @@
 	},
 	"agent": {
 		"title": "Agent",
-		"proxy": {
-			"label": "Agent proxy"
-		},
 		"userAgent": {
 			"section": "Relay compatibility",
 			"label": "User-Agent",
@@ -284,7 +279,6 @@
 		"probe": "Refresh",
 		"probing": "Probing…",
 		"scanning": "Scanning…",
-		"useDefault": "Use default",
 		"installAgent": "Install",
 		"installAgentAria": "Install {{name}} agent CLI",
 		"installAgentTitle": "Install agent CLI",
@@ -312,12 +306,9 @@
 		"removeSuccess": "Removed {{name}}",
 		"badges": {
 			"default": "default",
-			"installed": "installed",
-			"notInstalled": "not installed",
 			"agentInstalled": "Agent installed",
 			"agentMissing": "No agent",
-			"acpMissing": "No ACP",
-			"adapterMissing": "ACP adapter missing"
+			"acpMissing": "No ACP"
 		},
 		"permission": {
 			"label": "Permission mode",
@@ -380,7 +371,6 @@
 			"probeTitle": "Rescan & probe remote agents",
 			"empty": "No catalog results. Check the SSH session and remote PATH.",
 			"hint": "Refresh runs command -v then ACP initialize over SSH. If Claude shows “ACP adapter missing”, use Install ACP (opens Terminal → Enter → SSH install on the server). API keys stay on the remote machine (BYOA). If probe times out, enable Agent proxy (must be reachable from the server).",
-			"proxyHint": "Same proxy as local Agent settings. Injected as HTTP(S)_PROXY on the remote process — the URL must be reachable from the server (e.g. a proxy on the server, not only on this Mac).",
 			"installAdapterAria": "Install ACP adapter for {{name}} on remote host via Terminal",
 			"installAdapterTitle": "Open Terminal, then SSH to {{host}} and run: {{command}} (press Enter to confirm)"
 		}
@@ -608,7 +598,6 @@
 		"agent": {
 			"probing": "Probing agents…",
 			"none": "No Agents registered yet.",
-			"ready": "Ready",
 			"locationMissing": "Not found",
 			"authLabel": "Sign-in",
 			"authStatus": {
@@ -706,15 +695,10 @@
 			"clearFailed": "Couldn't clear logs."
 		},
 		"update": {
-			"idle": "Check for the latest Agentero release",
-			"unsupported": "Updates are available in installed desktop builds",
-			"checking": "Checking for updates...",
-			"upToDate": "You're up to date",
 			"available": "Version {{version}} is ready",
 			"downloading": "Downloading update...",
 			"downloadingProgress": "Downloading update: {{progress}}%",
 			"installing": "Installing update and restarting...",
-			"checkFailed": "Couldn't check for updates. Check your network or proxy settings",
 			"installFailed": "Couldn't install the update. Try again",
 			"check": "Check for updates",
 			"downloadInstall": "Install and restart",
@@ -765,11 +749,6 @@
 			"uninstallSuccess": "Finder Quick Action removed",
 			"installFailed": "Could not install the Finder Quick Action",
 			"uninstallFailed": "Could not remove the Finder Quick Action"
-		},
-		"onboarding": {
-			"label": "First-run setup",
-			"description": "Replay the theme, agent and translation setup wizard in the main window",
-			"reopen": "Reopen setup wizard"
 		}
 	},
 	"sync": {

@@ -1,17 +1,10 @@
 {
-	"mode": {
-		"pdf": "PDF",
-		"html": "HTML"
-	},
-	"centerPaneView": "Center pane view",
 	"unavailable": "{{label}} unavailable",
 	"pdf": {
 		"empty": "No paper available.",
 		"loading": "Loading PDF…",
 		"loadError": "Failed to load PDF",
 		"zoomPercentage": "Zoom percentage",
-		"prevPage": "Previous page",
-		"nextPage": "Next page",
 		"goToPage": "Go to page",
 		"outline": "Outline",
 		"linkAria": "PDF link",
@@ -31,25 +24,9 @@
 		"findClose": "Close find",
 		"findNoResults": "No results",
 		"layout": {
-			"analyze": "Detect figures, tables, and formulas",
 			"unavailable": "Layout analysis is not ready yet.",
-			"running": "Analyzing layout…",
 			"preparingModel": "Preparing layout model…",
-			"downloading": "Downloading layout model… {{pct}}%",
-			"loadingModel": "Loading layout model… {{pct}}%",
-			"creatingSession": "Initializing layout model…",
-			"rendering": "Rendering page {{page}}…",
-			"detecting": "Detecting layout on page {{page}}…",
-			"mapping": "Mapping coordinates on page {{page}}…",
-			"tableStructure": "Table structure page {{page}} ({{index}}/{{total}})…",
-			"pageComplete": "Layout page {{completed}}/{{total}}",
-			"done": "Layout ready — {{summary}}",
-			"failed": "Layout analysis failed",
-			"cancelled": "Layout analysis cancelled",
-			"rerunHint": "Re-run layout analysis. Last: {{summary}}",
-			"toggleOverlay": "Toggle layout boxes",
-			"showOverlay": "Show layout boxes",
-			"hideOverlay": "Hide layout boxes"
+			"failed": "Layout analysis failed"
 		},
 		"layoutTranslate": {
 			"start": "Full-text translate",
@@ -71,9 +48,7 @@
 		},
 		"translation": {
 			"title": "Translation",
-			"tabTitle": "Translation – {{title}}",
-			"noPaper": "Open a paper to see its rendered translation.",
-			"empty": "No rendered translation yet. Run full-text translate in the PDF viewer first."
+			"tabTitle": "Translation – {{title}}"
 		}
 	},
 	"pdfAsk": {
@@ -97,43 +72,22 @@
 		"selectRegion": "Add visual annotation",
 		"cancelRegion": "Cancel region selection",
 		"regionSelectionLabel": "Select a visual region on page {{page}}",
-		"formulaQuestion": "Explain this formula or technical expression.",
-		"figureQuestion": "Explain this figure, chart, table, or visual region.",
 		"cropFailed": "Could not capture the selected PDF region.",
 		"cropping": "Capturing region…",
-		"annotationEditorLabel": "Annotation note",
-		"annotationPlaceholder": "Write a note…",
-		"annotationSave": "Save",
-		"annotationSendNow": "Ask agent",
-		"annotationCancel": "Cancel",
-		"annotationShortcuts": "Enter saves note · ⌘/Ctrl+Enter asks agent",
-		"annotationPage": "Page {{page}}",
 		"annotationPreviewAlt": "Cropped region from page {{page}}",
 		"visualAnnotation": "Visual annotation",
 		"addToSidebarChat": "Add to sidebar chat",
-		"switchToNote": "Edit note",
-		"switchToChat": "Show conversation",
 		"tracePinAria": "Open visual annotation: {{preview}}",
 		"traceCardTitle": "Visual chat",
-		"traceAnnotationCount": "{{count}} regions",
-		"traceOpenSession": "Open in Agent",
 		"traceDelete": "Delete",
 		"traceHide": "Hide",
-		"traceContinuePlaceholder": "Continue this conversation…",
-		"traceEmptyMessages": "No messages yet. Type below to ask about this region.",
-		"traceThinking": "Thinking…",
-		"traceSend": "Send",
-		"traceStop": "Stop",
-		"traceSessionUnavailable": "This annotation session is not ready yet."
+		"traceEmptyMessages": "No messages yet. Type below to ask about this region."
 	},
 	"annotations": {
 		"title": "Annotations",
 		"pageLabel": "Page {{page}}",
 		"empty": "No asks or visual annotations yet. Select text to ask, or add a visual annotation in the PDF.",
 		"placeholder": "Write a note…",
-		"save": "Save",
-		"cancel": "Cancel",
-		"close": "Close",
 		"delete": "Delete",
 		"deleteAsk": "Delete conversation",
 		"deleteVisual": "Delete visual annotation",
@@ -143,7 +97,6 @@
 		"sectionAsks": "Conversations",
 		"sectionVisual": "Visual annotations",
 		"askTurns": "{{count}} messages",
-		"visualRegions": "{{count}} regions",
 		"copyLink": "Copy wikilink",
 		"copyEmbed": "Copy embed",
 		"linkCopied": "Wikilink copied",
@@ -218,8 +171,6 @@
 		"overlayLabel": "{{kind}} {{pct}}%",
 		"page": "p.{{page}}",
 		"thumbPending": "Loading…",
-		"confidence": "{{pct}}%",
-		"confidenceHint": "Model confidence (0–100%). Higher means the detector is more sure this region is a figure, table, algorithm, or formula. Overlapping duplicates are removed automatically.",
 		"toggleOverlay": "Toggle raw layout detections ≥30% on PDF (debug)",
 		"showOverlay": "Show raw layout detections ≥30% on PDF (debug)",
 		"hideOverlay": "Hide raw layout detections on PDF"
@@ -234,12 +185,10 @@
 			"pink": "Pink",
 			"purple": "Purple"
 		},
-		"copy": "Copy",
 		"copied": "Copied",
 		"note": "Annotate",
 		"ask": "Ask",
 		"quickChat": "Quick chat",
-		"explainVisual": "Explain formula or selection",
 		"addToChat": "Add to chat",
 		"translate": "Translate",
 		"removeHighlight": "Remove highlight",
@@ -261,9 +210,6 @@
 	"image": {
 		"empty": "No image available.",
 		"altFallback": "Image preview"
-	},
-	"excalidraw": {
-		"empty": "No drawing available."
 	},
 	"textEditor": {
 		"errorCount": "{{count}} errors",

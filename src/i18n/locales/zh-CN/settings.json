@@ -25,7 +25,6 @@
 			"label": "电脑名称"
 		},
 		"status": {
-			"label": "Relay 状态",
 			"online": "在线",
 			"offline": "离线"
 		},
@@ -147,8 +146,7 @@
 				"copyCommand": "复制安装命令",
 				"copied": "已复制",
 				"openTunnels": "打开隧道列表",
-				"openApiKeys": "打开 API Key 页面",
-				"mcpOff": "请先打开 MCP 服务器开关。"
+				"openApiKeys": "打开 API Key 页面"
 			}
 		},
 		"export": {
@@ -230,9 +228,6 @@
 	},
 	"agent": {
 		"title": "Agent",
-		"proxy": {
-			"label": "Agent 代理"
-		},
 		"userAgent": {
 			"section": "中转站兼容",
 			"label": "User-Agent",
@@ -284,7 +279,6 @@
 		"probe": "刷新",
 		"probing": "探测中…",
 		"scanning": "扫描中…",
-		"useDefault": "设为默认",
 		"installAgent": "安装",
 		"installAgentAria": "安装 {{name}} Agent CLI",
 		"installAgentTitle": "安装 Agent CLI",
@@ -312,12 +306,9 @@
 		"removeSuccess": "已移除 {{name}}",
 		"badges": {
 			"default": "默认",
-			"installed": "已安装",
-			"notInstalled": "未安装",
 			"agentInstalled": "Agent 已安装",
 			"agentMissing": "无 Agent",
-			"acpMissing": "无 ACP",
-			"adapterMissing": "缺 ACP 适配器"
+			"acpMissing": "无 ACP"
 		},
 		"permission": {
 			"label": "权限模式",
@@ -380,7 +371,6 @@
 			"probeTitle": "重新扫描并探测远端 Agent",
 			"empty": "没有目录结果。请检查 SSH 会话与远端 PATH。",
 			"hint": "刷新会经 SSH 执行 command -v 与 ACP initialize。若 Claude 显示「ACP adapter missing」，点「Install ACP」（打开终端 → Enter → 经 SSH 在服务器安装）。密钥留在远端（BYOA）。若探测超时，可开启 Agent 代理（代理需从服务器可达）。",
-			"proxyHint": "与本地 Agent 设置共用同一代理。会以 HTTP(S)_PROXY 注入远端进程——地址必须从服务器可达（例如服务器上的代理，而非仅本机 127.0.0.1）。",
 			"installAdapterAria": "在终端中经 SSH 为 {{name}} 安装远端 ACP 适配器",
 			"installAdapterTitle": "打开终端，SSH 到 {{host}} 并执行：{{command}}（按 Enter 确认）"
 		}
@@ -608,7 +598,6 @@
 		"agent": {
 			"probing": "正在探测 Agent…",
 			"none": "尚未注册 Agent。",
-			"ready": "可用",
 			"locationMissing": "未找到",
 			"authLabel": "登录",
 			"authStatus": {
@@ -706,15 +695,10 @@
 			"clearFailed": "无法清理日志。"
 		},
 		"update": {
-			"idle": "检查 Agentero 是否有新版本",
-			"unsupported": "已安装的桌面应用可使用自动更新",
-			"checking": "正在检查更新...",
-			"upToDate": "当前已是最新版本",
 			"available": "版本 {{version}} 已可用",
 			"downloading": "正在下载更新...",
 			"downloadingProgress": "正在下载更新：{{progress}}%",
 			"installing": "正在安装更新并重启...",
-			"checkFailed": "无法检查更新，请检查网络或代理设置",
 			"installFailed": "无法安装更新，请重试",
 			"check": "检查更新",
 			"downloadInstall": "安装并重启",
@@ -765,11 +749,6 @@
 			"uninstallSuccess": "已移除访达快捷操作",
 			"installFailed": "无法安装访达快捷操作",
 			"uninstallFailed": "无法移除访达快捷操作"
-		},
-		"onboarding": {
-			"label": "首次运行引导",
-			"description": "在主窗口重放主题、Agent 与翻译的设置向导",
-			"reopen": "重新打开引导向导"
 		}
 	},
 	"sync": {

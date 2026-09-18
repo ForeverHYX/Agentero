@@ -131,6 +131,12 @@ export const MessageResponse = memo(
 				: children;
 		return (
 			<Streamdown
+				// Streamdown's default `mode="streaming"` runs `remend` on every
+				// render. remend truncates a TeX `<` comparison (`x_{<n}`) as an
+				// unclosed HTML tag, so KaTeX gets `…x_{` and fails (#584). That
+				// repair only makes sense while text is still arriving; settled
+				// messages render statically with the math source intact.
+				mode={props.isAnimating ? "streaming" : "static"}
 				className={cn(
 					// Keep the renderer's height content-driven. `size-full` sets
 					// height: 100%, which can clip later blocks in auto-sized embeds.

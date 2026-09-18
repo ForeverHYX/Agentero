@@ -145,7 +145,7 @@ fn emit_run_failed(app: &AgentEventEmitter, session_id: &str, error: &impl std::
 
 /// Prompt-assembly phase: resolve skill instructions, template the prompt, and
 /// pick the working directory. Emits `agent:failed` and errors when a selected
-/// local skill cannot be loaded.
+/// local skill cannot be loaded or the spawn cwd cannot be resolved.
 async fn prepare_run_turn(params: &RunOnceParams) -> Result<RunTurnPrep, AppError> {
     let skill_style = skill_mention_style(&params.desc.template);
     let skill_instructions = if params.is_acp_command {
@@ -195,7 +195,13 @@ async fn prepare_run_turn(params: &RunOnceParams) -> Result<RunTurnPrep, AppErro
         )
     };
     let prompt_images = params.images.clone();
-    let cwd = agent_spawn_cwd(params.remote.as_deref(), params.vault_path.as_deref())?;
+    let cwd = match agent_spawn_cwd(params.remote.as_deref(), params.vault_path.as_deref()) {
+        Ok(cwd) => cwd,
+        Err(error) => {
+            emit_run_failed(&params.app, &params.session_id, &error);
+            return Err(error);
+        }
+    };
     Ok(RunTurnPrep {
         full_prompt,
         prompt_images,

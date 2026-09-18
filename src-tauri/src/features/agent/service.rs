@@ -319,7 +319,13 @@ pub async fn list_sessions(
             return Err(e);
         }
     };
-    let cwd = agent_spawn_cwd(remote_target.as_deref(), vault_path.as_deref())?;
+    let cwd = match agent_spawn_cwd(remote_target.as_deref(), vault_path.as_deref()) {
+        Ok(cwd) => cwd,
+        Err(error) => {
+            op.finish_err(&error);
+            return Err(error);
+        }
+    };
     match list_acp_sessions(&desc, cwd, cursor, remote_target.as_deref()).await {
         Ok(result) => {
             warm_gate.clear(&desc.id);

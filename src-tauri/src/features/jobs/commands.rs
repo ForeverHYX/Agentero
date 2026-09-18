@@ -81,6 +81,39 @@ async fn start_or_hold(
     snapshot
 }
 
+/// While metadata recognition is queued or running for a paper, non-forced
+/// parse / layout enqueues are deferred: recognition may rename the paper
+/// folder, and the recognize runner re-orchestrates those jobs against the
+/// final path once it lands. Returns the skipped snapshot to surface, or None
+/// when the enqueue may proceed.
+async fn deferred_if_recognizing(
+    center: &JobCenter,
+    vault: &Path,
+    path: &str,
+    kind: JobKind,
+    lane: JobLane,
+    force: bool,
+) -> Option<JobSnapshot> {
+    if force
+        || !center
+            .has_active_job_of_kind(vault, path, JobKind::RecognizeMetadata)
+            .await
+    {
+        return None;
+    }
+    log::info!(
+        target: "agentero::jobs",
+        "{kind:?} enqueue deferred on paper {path}: RecognizeMetadata is active"
+    );
+    Some(JobSnapshot::skipped(
+        kind,
+        vault.to_string_lossy().to_string(),
+        Some(path.to_string()),
+        lane,
+        "deferred: recognition active",
+    ))
+}
+
 #[tauri::command]
 #[specta::specta]
 pub async fn job_parse_refs_enqueue(
@@ -92,22 +125,16 @@ pub async fn job_parse_refs_enqueue(
         Ok(valid) => valid,
         Err(e) => return Ok(map_err(e)),
     };
-    if !args.force
-        && center
-            .has_active_job_of_kind(&vault, &path, JobKind::RecognizeMetadata)
-            .await
+    if let Some(snapshot) = deferred_if_recognizing(
+        &center,
+        &vault,
+        &path,
+        JobKind::ParseRefs,
+        parse_lane(args.lane),
+        args.force,
+    )
+    .await
     {
-        log::info!(
-            target: "agentero::jobs",
-            "parse refs enqueue deferred on paper {path}: RecognizeMetadata is active"
-        );
-        let snapshot = JobSnapshot::skipped(
-            JobKind::ParseRefs,
-            vault.to_string_lossy().to_string(),
-            Some(path),
-            parse_lane(args.lane),
-            "deferred: recognition active",
-        );
         return Ok(ApiResult::ok(snapshot));
     }
     let snapshot = center
@@ -127,22 +154,16 @@ pub async fn job_parse_body_enqueue(
         Ok(valid) => valid,
         Err(e) => return Ok(map_err(e)),
     };
-    if !args.force
-        && center
-            .has_active_job_of_kind(&vault, &path, JobKind::RecognizeMetadata)
-            .await
+    if let Some(snapshot) = deferred_if_recognizing(
+        &center,
+        &vault,
+        &path,
+        JobKind::ParseBody,
+        parse_lane(args.lane),
+        args.force,
+    )
+    .await
     {
-        log::info!(
-            target: "agentero::jobs",
-            "parse body enqueue deferred on paper {path}: RecognizeMetadata is active"
-        );
-        let snapshot = JobSnapshot::skipped(
-            JobKind::ParseBody,
-            vault.to_string_lossy().to_string(),
-            Some(path),
-            parse_lane(args.lane),
-            "deferred: recognition active",
-        );
         return Ok(ApiResult::ok(snapshot));
     }
     let snapshot = center
@@ -196,14 +217,19 @@ pub async fn job_reconcile_paper(
         Ok(valid) => valid,
         Err(e) => return Ok(map_err(e)),
     };
-    if center
-        .has_active_job_of_kind(&vault, &path, JobKind::RecognizeMetadata)
-        .await
+    // Reconcile defers unconditionally: the recognize runner orchestrates the
+    // same backfills against the post-rename path when recognition lands.
+    if deferred_if_recognizing(
+        &center,
+        &vault,
+        &path,
+        JobKind::ParseBody,
+        JobLane::Normal,
+        false,
+    )
+    .await
+    .is_some()
     {
-        log::info!(
-            target: "agentero::jobs",
-            "reconcile paper deferred on {path}: RecognizeMetadata is active, will orchestrate parse after rename"
-        );
         return Ok(ApiResult::ok(Vec::new()));
     }
     let paper_caps = caps.caps_for(&vault, &path);
@@ -330,22 +356,16 @@ pub async fn job_layout_analyze_enqueue(
         Ok(valid) => valid,
         Err(e) => return Ok(map_err(e)),
     };
-    if !args.force
-        && center
-            .has_active_job_of_kind(&vault, &path, JobKind::RecognizeMetadata)
-            .await
+    if let Some(snapshot) = deferred_if_recognizing(
+        &center,
+        &vault,
+        &path,
+        JobKind::LayoutAnalyze,
+        parse_lane(args.lane),
+        args.force,
+    )
+    .await
     {
-        log::info!(
-            target: "agentero::jobs",
-            "layout analyze enqueue deferred on paper {path}: RecognizeMetadata is active"
-        );
-        let snapshot = JobSnapshot::skipped(
-            JobKind::LayoutAnalyze,
-            vault.to_string_lossy().to_string(),
-            Some(path),
-            parse_lane(args.lane),
-            "deferred: recognition active",
-        );
         return Ok(ApiResult::ok(snapshot));
     }
     center.refresh_layout_backend().await;

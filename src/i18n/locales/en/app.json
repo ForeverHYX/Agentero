@@ -173,6 +173,7 @@
 		"removeRecent": "Remove {{name}} from recent",
 		"recentMissing": "Folder no longer exists: {{path}}",
 		"openPathMissing": "Cannot open vault — folder does not exist: {{path}}",
+		"restoredVaultMissing": "The last vault no longer exists, please reopen it: {{path}}",
 		"switchVault": "Switch vault",
 		"openVaultButton": "Open vault…",
 		"openRemoteVaultButton": "Open remote…",

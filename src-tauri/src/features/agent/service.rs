@@ -50,22 +50,6 @@ pub fn scan_catalog(registry: &AgentRegistry) -> Result<CatalogScanResponse, App
     registry.scan_catalog()
 }
 
-/// PATH scan plus async-safe version enrichment for Settings Upgrade buttons.
-///
-/// Runs `--version` / `npm view` off the async runtime via the caller’s
-/// `spawn_blocking`. Does not belong inside plain `scan_catalog` (Doctor and
-/// the chat switcher must stay network-free).
-pub fn check_catalog_updates(registry: &AgentRegistry) -> Result<CatalogScanResponse, AppError> {
-    let mut scan = registry.scan_catalog()?;
-    let (proxy_enabled, proxy_url) = registry.proxy_settings().unwrap_or_default();
-    crate::features::agent::registry::version_check::enrich_catalog_updates(
-        &mut scan,
-        proxy_enabled,
-        &proxy_url,
-    );
-    Ok(scan)
-}
-
 /// Service for `agent_ensure_catalog`.
 pub fn ensure_catalog(
     app: &AppHandle,

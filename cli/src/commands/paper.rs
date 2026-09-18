@@ -715,7 +715,7 @@ fn resolve_move_target(arg: &str, globals: &GlobalOpts) -> Result<MoveTarget, Cl
     } else {
         std::env::current_dir()?.join(path)
     };
-    let abs = abs.canonicalize().unwrap_or(abs);
+    let abs = agentero_core::fs::canonicalize_best_effort(&abs);
 
     let mut cur = abs.clone();
     loop {

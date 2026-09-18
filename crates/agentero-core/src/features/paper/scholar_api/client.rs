@@ -77,11 +77,6 @@ pub async fn get_json_with_timeout(url: &str, timeout: Duration) -> Result<Value
     serde_json::from_str(&text).map_err(|e| ApiError::Parse(format!("json: {e}")))
 }
 
-/// POST `body` as plain text to `url` and parse the response as JSON.
-pub async fn post_text_json(url: &str, body: String) -> Result<Value, ApiError> {
-    post_text_json_with_timeout(url, body, DEFAULT_TIMEOUT).await
-}
-
 pub async fn post_text_json_with_timeout(
     url: &str,
     body: String,
@@ -98,11 +93,6 @@ pub async fn post_text_json_with_timeout(
         .map_err(|e| ApiError::Network(e.to_string()))?;
     let text = handle_response(res).await?;
     serde_json::from_str(&text).map_err(|e| ApiError::Parse(format!("json: {e}")))
-}
-
-/// POST `body` as JSON to `url` and parse the response as JSON.
-pub async fn post_json(url: &str, body: Value) -> Result<Value, ApiError> {
-    post_json_with_timeout(url, body, DEFAULT_TIMEOUT).await
 }
 
 pub async fn post_json_with_timeout(

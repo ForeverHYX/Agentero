@@ -35,15 +35,11 @@ import {
 	useState,
 } from "react";
 import { pageElByIndex, rectRightScreen } from "@/components/viewer/pdf/coords";
-import {
-	EPHEMERAL_PREVIEW_HIDE_MS,
-	isFloatingDialogActive,
-} from "@/components/viewer/pdf/floating-hover";
+import { EPHEMERAL_PREVIEW_HIDE_MS } from "@/components/viewer/pdf/floating-hover";
+import { useStickyHoverHide } from "@/components/viewer/pdf/hooks/use-sticky-hover-hide";
 import { getLinkDestination } from "@/components/viewer/pdf/layers/citation-links";
 import { renderPdfRegionPromptImage } from "@/components/viewer/pdf/region-crop";
 import type { CrossrefPreviewState } from "@/components/viewer/pdf/types";
-import { errorText } from "@/lib/core/error";
-import { logger } from "@/lib/core/logger";
 import {
 	type CrossrefDestLabelMap,
 	type CrossrefDestMap,
@@ -52,7 +48,7 @@ import {
 	citationDestKey,
 	matchCrossrefLinkLabel,
 } from "@/lib/pdf/citation-dest-keys";
-import { loadPdfDestMaps } from "@/lib/pdf/citation-dest-map";
+import { schedulePdfDestMapsBuild } from "@/lib/pdf/citation-dest-map";
 import {
 	extractCrossrefLabel,
 	pickCrossrefRegion,
@@ -60,10 +56,6 @@ import {
 } from "@/lib/pdf/crossref-resolve";
 import { getLayoutDocumentResult } from "@/lib/pdf/layout";
 
-/** Upper bound before the deferred dest-map build runs anyway. */
-const DEST_MAP_IDLE_TIMEOUT_MS = 2000;
-/** Fallback delay when `requestIdleCallback` is unavailable (WebKit). */
-const DEST_MAP_FALLBACK_DELAY_MS = 500;
 /** Longest edge of the preview crop (px). */
 const CROSSREF_CROP_MAX_EDGE = 520;
 
@@ -116,15 +108,6 @@ async function extractLinkText(
 	return overlapping.map((r) => r.content).join(" ");
 }
 
-function scheduleIdle(fn: () => void): () => void {
-	if (typeof requestIdleCallback === "function") {
-		const id = requestIdleCallback(fn, { timeout: DEST_MAP_IDLE_TIMEOUT_MS });
-		return () => cancelIdleCallback(id);
-	}
-	const id = setTimeout(fn, DEST_MAP_FALLBACK_DELAY_MS);
-	return () => clearTimeout(id);
-}
-
 type DocumentManagerCapability = ReturnType<
 	typeof useDocumentManagerCapability
 >["provides"];
@@ -173,9 +156,20 @@ export function usePdfCrossrefPreview({
 	onPreviewShowRef.current = onPreviewShow;
 	const [crossrefPreview, setCrossrefPreview] =
 		useState<CrossrefPreviewState | null>(null);
-	const hideTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-	/** True while pointer is over the preview card. */
-	const crossrefHoverSurfaceRef = useRef(false);
+	const hideCrossrefPreview = useCallback(() => setCrossrefPreview(null), []);
+	/**
+	 * Leave link / card. Delay so the pointer can bridge into the card; never
+	 * dismiss while the card is still hovered / focused.
+	 */
+	const {
+		hoverSurfaceRef: crossrefHoverSurfaceRef,
+		cancelHide: cancelCrossrefHide,
+		markHoverEnter: markCrossrefHoverEnter,
+		scheduleHide: scheduleCrossrefHide,
+	} = useStickyHoverHide({
+		delayMs: EPHEMERAL_PREVIEW_HIDE_MS,
+		hide: hideCrossrefPreview,
+	});
 	/** hyperref cross-reference destinations of the open PDF, by coords. */
 	const crossrefMapRef = useRef<CrossrefDestMap | null>(null);
 	/**
@@ -208,30 +202,17 @@ export function usePdfCrossrefPreview({
 		crossrefLabelsRef.current = null;
 		crossrefLinksRef.current = null;
 		if (!paperAbsPath) return;
-		let cancelled = false;
-		const cancelIdle = scheduleIdle(() => {
-			void loadPdfDestMaps({
-				paperAbsPath,
-				viewerBytes: sourceBytesRef.current,
-			})
-				.then((maps) => {
-					if (!cancelled && maps) {
-						crossrefMapRef.current = maps.crossrefs;
-						crossrefKindsRef.current = maps.crossrefKinds;
-						crossrefLabelsRef.current = maps.crossrefLabels;
-						crossrefLinksRef.current = maps.crossrefLinks;
-					}
-				})
-				.catch((error: unknown) => {
-					logger.warn("crossref dest map failed", {
-						error: errorText(error),
-					});
-				});
+		return schedulePdfDestMapsBuild({
+			paperAbsPath,
+			viewerBytes: () => sourceBytesRef.current,
+			warnLabel: "crossref dest map failed",
+			onMaps: (maps) => {
+				crossrefMapRef.current = maps.crossrefs;
+				crossrefKindsRef.current = maps.crossrefKinds;
+				crossrefLabelsRef.current = maps.crossrefLabels;
+				crossrefLinksRef.current = maps.crossrefLinks;
+			},
 		});
-		return () => {
-			cancelled = true;
-			cancelIdle();
-		};
 	}, [paperAbsPath]);
 
 	// Reset the preview when the active PDF document changes.
@@ -241,42 +222,13 @@ export function usePdfCrossrefPreview({
 		setCrossrefPreview(null);
 	}, [docId]);
 
-	const cancelCrossrefHide = useCallback(() => {
-		if (!hideTimerRef.current) return;
-		clearTimeout(hideTimerRef.current);
-		hideTimerRef.current = null;
-	}, []);
-
 	const clearCrossrefPreview = useCallback(() => {
 		cancelCrossrefHide();
 		crossrefHoverSurfaceRef.current = false;
 		// Invalidate in-flight crops so a stale resolve cannot remount the card.
 		renderTokenRef.current += 1;
 		setCrossrefPreview(null);
-	}, [cancelCrossrefHide]);
-
-	const markCrossrefHoverEnter = useCallback(() => {
-		crossrefHoverSurfaceRef.current = true;
-		cancelCrossrefHide();
-	}, [cancelCrossrefHide]);
-
-	/**
-	 * Leave link / card. Delay so the pointer can bridge into the card; never
-	 * dismiss while the card is still hovered / focused.
-	 */
-	const scheduleCrossrefHide = useCallback(() => {
-		crossrefHoverSurfaceRef.current = false;
-		cancelCrossrefHide();
-		hideTimerRef.current = setTimeout(() => {
-			hideTimerRef.current = null;
-			if (crossrefHoverSurfaceRef.current) return;
-			if (isFloatingDialogActive()) {
-				crossrefHoverSurfaceRef.current = true;
-				return;
-			}
-			setCrossrefPreview(null);
-		}, EPHEMERAL_PREVIEW_HIDE_MS);
-	}, [cancelCrossrefHide]);
+	}, [cancelCrossrefHide, crossrefHoverSurfaceRef]);
 
 	const showPreview = useCallback(
 		(
@@ -323,7 +275,15 @@ export function usePdfCrossrefPreview({
 				})
 				.catch(() => {});
 		},
-		[docId, hostRef, zoomRef, engineRef, docCapRef, cancelCrossrefHide],
+		[
+			docId,
+			hostRef,
+			zoomRef,
+			engineRef,
+			docCapRef,
+			cancelCrossrefHide,
+			crossrefHoverSurfaceRef,
+		],
 	);
 
 	const handleCrossrefLinkHover = useCallback(
@@ -474,9 +434,9 @@ export function usePdfCrossrefPreview({
 	// biome-ignore lint/correctness/useExhaustiveDependencies: docId is the effect trigger, not a value read inside the cleanup.
 	useEffect(
 		() => () => {
-			if (hideTimerRef.current) clearTimeout(hideTimerRef.current);
+			cancelCrossrefHide();
 		},
-		[docId],
+		[docId, cancelCrossrefHide],
 	);
 
 	return {

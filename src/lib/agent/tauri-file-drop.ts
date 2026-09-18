@@ -97,3 +97,18 @@ export function isClientPointInRect(
 ): boolean {
 	return x >= rect.left && x <= rect.right && y >= rect.top && y <= rect.bottom;
 }
+
+/**
+ * Hit-test the first element matching `selector` in physical px (see
+ * `isPhysicalPointInRect` for the logical-coordinate fallback).
+ */
+export function isPhysicalPointInSelector(
+	position: Parameters<typeof isPhysicalPointInRect>[0],
+	selector: string,
+): boolean {
+	const el = document.querySelector(selector);
+	return (
+		el instanceof HTMLElement &&
+		isPhysicalPointInRect(position, el.getBoundingClientRect())
+	);
+}

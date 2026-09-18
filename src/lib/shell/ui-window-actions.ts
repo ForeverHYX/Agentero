@@ -10,30 +10,9 @@ import {
 	layout,
 	openRightTabInRail,
 	type RightSidebarTab,
-	setAgentPanelMounted,
 	setLayoutMode,
 	uiStore,
 } from "@/lib/shell/ui-store";
-
-/** Title-bar toggle: mounts the Agent panel when opening (unless agent is popped out). */
-export function toggleRightSidebar(): void {
-	setLayoutMode("custom");
-	const { rightSidebarOpen, rightSidebarTab } = uiStore.getState();
-	if (rightSidebarOpen) {
-		layout()?.setRightCollapsed(true);
-		return;
-	}
-	// Opening: prefer singleton window for the active feature tab.
-	void import("@/lib/shell/feature-window").then(
-		async ({ preferFeatureWindow }) => {
-			if (await preferFeatureWindow(rightSidebarTab)) return;
-			if (rightSidebarTab === "agent") setAgentPanelMounted(true);
-			layout()?.setRightCollapsed(false, {
-				focusAgent: rightSidebarTab === "agent",
-			});
-		},
-	);
-}
 
 /** ⌘L — toggle right sidebar (defaults to agent). */
 export function toggleChat(): void {

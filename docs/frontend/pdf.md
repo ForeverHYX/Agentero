@@ -99,12 +99,13 @@ PDFium engine 由窗口共享。默认优先 **worker 引擎**（PDFium WASM 跑
 | `src/components/viewer/pdf/viewport/` | 宿主接线：`dockview-viewport`（resize 门控 + 滚动指标按帧提交；`rightGutter` 为评论列预留页外空间，并向 EmbedPDF 报告缩减后的 width/clientWidth 使 fitWidth 页面让出该空间）/ `wheel-zoom-handler` / `pan-handler`（中键 / 空格拖拽平移的空格归属判定与光标 class）/ `active-card-scroll-sync` |
 | `src/lib/pdf/scroll-sync.ts` + `hooks/use-pdf-scroll-sync.ts` | 双栏翻译跨 EmbedPDF 实例的滚动/缩放同步：各 viewer 注册 peer，pair 的 source 侧接线，按视口比例对齐 scroll、镜像 zoom |
 | `src/components/viewer/pdf/floating-hover.ts` | 浮动卡 sticky hover 共用：hide 延迟常量、`isFloatingDialogActive` |
-| `src/components/viewer/pdf/hooks/use-pdf-cards.ts` | 浮动卡生命周期：打开 / 定位（虚拟化重试）/ hover 收起 |
+| `src/components/viewer/pdf/hooks/use-sticky-hover-hide.ts` | 浮动卡 sticky hover 状态机（hoverSurface ref + 延迟 hide + 浮动 dialog re-arm + 可选 hold 否决），`use-pdf-cards` / `use-pdf-citations` / `use-pdf-crossref-preview` 共用 |
+| `src/components/viewer/pdf/hooks/use-pdf-cards.ts` | 浮动卡生命周期：打开 / 定位（虚拟化重试）/ hover 收起（经 `use-sticky-hover-hide`，translate 流式期间 hold） |
 | `src/components/viewer/pdf/hooks/use-pdf-highlights.ts` | EmbedPDF 标注桥：高亮视图模型、页边针锚点、链接分页图、导入迁移与防抖导出；annotation 事件按微任务合并重建 |
 | `src/components/viewer/pdf/hooks/use-pdf-marks-io.ts` | `marks/` 并发读取与文件监听刷新（自写回声跳过；指纹比对后再提交 state） |
 | `src/components/viewer/pdf/hooks/use-pdf-text-selection.ts` | 选区检测、划词菜单状态、`isSelecting`（拖选中压制链接预览）、滚动/缩放时 `rePlaceSelectionMenu` 与复制拦截 |
-| `src/components/viewer/pdf/hooks/use-pdf-ask-threads.ts` | 划词提问工作流：建/续/停、ACP 流监听、`marks/<id>.json` 落盘 |
-| `src/components/viewer/pdf/hooks/use-pdf-selection-translate.ts` | 划词翻译工作流与结果卡状态 |
+| `src/components/viewer/pdf/hooks/use-pdf-ask-threads.ts` | 划词提问工作流：建/续/停、线程数组容器、`marks/<id>.json` 落盘；单轮状态机（乐观消息 → 流式 → 完成/失败 → resend 截断）在共享引擎 `src/lib/pdf/ask/run-turn.ts`，与 `use-selection-ask.ts` 复用 |
+| `src/components/viewer/pdf/hooks/use-pdf-selection-translate.ts` | 划词翻译工作流与结果卡状态；双 provider 执行（agent 流式 / 免费 MT 单发）在共享引擎 `src/lib/pdf/translate/run-selection.ts`，与 `use-web-view-selection.ts` 复用 |
 | `src/components/viewer/pdf/hooks/use-pdf-region-framing.ts` | ⌘. 框选模式与单次裁剪（产出草稿交给 visual draft hook） |
 | `src/components/viewer/pdf/hooks/use-pdf-visual-marks.ts` | visual mark 工作流：草稿落盘 / 加入对话 / 续聊 / pin 卡片 |
 | `src/components/viewer/pdf/hooks/use-pdf-layout-regions.ts` | layout store 订阅与按页分桶（hover 命中框 / Eye 叠加层） |
@@ -112,8 +113,8 @@ PDFium engine 由窗口共享。默认优先 **worker 引擎**（PDFium WASM 跑
 | `src/components/viewer/pdf/hooks/use-pdf-visual-draft.ts` | 裁剪草稿卡状态（`visualDraftEditor`）与区域屏幕锚点 |
 | `src/components/viewer/pdf/hooks/use-pdf-layout-translate.ts` | 全文翻译任务与工具栏三态标签 |
 | `src/components/viewer/pdf/hooks/use-pdf-page-text.ts` | 按需加载页文字矩形（页边针是否压字） |
-| `src/components/viewer/pdf/hooks/use-pdf-citations.ts` | 文中引用 hover 预览与跳转（sticky hover + clear API） |
-| `src/components/viewer/pdf/hooks/use-pdf-crossref-preview.ts` | 交叉引用 hover 裁剪预览（sticky hover + clear API） |
+| `src/components/viewer/pdf/hooks/use-pdf-citations.ts` | 文中引用 hover 预览与跳转（`use-sticky-hover-hide` + clear API；dest-map 经 `schedulePdfDestMapsBuild` 空闲构建） |
+| `src/components/viewer/pdf/hooks/use-pdf-crossref-preview.ts` | 交叉引用 hover 裁剪预览（`use-sticky-hover-hide` + clear API；dest-map 经 `schedulePdfDestMapsBuild` 空闲构建） |
 | `src/components/viewer/pdf/hooks/use-pdf-navigation.ts` | 页码输入、跳页与阅读位置恢复/持久化 |
 | `src/components/viewer/pdf/hooks/use-pdf-zoom-controls.ts` | 缩放 level → ref 镜像（页层 / 选区定位不因 zoom 重订阅） |
 | `src/components/viewer/pdf/hooks/use-pdf-chrome-visibility.ts` | 左上工具栏自动显隐：滚动事件 + 指针靠近顶部区域触发显示，空闲定时淡出；显隐动画由 `pdf-left-toolbar` 的 `PDF_CHROME_VIS*` 类承担；右上工具栏常显 |
@@ -126,7 +127,7 @@ PDFium engine 由窗口共享。默认优先 **worker 引擎**（PDFium WASM 跑
 | `src/components/viewer/pdf/hooks/use-pdf-pin-anchors.ts` | ask/translate 钉锚点几何投影（`useStableDerived` 指纹稳定：流式期间引用不变，`pinsByPage` 不失效） |
 | `src/components/viewer/pdf/hooks/use-pdf-active-anchors.ts` | 活动卡记录查找（thread/translate/visualTrace）与 ask/translate 页内源锚点投影（仅几何，流式期间保持引用稳定） |
 | `src/components/viewer/pdf/hooks/use-pdf-sidebar-panels.ts` | 左栏 References/Figures 面板开关（与大纲互斥）与评论卡 hover id |
-| `src/components/viewer/pdf/hooks/use-pdf-selection-actions.ts` | 划词动作装配（工具栏：高亮/加入对话/快速对话/翻译；右缘入口：批注），各动作入口注入 |
+| `src/components/viewer/pdf/hooks/use-pdf-selection-actions.ts` | 划词动作装配（工具栏：高亮/加入对话/快速对话/翻译；右缘入口：批注），各动作入口注入；划词表面三件套（copied 标签 / ⌘K 注册 / 加入对话尾段）与 plaza / 网页论文 / 文本编辑器共用 `src/components/selection/`（见 [web-view.md](web-view.md)） |
 | `src/components/viewer/pdf/hooks/use-pdf-mark-actions.ts` | 页边针打开（ask 线程/翻译卡/高亮编辑/visual 卡）与高亮标注菜单动作（编辑/删除/换色） |
 | `src/components/viewer/pdf/hooks/use-pdf-layout-cluster.ts` | layout 簇聚合：region 分桶、分析运行与 Figures 处理器、visual draft 卡状态、全文翻译任务 |
 | `src/components/viewer/pdf/marks-index.ts` | 纯派生 `buildMarksIndex`：由各 mark 数组 + 页文字矩形产出 `pinsByPage` / `commentsByPage`（无 React，调用方 memo） |
@@ -141,6 +142,7 @@ PDFium engine 由窗口共享。默认优先 **worker 引擎**（PDFium WASM 跑
 | `src/lib/pdf/ask/` | 划词提问 |
 | `src/lib/pdf/layout/` | EmbedPDF layout-analysis：归一化 bbox、`source/layout.json` raw sidecar、`source/layout-translate.json` 全文翻译缓存、内存 UI store |
 | `src/lib/pdf/region.ts` | 区域坐标归一化与 PDF rect 转换 |
+| `src/lib/pdf/citation-dest-map.ts` | dest-map Worker 加载与缓存；`schedulePdfDestMapsBuild` 供 citations / crossref hover hooks 空闲延迟构建（可取消、失败仅 warn） |
 | `src/lib/pdf/translate/` | 划词翻译 IO |
 | `src/lib/pdf/zoom.ts` | 精确缩放比例解析与范围限制 |
 | `src/lib/pdf/wheel-zoom.ts` | ⌘滚轮缩放 delta 累加与每帧合并步进；wheel 监听 passive / non-passive 切换；WebKit 捏合手势（gesture*）换算为等价 wheel delta |

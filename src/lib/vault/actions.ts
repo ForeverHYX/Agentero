@@ -14,7 +14,7 @@ import {
 	notifySuccess,
 	notifyWarning,
 } from "@/lib/core/notify";
-import { dirnameOf } from "@/lib/core/path";
+import { dirnameOf, displayPath } from "@/lib/core/path";
 import { isTauri } from "@/lib/core/tauri";
 import { isPaperDirectory, isPapersRoot, isUnderPapers } from "@/lib/paper";
 import {
@@ -52,6 +52,7 @@ import {
 	vaultRelativePath,
 	writeVaultFile,
 } from "@/lib/vault";
+import { normalizePathKey as pathKey } from "@/lib/vault/path";
 import {
 	clearRemoteSessionMeta,
 	isRemoteVaultHandle,
@@ -518,11 +519,6 @@ export async function movePathsTo(
 	} finally {
 		setVaultBusy(false);
 	}
-}
-
-/** Normalize a path for case-insensitive comparison. */
-function pathKey(path: string): string {
-	return path.replace(/\\/g, "/").replace(/\/+$/, "").toLowerCase();
 }
 
 /** Find a tree node by absolute path (case-insensitive). */
@@ -1059,6 +1055,11 @@ export function validateRestoredVault(): Promise<void> {
 			setActiveTabId(null);
 			clearClosedTabs();
 			setTreeSelectedPath(null);
+			notifyError(
+				i18n.t("app:vault.restoredVaultMissing", {
+					path: displayPath(restoredPath),
+				}),
+			);
 		})
 		.catch(() => {
 			// Leave the restored state intact when the existence check fails.

@@ -3,6 +3,7 @@
 
 use crate::error::AppError;
 use crate::features::doctor::{issue, DoctorIssue, DoctorSeverity};
+use crate::fs::normalize_rel_separators;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Map, Value};
 use std::fs;
@@ -40,10 +41,6 @@ pub struct VisualMarkRepairResult {
     pub updated_paths: Vec<String>,
 }
 
-fn normalize_rel(raw: &str) -> String {
-    raw.replace('\\', "/").trim_matches('/').to_string()
-}
-
 fn walk_mark_json_files(vault: &Path) -> Vec<PathBuf> {
     let papers = vault.join("papers");
     if !papers.is_dir() {
@@ -77,7 +74,7 @@ fn vault_relative(vault: &Path, absolute: &Path) -> Option<String> {
     absolute
         .strip_prefix(vault)
         .ok()
-        .map(|p| normalize_rel(&p.to_string_lossy()))
+        .map(|p| normalize_rel_separators(&p.to_string_lossy()))
 }
 
 /// Detect whether a mark JSON needs v1 → v2 visual migration.
@@ -323,11 +320,13 @@ pub fn apply_visual_mark_repairs(
     dirty_paths: &[String],
 ) -> Result<VisualMarkRepairResult, AppError> {
     crate::fs::ensure_vault_dir(vault)?;
-    let dirty: std::collections::HashSet<String> =
-        dirty_paths.iter().map(|p| normalize_rel(p)).collect();
+    let dirty: std::collections::HashSet<String> = dirty_paths
+        .iter()
+        .map(|p| normalize_rel_separators(p))
+        .collect();
     let mut updated = Vec::new();
     for change in changes {
-        let rel = normalize_rel(&change.path);
+        let rel = normalize_rel_separators(&change.path);
         if rel.is_empty() || rel.contains("..") {
             return Err(AppError::message(format!("invalid mark path: {rel}")));
         }

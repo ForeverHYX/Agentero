@@ -1,10 +1,5 @@
 {
 	"context": {
-		"totalCost": "Total cost",
-		"input": "Input",
-		"output": "Output",
-		"reasoning": "Reasoning",
-		"cache": "Cache",
 		"iconLabel": "Model context usage"
 	},
 	"tool": {
@@ -25,36 +20,17 @@
 		"thinking": "Thinking...",
 		"thought": "Thought process"
 	},
-	"sources": {
-		"used_one": "Used {{count}} source",
-		"used_other": "Used {{count}} sources"
-	},
 	"conversation": {
 		"empty": {
 			"title": "No messages yet",
 			"description": "Start a conversation to see messages here"
 		}
 	},
-	"message": {
-		"previousBranch": "Previous branch",
-		"nextBranch": "Next branch",
-		"branchIndicator": "{{current}} of {{total}}"
-	},
-	"inlineCitation": {
-		"previous": "Previous",
-		"next": "Next",
-		"unknown": "unknown"
-	},
 	"attachments": {
-		"source": "Source",
-		"image": "Image",
-		"attachment": "Attachment",
-		"remove": "Remove",
-		"empty": "No attachments"
+		"remove": "Remove"
 	},
 	"modelSelector": {
-		"label": "Model Selector",
-		"providerLogo": "{{provider}} logo"
+		"label": "Model Selector"
 	},
 	"plan": {
 		"toggle": "Toggle plan",

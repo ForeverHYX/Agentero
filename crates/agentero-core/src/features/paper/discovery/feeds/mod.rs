@@ -861,21 +861,6 @@ pub async fn add_and_fetch(url: String, title: Option<String>) -> Result<FeedSub
     }
 }
 
-pub fn remove_by_ref(target: &str) -> Result<FeedSub, AppError> {
-    let conn = ensure_feeds()?;
-    let trimmed = target.trim();
-    let sub = list_subs(&conn)?.into_iter().find(|row| {
-        row.id == trimmed
-            || row.url == trimmed
-            || normalize_feed_url(trimmed).ok().as_deref() == Some(row.url.as_str())
-    });
-    let Some(sub) = sub else {
-        return Err(AppError::message("feeds.not_found"));
-    };
-    conn.execute("DELETE FROM subscriptions WHERE id = ?1", [&sub.id])?;
-    Ok(sub)
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;

@@ -157,6 +157,73 @@ export function clearCitationDestKeyMapCache(): void {
 	cache.clear();
 }
 
+/** Upper bound before the deferred dest-map build runs anyway. */
+const DEST_MAP_IDLE_TIMEOUT_MS = 2000;
+/** Fallback delay when `requestIdleCallback` is unavailable (WebKit). */
+const DEST_MAP_FALLBACK_DELAY_MS = 500;
+
+/**
+ * Run `fn` when the main thread is idle (bounded), so the map build never
+ * competes with the PDF-open critical path (first paint, scroll, selection).
+ * Returns a canceller.
+ */
+function scheduleIdle(fn: () => void): () => void {
+	if (typeof requestIdleCallback === "function") {
+		const id = requestIdleCallback(fn, { timeout: DEST_MAP_IDLE_TIMEOUT_MS });
+		return () => cancelIdleCallback(id);
+	}
+	const id = setTimeout(fn, DEST_MAP_FALLBACK_DELAY_MS);
+	return () => clearTimeout(id);
+}
+
+export type SchedulePdfDestMapsBuildOptions = {
+	paperAbsPath: string | null;
+	/**
+	 * Viewer bytes read when the idle slot actually fires, so a late bytes
+	 * prop never re-triggers the effect but is still reused.
+	 */
+	viewerBytes: () => ArrayBuffer | null;
+	/** Cache key for remote papers (no local path to key on). */
+	documentId?: string | null;
+	/** Non-fatal warn label used when the build rejects. */
+	warnLabel: string;
+	onMaps: (maps: PdfDestMaps) => void;
+};
+
+/**
+ * Deferred `loadPdfDestMaps` for the hover-preview hooks: schedule at idle,
+ * drop the result when the disposer ran (document switch / unmount), warn
+ * (non-fatal — hover previews simply do not resolve) on failure. Returns the
+ * disposer for the effect cleanup.
+ */
+export function schedulePdfDestMapsBuild({
+	paperAbsPath,
+	viewerBytes,
+	documentId,
+	warnLabel,
+	onMaps,
+}: SchedulePdfDestMapsBuildOptions): () => void {
+	let cancelled = false;
+	const cancelIdle = scheduleIdle(() => {
+		void loadPdfDestMaps({
+			paperAbsPath,
+			viewerBytes: viewerBytes(),
+			documentId,
+		})
+			.then((maps) => {
+				if (cancelled || !maps) return;
+				onMaps(maps);
+			})
+			.catch((error: unknown) => {
+				logger.warn(warnLabel, { error: errorText(error) });
+			});
+	});
+	return () => {
+		cancelled = true;
+		cancelIdle();
+	};
+}
+
 export type LoadPdfDestMapsOptions = {
 	/** Absolute paper folder of the open PDF. Null for remote papers. */
 	paperAbsPath?: string | null;

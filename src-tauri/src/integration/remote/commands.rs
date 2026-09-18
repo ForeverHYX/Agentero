@@ -3,6 +3,7 @@
 //! Async commands return `Result<ApiResult<T>, String>` so `State` borrows are valid
 //! (same pattern as `agent_probe`).
 
+use crate::app::command_util::try_session;
 use crate::core::error::{map_err, ApiResult, AppError};
 use crate::core::fs::{FsDirEntry, WriteOpts};
 use crate::core::log_util::{trunc, OpTimer};
@@ -119,10 +120,7 @@ pub async fn remote_vault_ensure(
     registry: State<'_, Arc<RemoteRegistry>>,
     args: RemoteSessionArgs,
 ) -> Result<ApiResult<CreateVaultResult>, String> {
-    let session = match registry.get(&args.session_id).await {
-        Ok(s) => s,
-        Err(e) => return Ok(map_err(e)),
-    };
+    let session = try_session!(registry, &args.session_id);
     match ensure_remote_vault_skills(&session, args.locale.as_deref()).await {
         Ok(result) => Ok(ApiResult::ok(result)),
         Err(e) => Ok(map_err(e)),
@@ -143,10 +141,7 @@ pub async fn remote_list(
     registry: State<'_, Arc<RemoteRegistry>>,
     args: RemotePathArgs,
 ) -> Result<ApiResult<Vec<FsDirEntry>>, String> {
-    let session = match registry.get(&args.session_id).await {
-        Ok(s) => s,
-        Err(e) => return Ok(map_err(e)),
-    };
+    let session = try_session!(registry, &args.session_id);
     match session.fs.list(&args.path).await {
         Ok(v) => Ok(ApiResult::ok(v)),
         Err(e) => Ok(map_err(e)),
@@ -159,10 +154,7 @@ pub async fn remote_read_text(
     registry: State<'_, Arc<RemoteRegistry>>,
     args: RemotePathArgs,
 ) -> Result<ApiResult<String>, String> {
-    let session = match registry.get(&args.session_id).await {
-        Ok(s) => s,
-        Err(e) => return Ok(map_err(e)),
-    };
+    let session = try_session!(registry, &args.session_id);
     match session.fs.read(&args.path).await {
         Ok(bytes) => match String::from_utf8(bytes) {
             Ok(s) => Ok(ApiResult::ok(s)),
@@ -186,10 +178,7 @@ pub async fn remote_write_text(
     registry: State<'_, Arc<RemoteRegistry>>,
     args: RemoteWriteTextArgs,
 ) -> Result<ApiResult<()>, String> {
-    let session = match registry.get(&args.session_id).await {
-        Ok(s) => s,
-        Err(e) => return Ok(map_err(e)),
-    };
+    let session = try_session!(registry, &args.session_id);
     match session
         .fs
         .write(
@@ -212,10 +201,7 @@ pub async fn remote_mkdir(
     registry: State<'_, Arc<RemoteRegistry>>,
     args: RemotePathArgs,
 ) -> Result<ApiResult<()>, String> {
-    let session = match registry.get(&args.session_id).await {
-        Ok(s) => s,
-        Err(e) => return Ok(map_err(e)),
-    };
+    let session = try_session!(registry, &args.session_id);
     match session.fs.mkdir(&args.path).await {
         Ok(()) => Ok(ApiResult::ok(())),
         Err(e) => Ok(map_err(e)),
@@ -237,10 +223,7 @@ pub async fn remote_remove(
     registry: State<'_, Arc<RemoteRegistry>>,
     args: RemoteRemoveArgs,
 ) -> Result<ApiResult<()>, String> {
-    let session = match registry.get(&args.session_id).await {
-        Ok(s) => s,
-        Err(e) => return Ok(map_err(e)),
-    };
+    let session = try_session!(registry, &args.session_id);
     match session.fs.remove(&args.path, args.recursive).await {
         Ok(()) => Ok(ApiResult::ok(())),
         Err(e) => Ok(map_err(e)),
@@ -261,10 +244,7 @@ pub async fn remote_write_bytes(
     registry: State<'_, Arc<RemoteRegistry>>,
     args: RemoteWriteBytesArgs,
 ) -> Result<ApiResult<()>, String> {
-    let session = match registry.get(&args.session_id).await {
-        Ok(s) => s,
-        Err(e) => return Ok(map_err(e)),
-    };
+    let session = try_session!(registry, &args.session_id);
     match session
         .fs
         .write(
@@ -297,10 +277,7 @@ pub async fn remote_paper_get(
     registry: State<'_, Arc<RemoteRegistry>>,
     args: RemotePaperGetArgs,
 ) -> Result<ApiResult<PaperRecord>, String> {
-    let session = match registry.get(&args.session_id).await {
-        Ok(s) => s,
-        Err(e) => return Ok(map_err(e)),
-    };
+    let session = try_session!(registry, &args.session_id);
     let work = session.work_root.clone();
     let result = if let Some(path) = args
         .path
@@ -328,10 +305,7 @@ pub async fn remote_paper_list(
     registry: State<'_, Arc<RemoteRegistry>>,
     args: RemoteSessionArgs,
 ) -> Result<ApiResult<Vec<PaperRecord>>, String> {
-    let session = match registry.get(&args.session_id).await {
-        Ok(s) => s,
-        Err(e) => return Ok(map_err(e)),
-    };
+    let session = try_session!(registry, &args.session_id);
     let work = session.work_root.clone();
     match papers::list_all(&work) {
         Ok(rows) => Ok(ApiResult::ok(rows)),
@@ -353,10 +327,7 @@ pub async fn remote_paper_set_tags(
     registry: State<'_, Arc<RemoteRegistry>>,
     args: RemotePaperSetTagsArgs,
 ) -> Result<ApiResult<PaperRecord>, String> {
-    let session = match registry.get(&args.session_id).await {
-        Ok(s) => s,
-        Err(e) => return Ok(map_err(e)),
-    };
+    let session = try_session!(registry, &args.session_id);
     let path = args.path.trim().trim_matches('/').replace('\\', "/");
     if path.is_empty() {
         return Ok(map_err(AppError::message("path is required")));
@@ -388,10 +359,7 @@ pub async fn remote_paper_set_is_read(
     registry: State<'_, Arc<RemoteRegistry>>,
     args: RemotePaperSetIsReadArgs,
 ) -> Result<ApiResult<PaperRecord>, String> {
-    let session = match registry.get(&args.session_id).await {
-        Ok(s) => s,
-        Err(e) => return Ok(map_err(e)),
-    };
+    let session = try_session!(registry, &args.session_id);
     let path = args.path.trim().trim_matches('/').replace('\\', "/");
     if path.is_empty() {
         return Ok(map_err(AppError::message("path is required")));
@@ -430,10 +398,7 @@ pub async fn remote_cache_file(
     registry: State<'_, Arc<RemoteRegistry>>,
     args: RemoteCacheFileArgs,
 ) -> Result<ApiResult<RemoteCacheFileResult>, String> {
-    let session = match registry.get(&args.session_id).await {
-        Ok(s) => s,
-        Err(e) => return Ok(map_err(e)),
-    };
+    let session = try_session!(registry, &args.session_id);
     let rel = match crate::core::fs::sanitize_vault_rel(&args.path) {
         Ok(r) => r,
         Err(_) => return Ok(map_err(AppError::message("invalid path"))),
@@ -479,10 +444,7 @@ pub async fn remote_cache_stats(
         .map(str::trim)
         .filter(|s| !s.is_empty())
     {
-        let session = match registry.get(sid).await {
-            Ok(s) => s,
-            Err(e) => return Ok(map_err(e)),
-        };
+        let session = try_session!(registry, sid);
         Ok(ApiResult::ok(blob_cache::stats_for_root(
             &session.blob_root,
         )))
@@ -519,13 +481,7 @@ pub async fn remote_cache_clear(
         .map(str::trim)
         .filter(|s| !s.is_empty())
     {
-        let session = match registry.get(sid).await {
-            Ok(s) => s,
-            Err(e) => {
-                op.finish_err(&e);
-                return Ok(map_err(e));
-            }
-        };
+        let session = try_session!(registry, sid, op);
         blob_cache::clear_root(&session.blob_root)
     } else {
         blob_cache::clear_all()
@@ -554,10 +510,7 @@ pub async fn remote_paper_rescan(
     registry: State<'_, Arc<RemoteRegistry>>,
     args: RemoteSessionArgs,
 ) -> Result<ApiResult<RemotePaperRescanResult>, String> {
-    let session = match registry.get(&args.session_id).await {
-        Ok(s) => s,
-        Err(e) => return Ok(map_err(e)),
-    };
+    let session = try_session!(registry, &args.session_id);
     match remote_rescan_impl(&session).await {
         Ok(r) => Ok(ApiResult::ok(r)),
         Err(e) => Ok(map_err(e)),

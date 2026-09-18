@@ -44,6 +44,7 @@ import {
 	paperAbsFromWikiTarget,
 } from "@/lib/pdf/annotation-ref";
 import { removeTabAnnotations } from "@/lib/pdf/annotations-store";
+import { stripEmbedPdfRevision } from "@/lib/pdf/document-id";
 import {
 	buildLayoutDocumentResult,
 	getLayoutDocumentResult,
@@ -103,7 +104,7 @@ import {
 	takeClosedTab,
 	updateTab,
 } from "@/lib/workspace/store";
-import { flushTextEditorFor } from "@/lib/workspace/text-editor-flush";
+import { flushAllTextEditors } from "@/lib/workspace/text-editor-flush";
 import {
 	type PdfViewerHandle,
 	pdfHandleFor,
@@ -142,6 +143,7 @@ import {
 import {
 	compileTexFile,
 	ensureTexEngines,
+	resolveTexRoot,
 	texCompileStore,
 } from "./tex-compile";
 import {
@@ -541,11 +543,14 @@ function cloneTabForSplit(tab: DocTab, tabs: DocTab[]): DocTab {
 
 /**
  * Open (or refresh) the compiled PDF of a .tex file as a right split of its
- * editor pane — the TeX analogue of the paper→NOTES right split. When the
- * PDF is missing on disk (or `forceCompile`, the compile-button path), the
- * pane opens immediately with a shimmer placeholder while the compile runs,
- * then fills in. Existing PDF tabs are refreshed in place (new bytes
- * identity reloads EmbedPDF) and activated.
+ * editor pane — the TeX analogue of the paper→NOTES right split. The PDF is
+ * the project ROOT's output (magic comment → self indicator → vault
+ * \input/\include reverse scan → the file itself), so triggering this from a
+ * child file still builds and shows the root's PDF. When the PDF is missing
+ * on disk (or `forceCompile`, the compile-button path), the pane opens
+ * immediately with a shimmer placeholder while the compile runs, then fills
+ * in. Existing PDF tabs are refreshed in place (new bytes identity reloads
+ * EmbedPDF) and activated.
  */
 export async function openTexPdf(
 	texPath: string,
@@ -573,7 +578,14 @@ export async function openTexPdf(
 	}
 	const referencePanelId = refId ?? canonicalTexId;
 
-	const pdfPath = texPdfPath(texPath);
+	// Flush every mounted editor's debounced autosave first (a root compile
+	// must read the latest bytes of all its sections — the saveAll
+	// equivalent), then resolve the root from that fresh disk state so a
+	// just-typed magic comment or \input already counts. Both before the
+	// fast path: the pane id must follow the root either way.
+	await flushAllTextEditors();
+	const rootPath = await resolveTexRoot(texPath);
+	const pdfPath = texPdfPath(rootPath);
 	const pdfId = tabIdForPath(pdfPath);
 	await ensureLocalFsScope(vaultStore.getState().vaultPath);
 
@@ -599,11 +611,6 @@ export async function openTexPdf(
 			return;
 		}
 	}
-
-	// Compile-first flow: flush the editor's debounced autosave first so
-	// latexmk reads the just-typed bytes, not the pre-autosave disk snapshot
-	// (saves no longer auto-compile, nothing else would close that gap).
-	await flushTextEditorFor(texPath);
 
 	// Show the PDF pane immediately as a shimmer placeholder, then fill it
 	// once the compile lands.
@@ -634,7 +641,7 @@ export async function openTexPdf(
 		updateTab(insertedId, { texCompiling: true });
 	}
 
-	const compiled = await compileTexFile(texPath);
+	const compiled = await compileTexFile(rootPath, { triggerPath: texPath });
 	const bytes = compiled ? await localFileToArrayBuffer(compiled) : null;
 	if (!compiled || !bytes) {
 		// Failure already notified. Drop a pane we just created (it would sit
@@ -667,10 +674,13 @@ let pendingSaveCompilePath: string | null = null;
 /**
  * Quiet TeX compile + in-place refresh of the open PDF pane: the compile-button
  * flow without the focus steal, pane auto-open and success toast. Called after
- * a manual ⌘S save lands (`compileTexOnManualSave`). The pane's shimmer
- * (`texCompiling`) stays up while latexmk runs so partial watcher writes never
- * flash through; triggers landing mid-compile queue a single trailing run with
- * the latest path.
+ * a manual ⌘S save lands (`compileTexOnManualSave`). The build target is the
+ * project ROOT (saving a child recompiles the root and refreshes the root's
+ * PDF pane), resolved after flushing every mounted editor — ⌘S only guaranteed
+ * the triggered file on disk. The pane's shimmer (`texCompiling`) stays up
+ * while latexmk runs so partial watcher writes never flash through; triggers
+ * landing mid-compile queue a single trailing run with the latest path
+ * (re-resolving the root against the then-current disk state).
  */
 export async function compileTexOnSave(texPath: string): Promise<void> {
 	// Right after a window reload the detection scan may still be in flight:
@@ -684,12 +694,17 @@ export async function compileTexOnSave(texPath: string): Promise<void> {
 		pendingSaveCompilePath = texPath;
 		return;
 	}
-	const pdfPath = texPdfPath(texPath);
+	await flushAllTextEditors();
+	const rootPath = await resolveTexRoot(texPath);
+	const pdfPath = texPdfPath(rootPath);
 	const pdfId = tabIdForPath(pdfPath);
 	const paneOpen = getTabs().some((t) => t.id === pdfId);
 	if (paneOpen) updateTab(pdfId, { texCompiling: true });
 	try {
-		const compiled = await compileTexFile(texPath, { quietSuccess: true });
+		const compiled = await compileTexFile(rootPath, {
+			quietSuccess: true,
+			triggerPath: texPath,
+		});
 		const bytes = compiled ? await localFileToArrayBuffer(compiled) : null;
 		if (!compiled || !bytes) {
 			// Drop the shimmer on the previous content; the failure itself was
@@ -783,8 +798,13 @@ export function openTranslationTab(
 ): void {
 	if (!paperAbsPath) return;
 	const tabs = getTabs();
-	const paperTab = tabs.find((t) => t.id === paperTabId);
+	// The caller passes the viewer's document id; bytes-backed viewers suffix a
+	// per-buffer revision (`tab::r<n>`), so fall back to the stripped form.
+	const paperTab =
+		tabs.find((t) => t.id === paperTabId) ??
+		tabs.find((t) => t.id === stripEmbedPdfRevision(paperTabId));
 	if (!paperTab) return;
+	paperTabId = paperTab.id;
 
 	const existing = tabs.find(
 		(t) => t.id === `${tabIdForPath(paperAbsPath)}::translation`,

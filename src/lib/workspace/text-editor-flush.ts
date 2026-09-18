@@ -45,3 +45,17 @@ export async function flushTextEditorFor(path: string): Promise<boolean> {
 		return false;
 	}
 }
+
+/**
+ * Flush every mounted editor's pending autosave — the saveAll equivalent
+ * before a TeX build: a multi-file project's root compile must read the
+ * latest bytes of all its sections, not just the triggered file. Best-effort:
+ * a refused flush (disk-conflict guard / write error) counts as false but
+ * never rejects; callers compile from whatever landed on disk.
+ */
+export async function flushAllTextEditors(): Promise<boolean> {
+	const results = await Promise.all(
+		[...flushers.values()].map((flush) => flush().catch(() => false)),
+	);
+	return results.every(Boolean);
+}

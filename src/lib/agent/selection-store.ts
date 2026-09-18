@@ -64,6 +64,7 @@ export const selectionStore = createStore<SelectionStore>(() => ({
 }));
 
 export type SelectionInput = Omit<SelectionContext, "id" | "pinned">;
+export type PublishSelectionInput = SelectionInput;
 
 /** Freeze provenance before focus changes or a PDF selection is cleared. */
 export function createSelectionContext(

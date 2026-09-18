@@ -210,7 +210,7 @@ fn is_caps_relevant(path: &str) -> bool {
 /// is a harmless no-op.
 fn caps_paper_dirs(vault_root: &str, path: &str) -> Vec<String> {
     let root = std::path::Path::new(vault_root);
-    let canonical = std::fs::canonicalize(root).unwrap_or_else(|_| root.to_path_buf());
+    let canonical = crate::core::fs::canonicalize_best_effort(root);
     let file = std::path::Path::new(path);
     let Ok(rel) = file
         .strip_prefix(&canonical)

@@ -18,10 +18,8 @@ import {
 	useState,
 } from "react";
 import { pageElByIndex } from "@/components/viewer/pdf/coords";
-import {
-	CARD_HOVER_HIDE_MS,
-	isFloatingDialogActive,
-} from "@/components/viewer/pdf/floating-hover";
+import { CARD_HOVER_HIDE_MS } from "@/components/viewer/pdf/floating-hover";
+import { useStickyHoverHide } from "@/components/viewer/pdf/hooks/use-sticky-hover-hide";
 import type { CardScreenPoint } from "@/components/viewer/pdf/types";
 import {
 	isVisualMarkKind,
@@ -92,11 +90,43 @@ export function usePdfCards({
 	const activeCardRef = useRef<ActiveSelectionCard | null>(null);
 	activeCardRef.current = activeCard;
 	const cardScreenRef = useRef<CardScreenPoint | null>(null);
-	const hidePopoverTimerRef = useRef<ReturnType<typeof setTimeout> | null>(
-		null,
+
+	/**
+	 * Sticky hover contract for the open card: hide `CARD_HOVER_HIDE_MS` after
+	 * the pointer leaves every hover surface (pin / card / source fragment),
+	 * never while the floating dialog is hovered / focused, and not while a
+	 * translate run is still streaming. `hideActiveCard` needs the hook's
+	 * surface ref, so the hook receives it through a ref assigned below —
+	 * both stay identity-stable (`onCardClose` already is).
+	 */
+	const holdTranslateStreaming = useCallback(
+		() =>
+			activeCardRef.current?.kind === "translate" &&
+			translateStreamingRef.current === true,
+		[translateStreamingRef],
 	);
-	/** True while pointer is over the active card, pin, or source fragment. */
-	const cardHoverSurfaceRef = useRef(false);
+	const hideActiveCardRef = useRef<() => void>(() => undefined);
+	const hideViaRef = useCallback(() => hideActiveCardRef.current(), []);
+
+	const {
+		hoverSurfaceRef: cardHoverSurfaceRef,
+		cancelHide: cancelHoverHide,
+		markHoverEnter: markCardHoverEnter,
+		scheduleHide: scheduleHoverHide,
+	} = useStickyHoverHide({
+		delayMs: CARD_HOVER_HIDE_MS,
+		hide: hideViaRef,
+		hold: holdTranslateStreaming,
+	});
+
+	const hideActiveCard = useCallback(() => {
+		onCardClose(activeCardRef.current);
+		cardHoverSurfaceRef.current = false;
+		setActiveCard(null);
+		cardScreenRef.current = null;
+		setCardScreen(null);
+	}, [onCardClose, cardHoverSurfaceRef]);
+	hideActiveCardRef.current = hideActiveCard;
 
 	/**
 	 * Place the open pin card next to its gutter pin. Returns false when the
@@ -186,54 +216,6 @@ export function usePdfCards({
 		if (activeCardRef.current) placeActiveCard(activeCardRef.current);
 	}, [placeActiveCard]);
 
-	const cancelHoverHide = useCallback(() => {
-		if (hidePopoverTimerRef.current) {
-			clearTimeout(hidePopoverTimerRef.current);
-			hidePopoverTimerRef.current = null;
-		}
-	}, []);
-
-	const hideActiveCard = useCallback(() => {
-		onCardClose(activeCardRef.current);
-		cardHoverSurfaceRef.current = false;
-		setActiveCard(null);
-		cardScreenRef.current = null;
-		setCardScreen(null);
-	}, [onCardClose]);
-
-	const markCardHoverEnter = useCallback(() => {
-		cardHoverSurfaceRef.current = true;
-		cancelHoverHide();
-	}, [cancelHoverHide]);
-
-	/**
-	 * Leave pin / card / source fragment. Translate cards hide when nothing is
-	 * hovered (unless still streaming). Ask / visual / note editors keep a
-	 * {@link CARD_HOVER_HIDE_MS} delay, and never dismiss while the floating
-	 * dialog is hovered or focused.
-	 */
-	const scheduleHoverHide = useCallback(() => {
-		cardHoverSurfaceRef.current = false;
-		cancelHoverHide();
-		hidePopoverTimerRef.current = setTimeout(() => {
-			hidePopoverTimerRef.current = null;
-			if (cardHoverSurfaceRef.current) return;
-			// Still interacting with the floating note / chat modal.
-			if (isFloatingDialogActive()) {
-				cardHoverSurfaceRef.current = true;
-				return;
-			}
-			// Ephemeral translate result: stay open only while streaming or hovered.
-			if (
-				activeCardRef.current?.kind === "translate" &&
-				translateStreamingRef.current
-			) {
-				return;
-			}
-			hideActiveCard();
-		}, CARD_HOVER_HIDE_MS);
-	}, [cancelHoverHide, hideActiveCard, translateStreamingRef]);
-
 	const openCard = useCallback(
 		(card: ActiveSelectionCard) => {
 			// Cancel pending hide and treat open as an active hover surface so
@@ -260,6 +242,7 @@ export function usePdfCards({
 		},
 		[
 			cancelHoverHide,
+			cardHoverSurfaceRef,
 			onCardOpen,
 			placeActiveCard,
 			placeActiveCardWithRetry,

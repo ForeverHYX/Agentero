@@ -20,11 +20,6 @@
 			"rejectAlways": "始终拒绝"
 		}
 	},
-	"elicitation": {
-		"title": "Agent 需要你的选择",
-		"submit": "提交回答",
-		"cancel": "取消"
-	},
 	"missing": "（缺失）",
 	"switchAgent": "切换 ACP Agent",
 	"configBar": {
@@ -43,8 +38,6 @@
 		"description": "此对话中最近的 ACP 会话。",
 		"empty": "暂无会话。",
 		"restoring": "正在恢复会话……",
-		"includeExternal": "外部会话",
-		"includeExternalToggle": "显示所有会话",
 		"status": {
 			"running": "运行中",
 			"completed": "已完成",
@@ -63,7 +56,6 @@
 	},
 	"composer": {
 		"placeholder": "今天想做些什么？",
-		"interruptHint": "按 Esc 中止当前输出",
 		"queueLabel": "等待发送",
 		"queueRemove": "从队列移除",
 		"contextInstruction": "请在回答相关问题前读取以下知识库文件：",
@@ -162,7 +154,6 @@
 		"expand": "展开问卷"
 	},
 	"citation": {
-		"vaultPath": "Agent 引用的知识库路径",
 		"resolveFailed": "无法打开引用：{{source}}",
 		"figureNotFound": "找不到 Figure：{{source}}",
 		"sectionNotFound": "找不到章节：{{source}}",
@@ -180,11 +171,9 @@
 		"addToFavorites": "添加到收藏",
 		"removeFromFavorites": "取消收藏",
 		"selectTooltip": "选择模型 (ACP)",
-		"reportedTooltip": "Agent 上报模型后将在此显示",
 		"customOrReportedTooltip": "搜索或输入自定义模型 id（第三方 / 中转）",
 		"loading": "加载中……",
 		"button": "模型",
-		"searchPlaceholder": "搜索模型……",
 		"searchOrCustomPlaceholder": "搜索或输入模型 id……",
 		"customGroup": "自定义",
 		"useCustom": "使用 “{{id}}”",

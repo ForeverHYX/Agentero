@@ -1,21 +1,13 @@
 import type { TFunction } from "i18next";
-import { Quote, ScanSearch, Sparkles, X } from "lucide-react";
+import { Quote, ScanSearch, X } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { ContextPathIcon } from "@/components/agent/context-path-icon";
-import type { AgentSkill } from "@/lib/agent";
 import type { SelectionContext } from "@/lib/agent/selection-store";
 import type { PdfVisualDraft } from "@/lib/agent/visual-context-store";
 import { basenameOf } from "@/lib/core/path";
 import { cn, truncateToChars } from "@/lib/core/utils";
 
 const MAX_CHIP_TITLE_CHARS = 9;
-
-function cleanSkillDisplayName(name: string): string {
-	return name
-		.trim()
-		.replace(/^[/$]+/, "")
-		.replace(/^skill\s*:\s*/i, "");
-}
 
 /**
  * Icon-first chip: hover / focus animates width open to reveal a short label + X.
@@ -218,42 +210,6 @@ export function ComposerContextChips({
 					</button>
 				);
 			})}
-		</>
-	);
-}
-
-export function ComposerSkillChips({
-	selectedSkills,
-	onRemoveSkill,
-}: {
-	compact?: boolean;
-	selectedSkills: AgentSkill[];
-	onRemoveSkill: (skillId: string) => void;
-}) {
-	const { t } = useTranslation("agent");
-	if (selectedSkills.length === 0) return null;
-	return (
-		<>
-			{selectedSkills.map((skill) => (
-				<button
-					key={skill.id}
-					type="button"
-					className={chipShellClass()}
-					onClick={() => onRemoveSkill(skill.id)}
-					aria-label={t("composer.removeSkill", {
-						skill: skill.name,
-					})}
-				>
-					<Sparkles
-						className="size-3 shrink-0 text-muted-foreground"
-						aria-hidden
-					/>
-					<ChipExpandTrail
-						label={cleanSkillDisplayName(skill.name)}
-						withRemove
-					/>
-				</button>
-			))}
 		</>
 	);
 }

@@ -30,10 +30,8 @@ import {
 	useState,
 } from "react";
 import { pageElByIndex, rectRightScreen } from "@/components/viewer/pdf/coords";
-import {
-	EPHEMERAL_PREVIEW_HIDE_MS,
-	isFloatingDialogActive,
-} from "@/components/viewer/pdf/floating-hover";
+import { EPHEMERAL_PREVIEW_HIDE_MS } from "@/components/viewer/pdf/floating-hover";
+import { useStickyHoverHide } from "@/components/viewer/pdf/hooks/use-sticky-hover-hide";
 import { getLinkDestination } from "@/components/viewer/pdf/layers/citation-links";
 import type { CitationPreviewState } from "@/components/viewer/pdf/types";
 import { useVaultStore } from "@/hooks/use-app-stores";
@@ -41,7 +39,6 @@ import { useCitationImport } from "@/hooks/use-citation-import";
 import { usePaperRefsSidecar } from "@/hooks/use-paper-refs-sidecar";
 import { usePapersOrgFolders } from "@/hooks/use-papers-org-folders";
 import { errorText } from "@/lib/core/error";
-import { logger } from "@/lib/core/logger";
 import { notifyError } from "@/lib/core/notify";
 import { openExternalUrl } from "@/lib/core/open-external";
 import { lookupSubmit } from "@/lib/paper/import-actions";
@@ -55,26 +52,7 @@ import {
 	expandCitationLinkCluster,
 	matchCitationLinkKey,
 } from "@/lib/pdf/citation-dest-keys";
-import { loadPdfDestMaps } from "@/lib/pdf/citation-dest-map";
-
-/** Upper bound before the deferred dest-key map build runs anyway. */
-const DEST_MAP_IDLE_TIMEOUT_MS = 2000;
-/** Fallback delay when `requestIdleCallback` is unavailable (WebKit). */
-const DEST_MAP_FALLBACK_DELAY_MS = 500;
-
-/**
- * Run `fn` when the main thread is idle (bounded), so the map build never
- * competes with the PDF-open critical path (first paint, scroll, selection).
- * Returns a canceller.
- */
-function scheduleIdle(fn: () => void): () => void {
-	if (typeof requestIdleCallback === "function") {
-		const id = requestIdleCallback(fn, { timeout: DEST_MAP_IDLE_TIMEOUT_MS });
-		return () => cancelIdleCallback(id);
-	}
-	const id = setTimeout(fn, DEST_MAP_FALLBACK_DELAY_MS);
-	return () => clearTimeout(id);
-}
+import { schedulePdfDestMapsBuild } from "@/lib/pdf/citation-dest-map";
 
 type AnnotationCapabilityProvides = ReturnType<
 	typeof useAnnotationCapability
@@ -274,11 +252,20 @@ export function usePdfCitations({
 	onInternalJumpRef.current = onInternalJump;
 	const [citationPreview, setCitationPreview] =
 		useState<CitationPreviewState | null>(null);
-	const citationHideTimerRef = useRef<ReturnType<typeof setTimeout> | null>(
-		null,
-	);
-	/** True while pointer is over the preview card or the import folder menu. */
-	const citationHoverSurfaceRef = useRef(false);
+	const hideCitationPreview = useCallback(() => setCitationPreview(null), []);
+	/**
+	 * Leave link / card. Delay so the pointer can bridge into the card; never
+	 * dismiss while the card (or its import menu) is still hovered / focused.
+	 */
+	const {
+		hoverSurfaceRef: citationHoverSurfaceRef,
+		cancelHide: cancelCitationHide,
+		markHoverEnter: markCitationHoverEnter,
+		scheduleHide: scheduleCitationHide,
+	} = useStickyHoverHide({
+		delayMs: EPHEMERAL_PREVIEW_HIDE_MS,
+		hide: hideCitationPreview,
+	});
 	const { sidecar, setSidecar } = usePaperRefsSidecar(vaultPath, paperPath);
 	/** Mirrored so the hover callback identity does not change per sidecar load. */
 	const citationsRef = useRef(sidecar?.citations ?? []);
@@ -354,38 +341,25 @@ export function usePdfCitations({
 		const canBuildLocal = Boolean(paperAbsPath);
 		const canBuildRemote = isRemotePaper && sourceBytesRef.current;
 		if (!canBuildLocal && !canBuildRemote) return;
-		let cancelled = false;
 		// Deferred to idle, parsed in a worker, memoized per PDF — the build
 		// never blocks the open-PDF critical path (hover previews simply do not
 		// resolve until the map is ready).
-		const cancelIdle = scheduleIdle(() => {
-			void loadPdfDestMaps({
-				paperAbsPath,
-				viewerBytes: sourceBytesRef.current,
-				documentId: docId,
-			})
-				.then((maps) => {
-					if (cancelled || !maps) return;
-					destKeyMapRef.current = maps.cites;
-					citationLinksRef.current = maps.citationLinks;
-					if (isRemotePaper) {
-						citationsRef.current = buildRemoteCitations(
-							maps.cites,
-							maps.citationLinks,
-						);
-					}
-				})
-				.catch((error: unknown) => {
-					// Non-fatal: hover previews simply do not resolve.
-					logger.warn("citation dest key map failed", {
-						error: errorText(error),
-					});
-				});
+		return schedulePdfDestMapsBuild({
+			paperAbsPath,
+			documentId: docId,
+			viewerBytes: () => sourceBytesRef.current,
+			warnLabel: "citation dest key map failed",
+			onMaps: (maps) => {
+				destKeyMapRef.current = maps.cites;
+				citationLinksRef.current = maps.citationLinks;
+				if (isRemotePaper) {
+					citationsRef.current = buildRemoteCitations(
+						maps.cites,
+						maps.citationLinks,
+					);
+				}
+			},
 		});
-		return () => {
-			cancelled = true;
-			cancelIdle();
-		};
 	}, [paperAbsPath, isRemotePaper, docId]);
 
 	// Reset the hover preview when the active PDF document changes.
@@ -395,40 +369,11 @@ export function usePdfCitations({
 		setCitationPreview(null);
 	}, [docId]);
 
-	const cancelCitationHide = useCallback(() => {
-		if (!citationHideTimerRef.current) return;
-		clearTimeout(citationHideTimerRef.current);
-		citationHideTimerRef.current = null;
-	}, []);
-
 	const clearCitationPreview = useCallback(() => {
 		cancelCitationHide();
 		citationHoverSurfaceRef.current = false;
 		setCitationPreview(null);
-	}, [cancelCitationHide]);
-
-	const markCitationHoverEnter = useCallback(() => {
-		citationHoverSurfaceRef.current = true;
-		cancelCitationHide();
-	}, [cancelCitationHide]);
-
-	/**
-	 * Leave link / card. Delay so the pointer can bridge into the card; never
-	 * dismiss while the card (or its import menu) is still hovered / focused.
-	 */
-	const scheduleCitationHide = useCallback(() => {
-		citationHoverSurfaceRef.current = false;
-		cancelCitationHide();
-		citationHideTimerRef.current = setTimeout(() => {
-			citationHideTimerRef.current = null;
-			if (citationHoverSurfaceRef.current) return;
-			if (isFloatingDialogActive()) {
-				citationHoverSurfaceRef.current = true;
-				return;
-			}
-			setCitationPreview(null);
-		}, EPHEMERAL_PREVIEW_HIDE_MS);
-	}, [cancelCitationHide]);
+	}, [cancelCitationHide, citationHoverSurfaceRef]);
 
 	/** GoTo/destination → smooth scroll (annotation plugin); URI → browser. */
 	const handleCitationLinkActivate = useCallback(
@@ -489,18 +434,22 @@ export function usePdfCitations({
 				matched,
 			});
 		},
-		[scheduleCitationHide, cancelCitationHide, hostRef, zoomRef],
+		[
+			scheduleCitationHide,
+			cancelCitationHide,
+			hostRef,
+			zoomRef,
+			citationHoverSurfaceRef,
+		],
 	);
 
 	// Clean up the citation preview hide timer when the document changes or unmounts.
-	// biome-ignore lint/correctness/useExhaustiveDependencies: docId is the effect trigger, not a value read inside the cleanup.
+	// biome-ignore lint/correctness/useExhaustiveDependencies: docId is the effect trigger, not a value read inside the effect.
 	useEffect(
 		() => () => {
-			if (citationHideTimerRef.current) {
-				clearTimeout(citationHideTimerRef.current);
-			}
+			cancelCitationHide();
 		},
-		[docId],
+		[docId, cancelCitationHide],
 	);
 
 	return {

@@ -43,9 +43,11 @@ import {
 	TooltipContent,
 	TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { formatLocaleTimestamp } from "@/i18n";
 import { errorText } from "@/lib/core/error";
 import { notifyError } from "@/lib/core/notify";
 import { openExternalUrl } from "@/lib/core/open-external";
+import { readJsonStorage, writeJsonStorage } from "@/lib/core/storage";
 import { cn } from "@/lib/core/utils";
 import { lookupSubmit } from "@/lib/paper/import-actions";
 import { ARXIV_ALL_CATEGORIES, ARXIV_FEED_CHIPS } from "@/lib/plaza/feeds";
@@ -69,24 +71,13 @@ import { openRemoteArxivPaper } from "@/lib/workspace/actions";
 const CATEGORIES_STORAGE_KEY = "plaza:arxiv-rec:categories";
 
 function loadCategories(): string[] {
-	try {
-		const raw = localStorage.getItem(CATEGORIES_STORAGE_KEY);
-		if (raw) {
-			const parsed = JSON.parse(raw);
-			if (Array.isArray(parsed) && parsed.length > 0) return parsed;
-		}
-	} catch {
-		/* ignore */
-	}
+	const parsed = readJsonStorage<unknown>(CATEGORIES_STORAGE_KEY, null);
+	if (Array.isArray(parsed) && parsed.length > 0) return parsed;
 	return [...ARXIV_FEED_CHIPS];
 }
 
 function persistCategories(categories: string[]) {
-	try {
-		localStorage.setItem(CATEGORIES_STORAGE_KEY, JSON.stringify(categories));
-	} catch {
-		/* ignore */
-	}
+	writeJsonStorage(CATEGORIES_STORAGE_KEY, categories);
 }
 
 /** Empty-state reason, so the panel can offer the matching next action. */
@@ -347,7 +338,7 @@ export function PlazaArxivRecView({ className }: { className?: string }) {
 				<span className="ml-auto flex items-center gap-1.5">
 					{computedAt && probeOk ? (
 						<span className="text-muted-foreground text-caption">
-							{new Date(computedAt).toLocaleString()}
+							{formatLocaleTimestamp(computedAt)}
 						</span>
 					) : null}
 					<Tooltip>

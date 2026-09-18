@@ -1,3 +1,5 @@
+import { readJsonStorage, writeJsonStorage } from "@/lib/core/storage";
+
 /**
  * Best-effort cache of hydrated ACP history titles.
  *
@@ -18,38 +20,26 @@ function cacheKey(agentId: string, sessionId: string): string {
 }
 
 function readAll(): CacheMap {
-	if (typeof localStorage === "undefined") return {};
-	try {
-		const raw = localStorage.getItem(STORAGE_KEY);
-		if (!raw) return {};
-		const parsed = JSON.parse(raw) as unknown;
-		if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
-			return {};
-		}
-		const out: CacheMap = {};
-		for (const [k, v] of Object.entries(parsed as CacheMap)) {
-			if (typeof k === "string" && typeof v === "string" && v.trim()) {
-				out[k] = v.trim();
-			}
-		}
-		return out;
-	} catch {
+	const parsed = readJsonStorage<unknown>(STORAGE_KEY, null);
+	if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
 		return {};
 	}
+	const out: CacheMap = {};
+	for (const [k, v] of Object.entries(parsed as CacheMap)) {
+		if (typeof k === "string" && typeof v === "string" && v.trim()) {
+			out[k] = v.trim();
+		}
+	}
+	return out;
 }
 
 function writeAll(map: CacheMap): void {
-	if (typeof localStorage === "undefined") return;
-	try {
-		const entries = Object.entries(map);
-		const trimmed =
-			entries.length > MAX_ENTRIES
-				? Object.fromEntries(entries.slice(entries.length - MAX_ENTRIES))
-				: map;
-		localStorage.setItem(STORAGE_KEY, JSON.stringify(trimmed));
-	} catch {
-		// Quota / private mode — ignore.
-	}
+	const entries = Object.entries(map);
+	const trimmed =
+		entries.length > MAX_ENTRIES
+			? Object.fromEntries(entries.slice(entries.length - MAX_ENTRIES))
+			: map;
+	writeJsonStorage(STORAGE_KEY, trimmed);
 }
 
 export function getCachedHistoryTitle(

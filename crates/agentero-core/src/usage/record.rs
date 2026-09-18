@@ -1,6 +1,7 @@
 //! Append-only event writes: normalization, facet/qty derivation, daily rollup.
 
 use crate::error::AppError;
+use crate::fs::normalize_rel_separators;
 use rusqlite::params;
 use serde::Deserialize;
 use std::path::Path;
@@ -108,7 +109,7 @@ pub(super) fn normalize(raw: &UsageRecord) -> Result<Normalized, AppError> {
     let path = raw
         .path
         .as_deref()
-        .map(normalize_rel)
+        .map(|p| normalize_rel_separators(p.trim()))
         .filter(|s| !s.is_empty());
     if path.as_ref().is_some_and(|p| p.len() > MAX_PATH) {
         return Err(AppError::message("usage path too long"));
@@ -280,10 +281,6 @@ fn optional_trimmed(value: &Option<String>, max: usize) -> Option<String> {
         .map(str::trim)
         .filter(|s| !s.is_empty())
         .map(|s| s.chars().take(max).collect())
-}
-
-pub(super) fn normalize_rel(path: &str) -> String {
-    path.trim().replace('\\', "/").trim_matches('/').to_string()
 }
 
 fn now_rfc3339() -> String {

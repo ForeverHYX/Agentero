@@ -4,34 +4,10 @@ use crate::features::wiki::models::{
     BlockAnchor, HeadingAnchor, InternalLinkOccurrence, InternalLinkSyntax, LinkFragment,
     LinkResolutionStatus, ResolvedLink, WikiDocument,
 };
+use crate::features::wiki::util::{normalize_key, stem_of};
+use crate::fs::normalize_rel_lexical;
 use std::collections::HashMap;
 use std::path::Path;
-
-/// Normalize a Vault-relative forward-slash path without allowing it to escape the root.
-pub fn normalize_rel(path: &str) -> String {
-    let normalized = path.replace('\\', "/");
-    let mut parts = Vec::new();
-    for component in normalized.split('/') {
-        match component {
-            "" | "." => {}
-            ".." => {
-                if parts.pop().is_none() {
-                    parts.push("..");
-                }
-            }
-            value => parts.push(value),
-        }
-    }
-    parts.join("/")
-}
-
-fn normalize_key(value: &str) -> String {
-    value
-        .split_whitespace()
-        .collect::<Vec<_>>()
-        .join(" ")
-        .to_lowercase()
-}
 
 pub fn heading_path_ends_with(path: &[String], suffix: &[String]) -> bool {
     !suffix.is_empty()
@@ -42,16 +18,8 @@ pub fn heading_path_ends_with(path: &[String], suffix: &[String]) -> bool {
             .all(|(current, wanted)| normalize_key(current) == normalize_key(wanted))
 }
 
-fn stem_of(path: &str) -> String {
-    Path::new(path)
-        .file_stem()
-        .and_then(|value| value.to_str())
-        .unwrap_or(path)
-        .to_string()
-}
-
 fn add_extensions(value: &str) -> Vec<String> {
-    let value = normalize_rel(value);
+    let value = normalize_rel_lexical(value);
     if value.is_empty() {
         return Vec::new();
     }
@@ -71,7 +39,7 @@ fn add_extensions(value: &str) -> Vec<String> {
 
 fn source_relative(source: &str, target: &str) -> String {
     let parent = Path::new(source).parent().unwrap_or_else(|| Path::new(""));
-    normalize_rel(&parent.join(target).to_string_lossy())
+    normalize_rel_lexical(&parent.join(target).to_string_lossy())
 }
 
 fn unique(mut candidates: Vec<String>) -> Result<String, Vec<String>> {

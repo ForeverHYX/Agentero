@@ -1,6 +1,7 @@
 //! `paper_coolpapers_notes` / `paper_coolpapers_import` — papers.cool commands.
 
-use crate::core::error::{map_err, ApiResult};
+use crate::app::command_util::try_vault_ok;
+use crate::core::error::ApiResult;
 use crate::core::log_util::{trunc, OpTimer};
 use crate::features::paper::import::AssetProgressContext;
 use serde::Deserialize;
@@ -53,13 +54,7 @@ pub async fn paper_coolpapers_import(
         "paper_coolpapers_import",
         format!("branch={} id={}", args.branch, trunc(&args.id, 80)),
     );
-    let vault = match crate::core::fs::resolve_vault(&args.vault_path) {
-        Ok(vault) => vault,
-        Err(err) => {
-            op.finish_err(&err);
-            return Ok(map_err(err));
-        }
-    };
+    let vault = try_vault_ok!(&args.vault_path, op);
     let host_app = crate::features::host_hooks::wrap(&app);
     let result = super::page::import_page(super::page::ImportPageArgs {
         vault: &vault,
@@ -94,13 +89,7 @@ pub async fn paper_coolpapers_notes(
             args.arxiv_id.as_deref().unwrap_or("-")
         ),
     );
-    let vault = match crate::core::fs::resolve_vault(&args.vault_path) {
-        Ok(vault) => vault,
-        Err(err) => {
-            op.finish_err(&err);
-            return Ok(map_err(err));
-        }
-    };
+    let vault = try_vault_ok!(&args.vault_path, op);
     let result = super::fetch_notes(super::FetchNotesRequest {
         vault: &vault,
         paper_rel: &args.path,

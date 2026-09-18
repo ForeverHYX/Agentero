@@ -6,6 +6,7 @@
 import { createStore } from "zustand/vanilla";
 
 import type { PdfAskNormalizedRect } from "@/lib/pdf/ask/types";
+import { stripEmbedPdfRevision } from "@/lib/pdf/document-id";
 import type {
 	LayoutAnalysisUiStatus,
 	PdfLayoutDocumentResult,
@@ -112,11 +113,27 @@ export function setLayoutAnalysisUi(
 	});
 }
 
+/**
+ * Canonical `byDocument` key. Buffer-backed viewers mount as `tab::r<n>` (one
+ * revision per ArrayBuffer read), while cross-pane writers/readers — the
+ * source pane's layout run, `openTranslationTab`'s seed, the translation
+ * pane's own viewer — each hold a different revision suffix. Strip it so all
+ * sides agree on the base id; URL sources and headless synthetic ids pass
+ * through unchanged. Selectors that read `s.byDocument` directly must go
+ * through this helper too.
+ */
+export function layoutDocumentKey(docId: string): string {
+	return stripEmbedPdfRevision(docId);
+}
+
 export function setLayoutDocumentResult(result: PdfLayoutDocumentResult): void {
+	const key = layoutDocumentKey(result.documentId);
+	const stored =
+		key === result.documentId ? result : { ...result, documentId: key };
 	layoutAnalysisStore.setState((state) => ({
 		byDocument: {
 			...state.byDocument,
-			[result.documentId]: result,
+			[key]: stored,
 		},
 	}));
 }
@@ -124,18 +141,28 @@ export function setLayoutDocumentResult(result: PdfLayoutDocumentResult): void {
 export function getLayoutDocumentResult(
 	documentId: string,
 ): PdfLayoutDocumentResult | null {
-	return layoutAnalysisStore.getState().byDocument[documentId] ?? null;
+	return (
+		layoutAnalysisStore.getState().byDocument[layoutDocumentKey(documentId)] ??
+		null
+	);
 }
 
 export function clearLayoutDocumentResult(documentId: string): void {
+	const key = layoutDocumentKey(documentId);
 	layoutAnalysisStore.setState((state) => {
-		if (!(documentId in state.byDocument)) return state;
+		if (!(key in state.byDocument)) return state;
 		const next = { ...state.byDocument };
-		delete next[documentId];
+		delete next[key];
+		// focused/overlayVisible keep the caller's raw id form (same-viewer
+		// writers); clear whichever form this entry may have used.
 		const focused =
-			state.focused?.documentId === documentId ? null : state.focused;
+			state.focused?.documentId === documentId ||
+			state.focused?.documentId === key
+				? null
+				: state.focused;
 		const overlayVisible = { ...state.overlayVisible };
 		delete overlayVisible[documentId];
+		delete overlayVisible[key];
 		return { byDocument: next, focused, overlayVisible };
 	});
 }

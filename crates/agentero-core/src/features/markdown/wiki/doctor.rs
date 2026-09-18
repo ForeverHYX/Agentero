@@ -9,7 +9,11 @@ use crate::features::wiki::models::{
     InternalLinkSyntax, LinkFragment, LinkResolutionStatus, ResolvedLink, SourceRange,
 };
 use crate::features::wiki::rename::content_hash;
-use crate::features::wiki::resolve::{heading_path_ends_with, normalize_rel};
+use crate::features::wiki::resolve::heading_path_ends_with;
+use crate::features::wiki::util::{
+    normalize_key, replacement_target, stem_of, strip_markdown_extension,
+};
+use crate::fs::{normalize_rel_lexical, normalize_rel_separators};
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 use std::fs;
@@ -116,79 +120,6 @@ pub struct WikilinkRepairChange {
 #[serde(rename_all = "camelCase")]
 pub struct WikilinkRepairResult {
     pub updated_paths: Vec<String>,
-}
-
-fn normalize_key(value: &str) -> String {
-    value
-        .split_whitespace()
-        .collect::<Vec<_>>()
-        .join(" ")
-        .to_lowercase()
-}
-
-fn stem_of(path: &str) -> String {
-    Path::new(path)
-        .file_stem()
-        .and_then(|value| value.to_str())
-        .unwrap_or(path)
-        .to_string()
-}
-
-fn strip_markdown_extension(path: &str) -> &str {
-    [".markdown", ".mdx", ".md"]
-        .iter()
-        .find_map(|extension| path.strip_suffix(extension))
-        .unwrap_or(path)
-}
-
-fn markdown_relative_target(source: &str, target: &str) -> String {
-    let source_parent = Path::new(source).parent().unwrap_or_else(|| Path::new(""));
-    let source_parts = source_parent
-        .components()
-        .filter_map(|component| match component {
-            Component::Normal(value) => value.to_str(),
-            _ => None,
-        })
-        .collect::<Vec<_>>();
-    let target_parts = Path::new(target)
-        .components()
-        .filter_map(|component| match component {
-            Component::Normal(value) => value.to_str(),
-            _ => None,
-        })
-        .collect::<Vec<_>>();
-    let common = source_parts
-        .iter()
-        .zip(&target_parts)
-        .take_while(|(left, right)| left == right)
-        .count();
-    let mut parts = Vec::new();
-    parts.extend(std::iter::repeat_n("..", source_parts.len() - common));
-    parts.extend(target_parts[common..].iter().copied());
-    if parts.is_empty() {
-        Path::new(target)
-            .file_name()
-            .and_then(|name| name.to_str())
-            .unwrap_or(target)
-            .to_string()
-    } else {
-        parts.join("/")
-    }
-}
-
-fn replacement_target(
-    syntax: &InternalLinkSyntax,
-    target_raw: &str,
-    source: &str,
-    final_target: &str,
-) -> String {
-    if target_raw.is_empty() && source == final_target {
-        return String::new();
-    }
-    match syntax {
-        InternalLinkSyntax::Wikilink => strip_markdown_extension(final_target).to_string(),
-        InternalLinkSyntax::Markdown => markdown_relative_target(source, final_target),
-    }
 }
 
 fn levenshtein(a: &str, b: &str) -> usize {
@@ -780,13 +711,13 @@ pub fn apply_wikilink_repairs(
 
     let dirty = dirty_paths
         .iter()
-        .map(|path| path.replace('\\', "/").trim_matches('/').to_string())
+        .map(|path| normalize_rel_separators(path))
         .collect::<HashSet<_>>();
 
     // Group edits by source path.
     let mut by_source: HashMap<String, Vec<&WikilinkRepairChange>> = HashMap::new();
     for change in changes {
-        let path = normalize_rel(&change.source.replace('\\', "/"));
+        let path = normalize_rel_lexical(&change.source.replace('\\', "/"));
         if !safe_relative_path(&path) {
             return Err(DoctorRepairError::new(
                 "invalidPath",

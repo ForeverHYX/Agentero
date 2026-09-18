@@ -14,20 +14,14 @@ import type {
 	FormattedSelection,
 	useSelectionCapability,
 } from "@embedpdf/plugin-selection/react";
-import {
-	type Dispatch,
-	type SetStateAction,
-	useCallback,
-	useEffect,
-	useRef,
-} from "react";
+import { type Dispatch, type SetStateAction, useCallback, useRef } from "react";
+import { useSelectionQuickChat } from "@/components/selection/use-selection-quick-chat";
 import type { SelectionMenuState } from "@/components/viewer/pdf/types";
 import { annotationPdfAnchors } from "@/lib/agent/selection-annotations";
 import {
 	openSelectionChat,
 	selectionChatStore,
 } from "@/lib/agent/selection-chat-store";
-import { registerSelectionQuickChat } from "@/lib/agent/selection-quick-chat";
 import type { PdfAskAnchor } from "@/lib/pdf/ask/types";
 import {
 	DEFAULT_HIGHLIGHT_COLOR,
@@ -150,13 +144,7 @@ export function usePdfSelectionActions({
 	}, [startFromAnchor, selectionCap, docId, setSelectionMenu]);
 
 	// ⌘K Quick chat — only while this viewer's selection toolbar is armed.
-	useEffect(() => {
-		return registerSelectionQuickChat(() => {
-			if (!selectionMenuRef.current) return false;
-			handleMenuAsk();
-			return true;
-		});
-	}, [handleMenuAsk]);
+	useSelectionQuickChat(() => selectionMenuRef.current != null, handleMenuAsk);
 
 	const handleMenuAddToChat = useCallback(() => {
 		const menu = selectionMenuRef.current;

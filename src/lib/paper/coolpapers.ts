@@ -20,8 +20,6 @@ import { joinVaultPath, readVaultFile } from "@/lib/vault";
 import { getVaultPath } from "@/lib/vault/store";
 import { refreshTabNotes } from "@/lib/workspace/store";
 
-export const COOL_PAPERS_ORIGIN = "https://papers.cool";
-
 /**
  * Append the papers.cool Kimi analysis for one paper to its NOTES.md.
  *

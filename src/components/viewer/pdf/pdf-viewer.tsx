@@ -129,6 +129,7 @@ import { HIGHLIGHT_HEX_LIST } from "@/lib/pdf/highlight/palette";
 import {
 	getPdfAiRuntime,
 	layoutAnalysisStore,
+	layoutDocumentKey,
 	type PdfLayoutRegion,
 	setFocusedLayoutRegion,
 } from "@/lib/pdf/layout";
@@ -327,12 +328,14 @@ export const PdfViewer = memo(function PdfViewer(props: PdfViewerProps) {
 							<PdfTranslationViewerInner
 								{...props}
 								docId={docId}
+								baseDocId={baseDocId}
 								sourceBytes={effectiveSourceBytes}
 							/>
 						) : (
 							<PdfViewerInner
 								{...props}
 								docId={docId}
+								baseDocId={baseDocId}
 								sourceBytes={effectiveSourceBytes}
 							/>
 						);
@@ -345,6 +348,7 @@ export const PdfViewer = memo(function PdfViewer(props: PdfViewerProps) {
 
 function PdfViewerInner({
 	docId,
+	baseDocId,
 	sourceBytes = null,
 	paperAbsPath = null,
 	paperRelPath = null,
@@ -417,7 +421,8 @@ function PdfViewerInner({
 		const focused = s.focused;
 		if (!focused) return null;
 		if (focused.region) return focused.region;
-		const result = s.byDocument[docId];
+		// byDocument is keyed by the revision-stripped base id.
+		const result = s.byDocument[layoutDocumentKey(docId)];
 		if (!result) return null;
 		return (
 			result.regions.find((r) => r.id === focused.regionId) ??
@@ -932,14 +937,16 @@ function PdfViewerInner({
 		}
 		// In dual-pane mode the source pane only opens the right-hand
 		// translation panel. The translation pane itself owns the single
-		// layout-translation job so only one task runs at a time.
-		onOpenTranslationTab?.(docId, paperAbsPath ?? null, paperTitle ?? null);
+		// layout-translation job so only one task runs at a time. The receiver
+		// resolves this back to a workspace tab, so pass the revision-stripped
+		// base id (`docId` carries a `::r<n>` buffer suffix).
+		onOpenTranslationTab?.(baseDocId, paperAbsPath ?? null, paperTitle ?? null);
 	}, [
 		plainViewer,
 		dualPaneTranslate,
 		toggleLayoutTranslate,
 		onOpenTranslationTab,
-		docId,
+		baseDocId,
 		paperAbsPath,
 		paperTitle,
 	]);

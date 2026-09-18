@@ -99,7 +99,15 @@ export type PdfViewerProps = {
 	importIdentifier?: string;
 };
 
-export type PdfViewerInnerProps = PdfViewerProps & { docId: string };
+export type PdfViewerInnerProps = PdfViewerProps & {
+	docId: string;
+	/**
+	 * Revision-stripped document id (the tab id / stable scope key). Cross-pane
+	 * callers — e.g. `onOpenTranslationTab`, which resolves it back to a
+	 * workspace tab — need this form, not the per-buffer `docId`.
+	 */
+	baseDocId: string;
+};
 
 /** Viewport-space point (client px) used by every floating overlay. */
 export type ScreenPoint = {

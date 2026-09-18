@@ -3,10 +3,9 @@
  *
  * Lifted from the Plaza feed selection hook so any text surface (plaza detail,
  * proxied web papers, …) gets the same run machinery: in-memory `PdfAskThread`
- * (nothing writes marks/), `runOnce({workflow: "free"})` + `attachAgentRun`
- * streaming, resend-from-turn, stop / hide / delete, and IPC teardown.
- * Surfaces keep their own selection capture and pass a `buildPrompt` that
- * stamps their context (title / URL / surface wording).
+ * (nothing writes marks/), turn engine from `@/lib/pdf/ask/run-turn`, and IPC
+ * teardown. Surfaces keep their own selection capture and pass a `buildPrompt`
+ * that stamps their context (title / URL / surface wording).
  */
 
 import type { UnlistenFn } from "@tauri-apps/api/event";
@@ -18,20 +17,17 @@ import {
 	useState,
 } from "react";
 import { useTranslation } from "react-i18next";
+import { disposeAgentRun } from "@/lib/agent";
+import { createEmptyThread } from "@/lib/pdf/ask";
 import {
-	attachAgentRun,
-	cancelAgentRun,
-	disposeAgentRun,
-	listAgents,
-	runOnce,
-} from "@/lib/agent";
-import { errorText } from "@/lib/core/error";
-import { notifyError } from "@/lib/core/notify";
-import { createEmptyThread, newMessageId } from "@/lib/pdf/ask";
-import { threadHasUserQuestion } from "@/lib/pdf/ask/schema";
+	dispatchAskTurn,
+	type ResolvedAskAgent,
+	resendBaseMessages,
+	resolveAskAgent,
+	runAskTurn,
+	stopAskRun,
+} from "@/lib/pdf/ask/run-turn";
 import type { PdfAskThread } from "@/lib/pdf/ask/types";
-import { loadSettings } from "@/lib/settings";
-import { resolveTranslateAgent } from "@/lib/translate";
 import { getVaultPath } from "@/lib/vault/store";
 
 export type SelectionAskState<S> = {
@@ -94,21 +90,26 @@ export function useSelectionAsk<S>({
 		setStreaming(false);
 	}, []);
 
-	const resolveAskAgent = useCallback(async () => {
-		const registry = await listAgents().catch(() => null);
-		const resolved = resolveTranslateAgent(loadSettings().pdfAsk, registry);
-		if (!resolved.agentId) {
-			const msg = t("pdfAsk.noAgent");
-			notifyError(msg);
-			setAskError(msg);
-			return null;
-		}
-		return resolved;
-	}, [t]);
-
 	const upsertAskThread = useCallback((thread: PdfAskThread) => {
 		setAsk((prev) => (prev ? { ...prev, thread } : prev));
 	}, []);
+
+	const patchAskThread = useCallback(
+		(
+			threadId: string,
+			transform: (thread: PdfAskThread) => PdfAskThread,
+			onApplied?: (thread: PdfAskThread) => void,
+		) => {
+			setAsk((prev) => {
+				if (!prev || prev.thread.id !== threadId) return prev;
+				const thread = transform(prev.thread);
+				if (thread === prev.thread) return prev;
+				onApplied?.(thread);
+				return { ...prev, thread };
+			});
+		},
+		[],
+	);
 
 	const sendToThread = useCallback(
 		async (
@@ -116,189 +117,75 @@ export function useSelectionAsk<S>({
 			question: string,
 			agentOpts?: { agentId?: string; modelId?: string },
 			baseMessages?: PdfAskThread["messages"],
-		) => {
-			const threadId = thread.id;
-			if (!question.trim()) return;
-			const userMsg = {
-				id: newMessageId(),
-				role: "user" as const,
-				content: question,
-				createdAt: new Date().toISOString(),
-			};
-			const prior = baseMessages ?? thread.messages;
-			const withUser: PdfAskThread = {
-				...thread,
-				status: "open",
-				messages: [...prior, userMsg],
-				updatedAt: new Date().toISOString(),
-			};
-			upsertAskThread(withUser);
-			setAskError(null);
-			setStreaming(true);
+		) =>
+			runAskTurn({
+				thread,
+				question,
+				agent: agentOpts,
+				baseMessages,
+				vaultPath: getVaultPath() ?? undefined,
+				buildPrompt,
+				upsertThread: upsertAskThread,
+				patchThread: patchAskThread,
+				setAskError,
+				setStreaming,
+				failureText: () => t("pdfAsk.agentFailed"),
+				disposedRef: runDisposedRef,
+				unsubsRef: runUnsubsRef,
+				sessionRef: askSessionRef,
+				activeSessionRef,
+			}),
+		[buildPrompt, upsertAskThread, patchAskThread, activeSessionRef, t],
+	);
 
-			const assistantId = newMessageId();
-			const prompt = buildPrompt(withUser, question);
-			try {
-				const accepted = await runOnce({
-					prompt,
-					agentId: agentOpts?.agentId,
-					modelId: agentOpts?.modelId,
-					vaultPath: getVaultPath() ?? undefined,
-					workflow: "free",
-					permissionMode: "auto",
-					hideFromChatHistory: true,
-				});
-				const withAssistant: PdfAskThread = {
-					...withUser,
-					messages: [
-						...withUser.messages,
-						{
-							id: assistantId,
-							role: "assistant",
-							content: "",
-							createdAt: new Date().toISOString(),
-							agentSessionId: accepted.sessionId,
-						},
-					],
-				};
-				await attachAgentRun({
-					accepted,
-					disposedRef: runDisposedRef,
-					unsubsRef: runUnsubsRef,
-					sessionRef: askSessionRef,
-					activeSessionRef,
-					onArmed: () => upsertAskThread(withAssistant),
-					onStream: (ev) => {
-						setAsk((prev) => {
-							if (!prev || prev.thread.id !== threadId) return prev;
-							const msgs = [...prev.thread.messages];
-							const last = msgs[msgs.length - 1];
-							if (last?.id !== assistantId) return prev;
-							msgs[msgs.length - 1] = {
-								...last,
-								content: last.content + ev.chunk,
-							};
-							return { ...prev, thread: { ...prev.thread, messages: msgs } };
-						});
-					},
-					onCompleted: (ev) => {
-						setAsk((prev) => {
-							if (!prev || prev.thread.id !== threadId) return prev;
-							const msgs = [...prev.thread.messages];
-							const last = msgs[msgs.length - 1];
-							if (last?.id === assistantId) {
-								msgs[msgs.length - 1] = {
-									...last,
-									content: ev.content || last.content,
-									sources: (ev.sources ?? []).map((uri) => ({ uri })),
-								};
-							}
-							return {
-								...prev,
-								thread: {
-									...prev.thread,
-									messages: msgs,
-									updatedAt: new Date().toISOString(),
-								},
-							};
-						});
-					},
-					onFailed: (ev) => {
-						setAskError(ev.error || t("pdfAsk.agentFailed"));
-						setAsk((prev) => {
-							if (!prev || prev.thread.id !== threadId) return prev;
-							return {
-								...prev,
-								thread: {
-									...prev.thread,
-									messages: prev.thread.messages.filter(
-										(m) => m.id !== assistantId,
-									),
-								},
-							};
-						});
-					},
-					onSettled: () => setStreaming(false),
-				});
-			} catch (e) {
-				setStreaming(false);
-				setAskError(e instanceof Error ? e.message : t("pdfAsk.agentFailed"));
-			}
-		},
-		[buildPrompt, upsertAskThread, activeSessionRef, t],
+	const resolveAgent = useCallback(
+		async (): Promise<ResolvedAskAgent | null> =>
+			resolveAskAgent(() => t("pdfAsk.noAgent"), setAskError),
+		[t],
 	);
 
 	const sendAskQuestion = useCallback(
 		(question: string) => {
 			const current = askRef.current;
 			if (!current) return;
-			void (async () => {
-				try {
-					const resolved = await resolveAskAgent();
-					if (!resolved) return;
-					void sendToThread(current.thread, question, {
-						agentId: resolved.agentId,
-						modelId: resolved.modelId,
-					});
-				} catch (e) {
-					const message = errorText(e);
-					notifyError(message);
-					setAskError(message);
-				}
-			})();
+			dispatchAskTurn({
+				thread: current.thread,
+				question,
+				resolveAgent,
+				run: sendToThread,
+				onError: setAskError,
+			});
 		},
-		[resolveAskAgent, sendToThread],
+		[resolveAgent, sendToThread],
 	);
 
 	const resendAskQuestion = useCallback(
 		(messageId: string, question: string) => {
 			const current = askRef.current;
 			if (!current) return;
-			const index = current.thread.messages.findIndex(
-				(m) => m.id === messageId && m.role === "user",
+			const baseMessages = resendBaseMessages(
+				current.thread.messages,
+				messageId,
 			);
-			if (index < 0) return;
-			const baseMessages = current.thread.messages.slice(0, index);
-			void (async () => {
-				try {
-					const resolved = await resolveAskAgent();
-					if (!resolved) return;
-					void sendToThread(
-						current.thread,
-						question,
-						{
-							agentId: resolved.agentId,
-							modelId: resolved.modelId,
-						},
-						baseMessages,
-					);
-				} catch (e) {
-					const message = errorText(e);
-					notifyError(message);
-					setAskError(message);
-				}
-			})();
+			if (!baseMessages) return;
+			dispatchAskTurn({
+				thread: current.thread,
+				question,
+				baseMessages,
+				resolveAgent,
+				run: sendToThread,
+				onError: setAskError,
+			});
 		},
-		[resolveAskAgent, sendToThread],
+		[resolveAgent, sendToThread],
 	);
 
 	const stopAskStreaming = useCallback(() => {
-		const sid = askSessionRef.current;
-		if (!sid) return;
-		askSessionRef.current = null;
-		if (activeSessionRef.current === sid) activeSessionRef.current = null;
-		void cancelAgentRun(sid).catch(() => undefined);
-		setStreaming(false);
+		stopAskRun(askSessionRef, activeSessionRef, () => setStreaming(false));
 	}, [activeSessionRef]);
 
 	const hideAsk = useCallback(() => {
 		stopAskStreaming();
-		const current = askRef.current;
-		if (current && !threadHasUserQuestion(current.thread)) {
-			setAsk(null);
-			setAskError(null);
-			return;
-		}
 		setAsk(null);
 		setAskError(null);
 	}, [stopAskStreaming]);

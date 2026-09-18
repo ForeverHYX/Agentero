@@ -27,9 +27,9 @@ import {
 	createSelectionAskThread,
 	useSelectionAsk,
 } from "@/components/selection/use-selection-ask";
+import { useSelectionQuickChat } from "@/components/selection/use-selection-quick-chat";
 import type { ScreenPoint } from "@/components/viewer/pdf/types";
 import { openSelectionChat } from "@/lib/agent/selection-chat-store";
-import { registerSelectionQuickChat } from "@/lib/agent/selection-quick-chat";
 import {
 	clearActiveSelection,
 	publishSelection,
@@ -204,17 +204,7 @@ export function useTextEditorSelection({
 	}, [viewRef]);
 
 	// ⌘K Quick chat — while this editor's selection toolbar is armed.
-	const handleAskRef = useRef(handleAsk);
-	handleAskRef.current = handleAsk;
-	useEffect(
-		() =>
-			registerSelectionQuickChat(() => {
-				if (!menuRef.current) return false;
-				handleAskRef.current();
-				return true;
-			}),
-		[],
-	);
+	useSelectionQuickChat(() => menuRef.current != null, handleAsk);
 
 	// Drag arm point + collapse dismissal: mousedown/mouseup pairs anywhere
 	// (capture), arming only when the release lands inside this editor.

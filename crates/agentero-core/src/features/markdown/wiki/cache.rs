@@ -65,8 +65,7 @@ pub(crate) enum WikiSnapshotWrite {
 }
 
 fn vault_identity(vault_root: &Path) -> String {
-    fs::canonicalize(vault_root)
-        .unwrap_or_else(|_| vault_root.to_path_buf())
+    crate::fs::canonicalize_best_effort(vault_root)
         .to_string_lossy()
         .replace('\\', "/")
 }

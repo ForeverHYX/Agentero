@@ -60,9 +60,11 @@ NAV_BRIDGE 同款 vanilla ES5 IIFE,只装配顶层 frame。经 `parent.postMessa
 `use-web-view-selection.ts`(`src/components/viewer/web-view/`)消费桥消息,产出与 PDF / plaza 同款的浮层:
 
 - **工具栏**:`SelectionMenu`(复用 `viewer/pdf/cards/`,`showHighlight={false}`——网页无 marks/,藏高亮留翻译)+ 选中即复制标签 `SelectionCopiedLabel`;
-- **翻译**:`TranslateCard` 流式卡,双 provider(agent → `runOnce{workflow:"translate"}` 流式;免费 MT → `runTranslate`),ephemeral 单卡不写 marks;
-- **Quick chat ⌘K**:`AskPopover` + 共享 `use-selection-ask.ts`(从 plaza 抽出的 ephemeral ask 生命周期:`PdfAskThread` + `runOnce{workflow:"free"}` + `attachAgentRun` 流式,plaza 改为消费方);
-- **加入对话 ⌘L**:`publishSelection{origin:"markdown", sourcePath: html_url}` + `pinActiveSelection` + `openRightTab("agent")`。
+- **翻译**:`TranslateCard` 流式卡,双 provider 执行在共享引擎 `lib/pdf/translate/run-selection.ts`(agent → `runOnce{workflow:"translate"}` 流式;免费 MT → `runTranslate`;与 PDF 划词复用),ephemeral 单卡不写 marks;
+- **Quick chat ⌘K**:`AskPopover` + 共享 `use-selection-ask.ts`(从 plaza 抽出的 ephemeral ask 生命周期:`PdfAskThread` + 共享引擎 `lib/pdf/ask/run-turn.ts` 的 `runOnce{workflow:"free"}` + `attachAgentRun` 流式,plaza 改为消费方);
+- **加入对话 ⌘L**:`addSelectionToChat`(= `publishSelection` + `pinActiveSelection` + `openRightTab("agent")`)。
+
+四个划词表面(PDF / plaza / 网页论文 / 文本编辑器)共用 `src/components/selection/` 下的三件套:`use-copied-label.ts`(自动复制的 copied 确认标签,1000ms 自隐藏)、`use-selection-quick-chat.ts`(⌘K 注册,ref 守卫 mount 稳定 + armed 谓词)、`add-selection-to-chat.ts`(发布 + pin + 打开 Agent 侧栏);ask 生命周期在 `use-selection-ask.ts`。各表面只保留自己的来源 origin、几何信息与 dismissal 编排。
 
 坐标换算:`bridgeSelectionScreen(rect, iframeRect)`(桥给的是 frame 视口坐标,加 iframe 元素偏移即应用视口坐标),纯函数在 `bridge-message.ts`,与消息 parse 守卫一起有 vitest 覆盖。
 

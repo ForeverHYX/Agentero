@@ -213,11 +213,10 @@ export async function refreshTree(
 			}
 		}
 	} finally {
-		if (
-			!quiet &&
-			getVaultPath() === path &&
-			treeLoadGeneration === generation
-		) {
+		// Only the generation guards the reset: validateRestoredVault may clear
+		// vaultPath mid-load (invalid restored path), and a path-based guard
+		// would strand busy:true, freezing the whole welcome page.
+		if (!quiet && treeLoadGeneration === generation) {
 			vaultStore.setState({ treeLoading: false, busy: false });
 		}
 	}

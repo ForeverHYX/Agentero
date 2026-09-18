@@ -8,8 +8,13 @@ import {
 	Search,
 	TriangleAlert,
 } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
+import {
+	chooseZoteroFolder,
+	loadStoredOpts,
+	useZoteroDirDetect,
+} from "@/components/dialogs/zotero-dialog-shared";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
@@ -33,14 +38,12 @@ import {
 import { useOverlayRegistration } from "@/hooks/use-overlay-registration";
 import i18n from "@/i18n";
 import { errorText } from "@/lib/core/error";
-import { readJsonStorage, writeJsonStorage } from "@/lib/core/storage";
+import { writeJsonStorage } from "@/lib/core/storage";
 import { runLocalActivity } from "@/lib/core/tasks";
-import { isTauri } from "@/lib/core/tauri";
 import {
 	discoverZoteroDirs,
 	isSqliteMissingError,
 	migrateZotero,
-	pickZoteroDir,
 	scanZotero,
 	suggestZoteroParentDir,
 	type ZoteroMigrateResult,
@@ -79,10 +82,6 @@ const STANDARD_ITEM_TYPES = new Set([
 	"report",
 	"document",
 ]);
-function loadOpts(): SavedOpts {
-	const stored = readJsonStorage<Partial<SavedOpts>>(OPTS_KEY, {});
-	return { ...DEFAULT_OPTS, ...stored };
-}
 function saveOpts(o: SavedOpts) {
 	writeJsonStorage(OPTS_KEY, o);
 }
@@ -113,12 +112,11 @@ export function ZoteroMigrateDialog({
 	onDone: () => void;
 }) {
 	const { t } = useTranslation(["sidebar", "app"]);
-	const saved = useMemo(loadOpts, []);
+	const saved = useMemo(() => loadStoredOpts(OPTS_KEY, DEFAULT_OPTS), []);
 	const [dir, setDir] = useState<string | null>(null);
 	const [scan, setScan] = useState<ZoteroScan | null>(null);
 	const [scanning, setScanning] = useState(false);
 	const [suggestedDir, setSuggestedDir] = useState<string | null>(null);
-	const [detecting, setDetecting] = useState(false);
 	const [copyPdfs, setCopyPdfs] = useState(saved.copyPdfs);
 	const [preserveCollections, setPreserveCollections] = useState(
 		saved.preserveCollections,
@@ -191,39 +189,21 @@ export function ZoteroMigrateDialog({
 		}
 	};
 
-	const chooseFolder = async () => {
-		setError(null);
-		const picked = await pickZoteroDir();
-		if (!picked) return;
-		await scanDir(picked);
-	};
+	const chooseFolder = () =>
+		chooseZoteroFolder(setError, (picked) => scanDir(picked));
 
 	// On open, try the default ~/Zotero folder so most users skip browsing.
-	useEffect(() => {
-		if (!open || dir || !isTauri()) return;
-		let cancelled = false;
-		void (async () => {
-			setDetecting(true);
-			try {
-				for (const candidate of await discoverZoteroDirs()) {
-					const r = await scanZotero(candidate);
-					if (!cancelled && r.valid && r.itemCount > 0) {
-						setDir(candidate);
-						setScan(r);
-						setSelectedItems(new Set(r.items.map((i) => i.id)));
-						break;
-					}
+	const detecting = useZoteroDirDetect(open, dir, {
+		detect: async (isCancelled) => {
+			for (const candidate of await discoverZoteroDirs()) {
+				const r = await scanZotero(candidate);
+				if (!isCancelled() && r.valid && r.itemCount > 0) {
+					applyScan(candidate, r);
+					break;
 				}
-			} catch {
-				// no default library here — the user picks the folder manually
-			} finally {
-				if (!cancelled) setDetecting(false);
 			}
-		})();
-		return () => {
-			cancelled = true;
-		};
-	}, [open, dir]);
+		},
+	});
 
 	// Collection helpers: depth + descendant-inclusive item counts, so picking
 	// a parent folder clearly means "this folder and everything inside it".

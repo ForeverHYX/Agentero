@@ -1,29 +1,24 @@
 //! Magic-wand / identifier import commands.
 
-use crate::core::blocking::run_blocking;
-use crate::core::error::{map_err, ApiResult, AppError};
+use crate::core::error::{ApiResult, AppError};
 use crate::core::fs::resolve_vault;
 use crate::core::log_util::{trunc, OpTimer};
 use crate::core::remote::parse_remote_handle;
 use crate::features::paper::catalog::papers::PaperRecord;
 use crate::features::paper::catalog::CapsCache;
 use crate::features::paper::import::pdf_parse::{PaperParseBodyArgs, PaperParseResult};
-use crate::features::paper::import::search_router::{needs_s2_venue_enrichment, search_papers};
+use crate::features::paper::import::search_router::needs_s2_venue_enrichment;
 use crate::features::paper::import::RemoteImportOps;
 use crate::features::paper::import::{
     AssetDownloadResult, ImportLocalPdfArgs, ImportLocalPdfResult, LookupImportBatchArgs,
     LookupImportBatchResult, PaperDownloadAssetsArgs, SkillImportResult, StageImportFileArgs,
     StageImportFileResult,
 };
-use crate::features::paper::scholar_api::identifiers::{
-    fetch_arxiv_metadata, fetch_crossref_metadata,
-};
 use crate::features::paper::scholar_api::sources::semantic_scholar::{
-    better_publication, is_usable_publication, SemanticScholarApi,
+    better_publication, SemanticScholarApi,
 };
-use futures_util::stream::{self, StreamExt};
-use serde::{Deserialize, Serialize};
-use std::sync::{Arc, Mutex};
+use serde::Deserialize;
+use std::sync::Arc;
 use tauri::State;
 
 /// Batch resolve identifiers and write papers into vault.
@@ -284,183 +279,4 @@ pub fn notes_template_seed(vault_path: String) -> ApiResult<NotesTemplateSeedRes
         .and_then(|vault| super::seed_notes_template(&vault))
         .map(|created| NotesTemplateSeedResult { created });
     op.finish_result(result)
-}
-
-#[derive(Debug, Deserialize, specta::Type)]
-#[serde(rename_all = "camelCase")]
-pub struct PaperBackfillPublicationArgs {
-    pub vault_path: String,
-    /// Optional Translator base URL; left empty for direct Crossref/arXiv/S2.
-    #[serde(default)]
-    pub translator_base_url: Option<String>,
-}
-
-#[derive(Debug, Serialize, specta::Type)]
-#[serde(rename_all = "camelCase")]
-pub struct PaperBackfillPublicationResult {
-    pub total: usize,
-    pub updated: usize,
-    pub failed: usize,
-    #[serde(skip_serializing_if = "Vec::is_empty", default)]
-    pub errors: Vec<String>,
-}
-
-/// Resolve and fill missing `publication` values for papers in the catalog.
-/// Uses arXiv journal_ref / S2 `publicationVenue`, then DOI → S2 then Crossref,
-/// then title → Semantic Scholar. Crossref is last among identifier sources
-/// because its `container-title` truncates many conference proceedings.
-#[tauri::command]
-#[specta::specta]
-pub async fn paper_backfill_publication(
-    args: PaperBackfillPublicationArgs,
-) -> Result<ApiResult<PaperBackfillPublicationResult>, String> {
-    let vault = match resolve_vault(&args.vault_path) {
-        Ok(vault) => vault,
-        Err(e) => return Ok(map_err(e)),
-    };
-
-    let vault_for_list = vault.clone();
-    let rows = match run_blocking(move || {
-        match crate::features::paper::catalog::papers::list_missing_publication(&vault_for_list) {
-            Ok(rows) => ApiResult::ok(rows),
-            Err(e) => map_err(e),
-        }
-    })
-    .await
-    {
-        ApiResult {
-            ok: true,
-            data: Some(rows),
-            ..
-        } => rows,
-        ApiResult {
-            error: Some(err), ..
-        } => return Ok(map_err(AppError::message(err.message))),
-        _ => {
-            return Ok(map_err(AppError::message(
-                "failed to list papers missing publication",
-            )))
-        }
-    };
-
-    const CONCURRENCY: usize = 10;
-
-    let updated = Arc::new(Mutex::new(0usize));
-    let failed = Arc::new(Mutex::new(0usize));
-    let errors = Arc::new(Mutex::new(Vec::new()));
-
-    stream::iter(rows.into_iter().map(|row| {
-        let vault = vault.clone();
-        let updated = updated.clone();
-        let failed = failed.clone();
-        let errors = errors.clone();
-        async move {
-            let publication = resolve_publication_for_backfill(
-                row.doi.as_deref(),
-                row.arxiv_id.as_deref(),
-                &row.title,
-            )
-            .await;
-
-            match publication {
-                Some(pub_value) => {
-                    let patch = crate::features::paper::catalog::papers::PaperMetaPatch {
-                        publication: Some(pub_value),
-                        ..Default::default()
-                    };
-                    let path = row.path.clone();
-                    match run_blocking(move || {
-                        match crate::features::paper::catalog::papers::update_meta(
-                            &vault, &path, &patch,
-                        ) {
-                            Ok(_) => ApiResult::ok(()),
-                            Err(e) => map_err(e),
-                        }
-                    })
-                    .await
-                    {
-                        ApiResult { ok: true, .. } => {
-                            *updated.lock().unwrap() += 1;
-                        }
-                        ApiResult {
-                            error: Some(err), ..
-                        } => {
-                            *failed.lock().unwrap() += 1;
-                            errors
-                                .lock()
-                                .unwrap()
-                                .push(format!("{}: {}", row.path, err.message));
-                        }
-                        _ => {
-                            *failed.lock().unwrap() += 1;
-                            errors
-                                .lock()
-                                .unwrap()
-                                .push(format!("{}: update failed", row.path));
-                        }
-                    }
-                }
-                None => {
-                    *failed.lock().unwrap() += 1;
-                }
-            }
-        }
-    }))
-    .buffer_unordered(CONCURRENCY)
-    .collect::<()>()
-    .await;
-
-    let updated = Arc::try_unwrap(updated).unwrap().into_inner().unwrap();
-    let failed = Arc::try_unwrap(failed).unwrap().into_inner().unwrap();
-    let errors = Arc::try_unwrap(errors).unwrap().into_inner().unwrap();
-
-    Ok(ApiResult::ok(PaperBackfillPublicationResult {
-        total: updated + failed,
-        updated,
-        failed,
-        errors,
-    }))
-}
-
-async fn resolve_publication_for_backfill(
-    doi: Option<&str>,
-    arxiv_id: Option<&str>,
-    title: &str,
-) -> Option<String> {
-    // 1. arXiv `journal_ref` (most complete when present). Skip generic "arXiv".
-    if let Some(arxiv) = arxiv_id.map(str::trim).filter(|s| !s.is_empty()) {
-        if let Ok(meta) = fetch_arxiv_metadata(arxiv, None).await {
-            if let Some(pub_value) = meta.venue.filter(|p| is_usable_publication(p)) {
-                return Some(pub_value);
-            }
-        }
-    }
-
-    // 2. DOI → pick the longer usable of S2 publicationVenue and Crossref
-    //    container-title. S2 wins on truncated ACL/NAACL titles; Crossref
-    //    wins when it has the full proceedings string (ACL 2026 Long Papers).
-    if let Some(doi) = doi.map(str::trim).filter(|s| !s.is_empty()) {
-        let s2 = SemanticScholarApi.fetch_venue_by_doi(doi).await;
-        let crossref = match fetch_crossref_metadata(doi).await {
-            Ok(meta) => meta.venue.filter(|p| is_usable_publication(p)),
-            Err(_) => None,
-        };
-        if let Some(best) = better_publication(s2.as_deref(), crossref.as_deref()) {
-            return Some(best);
-        }
-    }
-
-    // 3. Title → Semantic Scholar (last resort; also uses publicationVenue).
-    if let Ok(candidates) = search_papers(title, 1).await {
-        if let Some(venue) = candidates
-            .into_iter()
-            .next()
-            .and_then(|c| c.venue)
-            .filter(|p| is_usable_publication(p))
-        {
-            return Some(venue);
-        }
-    }
-
-    None
 }

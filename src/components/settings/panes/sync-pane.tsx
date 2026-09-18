@@ -43,6 +43,7 @@ import {
 	TooltipContent,
 	TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { formatLocaleTimestamp } from "@/i18n";
 import { formatBytes } from "@/lib/core/background-tasks";
 import { events } from "@/lib/core/bindings";
 import { errorMessage, notifyError, notifySuccess } from "@/lib/core/notify";
@@ -119,7 +120,7 @@ const SYNC_PROVIDER_LINKS: SyncProviderLink[] = [
 const WEBDAV_PROVIDER_LINKS: SyncProviderLink[] = [
 	{
 		id: "jianguoyun",
-		name: "坚果云",
+		name: "Jianguoyun",
 		docsUrl: "https://help.jianguoyun.com/?p=2064",
 		icon: Cloud,
 		iconClassName: "text-[#2E7CF6]",
@@ -328,7 +329,7 @@ export function SyncPane({ vaultPath }: { vaultPath: string | null }) {
 				})
 			: status?.lastSyncAt
 				? t("sync.lastSync", {
-						time: new Date(status.lastSyncAt).toLocaleString(),
+						time: formatLocaleTimestamp(status.lastSyncAt),
 					})
 				: status?.configured
 					? t("sync.neverSynced")

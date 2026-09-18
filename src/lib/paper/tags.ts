@@ -3,7 +3,7 @@
  * which keeps only the color-token mapping).
  */
 import type { PaperTag, PaperTagInput } from "@/lib/paper/types";
-import { isTagColorId, type TagColorId } from "@/lib/ui/tag-colors";
+import { isTagColorId } from "@/lib/ui/tag-colors";
 
 export type { PaperTag, PaperTagInput } from "@/lib/paper/types";
 
@@ -95,11 +95,6 @@ export function normalizePaperTags(tags: readonly PaperTagInput[]): PaperTag[] {
 
 export function tagName(t: PaperTagInput): string {
 	return typeof t === "string" ? t : t.name;
-}
-
-export function tagColorOf(t: PaperTagInput): TagColorId | undefined {
-	if (typeof t === "string") return undefined;
-	return isTagColorId(t.color) ? t.color : undefined;
 }
 
 /** Coerce API/catalog tags (string[] or mixed) into PaperTag[]. */

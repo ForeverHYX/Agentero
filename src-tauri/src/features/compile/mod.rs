@@ -1,6 +1,8 @@
 //! LaTeX compilation: engine detection plus the `LatexCompile` job runner
 //! (latexmk orchestration with live log streaming, progress and cancel).
 
+pub mod root;
+
 use serde::Deserialize;
 use serde::Serialize;
 use std::path::Path;

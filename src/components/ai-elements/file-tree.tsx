@@ -185,18 +185,6 @@ export const FileTreeName = ({
 	</span>
 );
 
-interface FileTreeFolderContextType {
-	path: string;
-	name: string;
-	isExpanded: boolean;
-}
-
-const FileTreeFolderContext = createContext<FileTreeFolderContextType>({
-	isExpanded: false,
-	name: "",
-	path: "",
-});
-
 /**
  * Keep the disclosure affordance in the row icon slot. This mirrors the
  * sidebar pattern used by Notion: the item identity is visible at rest, and
@@ -226,115 +214,14 @@ export function FileTreeDisclosureIcon({
 	);
 }
 
-export type FileTreeFolderProps = HTMLAttributes<HTMLDivElement> & {
-	path: string;
-	name: string;
-};
-
 /** Ring shown on the row a drag is currently hovering (valid drop target). */
 const DROP_RING = "ring-1 ring-inset ring-primary bg-accent";
 const SELECTED_ROW = "bg-primary/10 hover:bg-primary/15 active:bg-primary/20";
 
-export const FileTreeFolder = ({
-	path,
-	name,
-	className,
-	children,
-	...props
-}: FileTreeFolderProps) => {
-	const {
-		expandedPaths,
-		togglePath,
-		selectedPath,
-		selectedPaths,
-		onSelectRow,
-		onDoubleClickPath,
-		onContextMenuPath,
-		dropTargetPath,
-		onRowDragStart,
-		onRowDragOver,
-		onRowDrop,
-		onRowDragEnd,
-	} = useContext(FileTreeContext);
-	const isExpanded = expandedPaths.has(path);
-	const selCount = selectedPaths?.size ?? 0;
-	const isSelected =
-		selCount > 0 ? (selectedPaths?.has(path) ?? false) : selectedPath === path;
-
-	const folderContextValue = useMemo(
-		() => ({ isExpanded, name, path }),
-		[isExpanded, name, path],
-	);
-
-	return (
-		<FileTreeFolderContext.Provider value={folderContextValue}>
-			<div className={cn("", className)} {...props}>
-				<button
-					type="button"
-					data-path={path}
-					draggable
-					className={cn(
-						"group flex h-7 min-h-7 w-full items-center gap-1 rounded px-4 text-left transition-colors duration-100 hover:bg-muted/50 active:bg-muted/80 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring",
-						isSelected && SELECTED_ROW,
-						dropTargetPath === path && DROP_RING,
-					)}
-					onClick={(e) => {
-						if ((e.metaKey || e.ctrlKey || e.shiftKey) && onSelectRow) {
-							onSelectRow(path, {
-								meta: e.metaKey,
-								ctrl: e.ctrlKey,
-								shift: e.shiftKey,
-							});
-							return;
-						}
-						// Expand/collapse + select so host can open scoped library.
-						togglePath(path);
-						onSelectRow?.(path, {
-							meta: false,
-							ctrl: false,
-							shift: false,
-						});
-					}}
-					onDoubleClick={(e) => {
-						e.preventDefault();
-						e.stopPropagation();
-						onDoubleClickPath?.(path);
-					}}
-					onContextMenu={(e) => {
-						onContextMenuPath?.(path, e);
-					}}
-					onDragStart={(e) => onRowDragStart?.(path, e)}
-					onDragOver={(e) => onRowDragOver?.(path, e)}
-					onDrop={(e) => onRowDrop?.(path, e)}
-					onDragEnd={() => onRowDragEnd?.()}
-					aria-expanded={isExpanded}
-					aria-selected={isSelected}
-					role="treeitem"
-				>
-					<FileTreeDisclosureIcon
-						isExpanded={isExpanded}
-						icon={
-							isExpanded ? (
-								<FolderOpenIcon className="size-4 text-blue-500" aria-hidden />
-							) : (
-								<FolderIcon className="size-4 text-blue-500" aria-hidden />
-							)
-						}
-					/>
-					<FileTreeName>{name}</FileTreeName>
-				</button>
-				{isExpanded ? (
-					<div className="ml-4 border-l pl-2">{children}</div>
-				) : null}
-			</div>
-		</FileTreeFolderContext.Provider>
-	);
-};
-
 /**
  * Flat folder ROW (no nested children) for virtualized rendering: renders the
  * folder button only; its children are separate flattened rows. Reads the same
- * FileTreeContext as {@link FileTreeFolder}.
+ * FileTreeContext as {@link FileTreeFile}.
  */
 export const FileTreeFolderRow = ({
 	path,

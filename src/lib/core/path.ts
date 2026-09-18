@@ -20,6 +20,25 @@ export function normalizeRelPath(path: string): string {
 	return normalizePath(path).replace(/^\.?\//, "");
 }
 
+/**
+ * Vault-relative paper path comparison key: forward slashes, no leading or
+ * trailing slash runs. Unlike {@link normalizeRelPath} a `./` prefix is kept
+ * and every leading slash is stripped; used to match background-task paper
+ * rows against the currently open paper.
+ */
+export function normalizeRelPaperPath(path: string): string {
+	return normalizeSlashes(path).replace(/^\/+|\/+$/g, "");
+}
+
+/** Whether two vault-relative paper paths refer to the same paper folder. */
+export function sameRelPaperPath(
+	a: string | null | undefined,
+	b: string | null | undefined,
+): boolean {
+	if (!a || !b) return false;
+	return normalizeRelPaperPath(a) === normalizeRelPaperPath(b);
+}
+
 /** Last path segment, or the original string for a single segment. */
 export function basenameOf(path: string): string {
 	return normalizeSlashes(path).replace(/\/+$/, "").split("/").pop() ?? path;

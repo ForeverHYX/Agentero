@@ -104,7 +104,7 @@ export function paperNeedsAssetDownload(
  * Local assets are complete enough for reading / paper-reader:
  * PDF present, and TeX or PAPER.md as readable body.
  */
-export function paperAssetsComplete(
+function paperAssetsComplete(
 	node: TreeWalkNode,
 	meta?: { body_source?: string | null } | null,
 ): boolean {

@@ -27,6 +27,7 @@ import {
 } from "@/components/ui/tooltip";
 import type { PromptImage } from "@/lib/agent";
 import { backgroundTasksStore } from "@/lib/core/background-tasks";
+import { sameRelPaperPath } from "@/lib/core/path";
 import { cn } from "@/lib/core/utils";
 import {
 	compareLayoutReadingOrder,
@@ -39,6 +40,7 @@ import {
 	isTableLayoutKind,
 	LAYOUT_SIDEBAR_MIN_SCORE,
 	layoutAnalysisStore,
+	layoutDocumentKey,
 	normalizeLayoutPaperKey,
 	type PdfLayoutKind,
 	type PdfLayoutRegion,
@@ -64,18 +66,6 @@ type FiguresPanelProps = {
 	/** Hide the pane header for use inside a floating PDF panel. */
 	compact?: boolean;
 };
-
-function normalizeRelPaperPath(path: string): string {
-	return path.replace(/\\/g, "/").replace(/^\/+|\/+$/g, "");
-}
-
-function sameRelPaperPath(
-	a: string | null | undefined,
-	b: string | null | undefined,
-): boolean {
-	if (!a || !b) return false;
-	return normalizeRelPaperPath(a) === normalizeRelPaperPath(b);
-}
 
 type SidebarKind = "image" | "chart" | "table" | "algorithm" | "formula";
 
@@ -250,8 +240,11 @@ export function FiguresPanel({
 	compact,
 }: FiguresPanelProps) {
 	const { t } = useTranslation("viewer");
+	// byDocument is keyed by the revision-stripped base id (bytes-backed
+	// viewers mount as `tab::r<n>`); focused/overlay stay raw form.
+	const documentKey = documentId ? layoutDocumentKey(documentId) : null;
 	const result = useStore(layoutAnalysisStore, (s) =>
-		documentId ? (s.byDocument[documentId] ?? null) : null,
+		documentKey ? (s.byDocument[documentKey] ?? null) : null,
 	);
 	const focusedId = useStore(layoutAnalysisStore, (s) =>
 		documentId && s.focused?.documentId === documentId

@@ -163,7 +163,7 @@ fn conn_cache() -> &'static Mutex<ConnCache> {
 }
 
 fn conn_cache_key(vault_root: &Path) -> PathBuf {
-    fs::canonicalize(vault_root).unwrap_or_else(|_| vault_root.to_path_buf())
+    crate::fs::canonicalize_best_effort(vault_root)
 }
 
 /// How many times `with_catalog` physically opened the catalog for this vault.

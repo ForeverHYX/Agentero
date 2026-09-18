@@ -103,10 +103,6 @@ export const DEFAULT_LAYOUT_SETTINGS: LayoutSettings = {
 	providerConfigs: {},
 };
 
-/** Fixed AI Studio PaddleOCR jobs endpoint (shown read-only in Settings). */
-export const LAYOUT_PADDLE_JOBS_URL =
-	"https://paddleocr.aistudio-app.com/api/v2/ocr/jobs";
-
 /** Docs / console pages for obtaining keys (settings UI external link). */
 export const LAYOUT_PROVIDER_DOCS_URLS: Record<LayoutProviderId, string> = {
 	// Built-in provider has no key page; the card is never rendered.

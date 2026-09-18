@@ -8,7 +8,7 @@
 import { commands, type Json } from "@/lib/core/bindings";
 import { callApi } from "@/lib/core/ipc";
 import { isTauri } from "@/lib/core/tauri";
-import type { PaperTag, PaperTagInput } from "@/lib/paper/tags";
+import type { PaperTagInput } from "@/lib/paper/tags";
 import type { TagColorId } from "@/lib/ui/tag-colors";
 
 export const EASY_SCHOLAR_TAG_PREFIX = "#easyscholar:";
@@ -148,11 +148,6 @@ export function buildEasyScholarTags(
 /** Whether a tag belongs to the EasyScholar namespace. */
 export function isEasyScholarTag(tag: string): boolean {
 	return tag.trim().toLocaleLowerCase().startsWith(EASY_SCHOLAR_TAG_PREFIX);
-}
-
-/** Strip EasyScholar tags from a list while preserving user tags. */
-export function removeEasyScholarTags(tags: PaperTag[]): PaperTag[] {
-	return tags.filter((tag) => !isEasyScholarTag(tag.name));
 }
 
 /**

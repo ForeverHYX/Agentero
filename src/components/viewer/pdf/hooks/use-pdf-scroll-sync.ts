@@ -2,6 +2,7 @@ import { useScrollCapability } from "@embedpdf/plugin-scroll/react";
 import { useViewportCapability } from "@embedpdf/plugin-viewport/react";
 import { useZoomCapability } from "@embedpdf/plugin-zoom/react";
 import { useEffect, useMemo, useRef, useState } from "react";
+import { stripEmbedPdfRevision } from "@/lib/pdf/document-id";
 import {
 	getScrollSyncElement,
 	getScrollSyncPartner,
@@ -84,11 +85,14 @@ export function usePdfScrollSync(docId: string): void {
 
 	// Restored translation tabs skip openTranslationTab; re-bind the pair from
 	// the conventional `::translation` document id so sync survives reload.
+	// Bytes-backed panes mount as `…::translation::r<n>` — strip the buffer
+	// revision before matching the suffix.
 	useEffect(() => {
-		if (!docId.endsWith(TRANSLATION_DOC_SUFFIX)) return;
-		const sourceId = docId.slice(0, -TRANSLATION_DOC_SUFFIX.length);
+		const baseId = stripEmbedPdfRevision(docId);
+		if (!baseId.endsWith(TRANSLATION_DOC_SUFFIX)) return;
+		const sourceId = baseId.slice(0, -TRANSLATION_DOC_SUFFIX.length);
 		if (!sourceId) return;
-		registerScrollSyncPair(sourceId, docId);
+		registerScrollSyncPair(sourceId, baseId);
 	}, [docId]);
 
 	// pairRevision is an external-store tick: re-read after registerScrollSyncPair.

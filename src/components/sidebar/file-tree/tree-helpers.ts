@@ -8,6 +8,10 @@ import {
 import { LIBRARY_VIRTUAL_PATH, TRASH_VIRTUAL_PATH } from "@/lib/paper/api";
 import { isPlazaVirtualPath, PLAZA_VIRTUAL_PATH } from "@/lib/plaza";
 import type { FileNode } from "@/lib/vault";
+import { normalizePathKey } from "@/lib/vault/path";
+
+/** Case-insensitive tree-path key (same normalization as vault path keys). */
+export const pathKey = normalizePathKey;
 
 /** Paper folders that need Download (no PDF / no source / no PAPER.md). */
 export function collectPapersNeedingAssets(nodes: FileNode[]): FileNode[] {
@@ -38,10 +42,6 @@ export function isVirtualTreePath(path: string): boolean {
 		path === TRASH_VIRTUAL_PATH ||
 		isPlazaVirtualPath(path)
 	);
-}
-
-export function pathKey(path: string): string {
-	return path.replace(/\\/g, "/").replace(/\/+$/, "").toLowerCase();
 }
 
 /**

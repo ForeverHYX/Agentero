@@ -5,6 +5,7 @@ use super::{
     DuplicateRepairResult, VisualMarkRepairChange, VisualMarkRepairResult, WikilinkRepairChange,
     WikilinkRepairPlan, WikilinkRepairResult,
 };
+use crate::app::command_util::{lock_wiki_index, try_vault};
 use crate::core::blocking::run_blocking;
 use crate::core::error::{map_err, ApiResult, AppError};
 use crate::features::markdown::wiki::WikiIndexState;
@@ -82,10 +83,7 @@ pub fn doctor_set_dirty_paths(
 #[specta::specta]
 pub async fn doctor_check(args: DoctorCheckArgs) -> ApiResult<DoctorReport> {
     run_blocking(move || {
-        let vault = match crate::core::fs::resolve_vault(&args.vault_path) {
-            Ok(vault) => vault,
-            Err(error) => return map_err(error),
-        };
+        let vault = try_vault!(&args.vault_path);
         match diagnose(&vault) {
             Ok(report) => ApiResult::ok(report),
             Err(error) => map_err(error),
@@ -106,10 +104,7 @@ pub async fn doctor_fix_catalog_duplicates(
     args: DoctorFixCatalogDuplicatesArgs,
 ) -> ApiResult<DuplicateRepairResult> {
     run_blocking(move || {
-        let vault = match crate::core::fs::resolve_vault(&args.vault_path) {
-            Ok(vault) => vault,
-            Err(error) => return map_err(error),
-        };
+        let vault = try_vault!(&args.vault_path);
         match apply_catalog_duplicate_repairs(&vault) {
             Ok(result) => ApiResult::ok(result),
             Err(error) => map_err(error),
@@ -154,12 +149,7 @@ pub async fn doctor_apply_aliases(
         match apply_alias_repairs(&vault, &args.changes, &dirty_paths) {
             Ok(result) => {
                 if !result.updated_paths.is_empty() {
-                    let mut guard = match index.lock() {
-                        Ok(guard) => guard,
-                        Err(error) => {
-                            return map_err(AppError::message(format!("wiki index lock: {error}")))
-                        }
-                    };
+                    let mut guard = lock_wiki_index!(index);
                     if let Err(error) = guard.rebuild(&args.vault_path) {
                         return map_err(AppError::message(format!(
                             "aliases updated but Wiki index rebuild failed: {error}"
@@ -181,10 +171,7 @@ pub async fn doctor_apply_aliases(
 #[specta::specta]
 pub async fn doctor_plan_wikilinks(args: DoctorPlanWikilinksArgs) -> ApiResult<WikilinkRepairPlan> {
     run_blocking(move || {
-        let vault = match crate::core::fs::resolve_vault(&args.vault_path) {
-            Ok(vault) => vault,
-            Err(error) => return map_err(error),
-        };
+        let vault = try_vault!(&args.vault_path);
         match plan_wikilink_repairs(&vault) {
             Ok(plan) => ApiResult::ok(plan),
             Err(error) => ApiResult::err_with_details(
@@ -252,12 +239,7 @@ pub async fn doctor_apply_wikilinks(
         match apply_wikilink_repairs(&vault, &args.changes, &dirty_paths) {
             Ok(result) => {
                 if !result.updated_paths.is_empty() {
-                    let mut guard = match index.lock() {
-                        Ok(guard) => guard,
-                        Err(error) => {
-                            return map_err(AppError::message(format!("wiki index lock: {error}")))
-                        }
-                    };
+                    let mut guard = lock_wiki_index!(index);
                     if let Err(error) = guard.rebuild(&args.vault_path) {
                         return map_err(AppError::message(format!(
                             "wikilinks updated but Wiki index rebuild failed: {error}"

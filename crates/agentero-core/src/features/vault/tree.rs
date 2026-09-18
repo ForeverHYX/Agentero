@@ -94,7 +94,10 @@ pub struct VaultTreeNode {
     pub has_tex: Option<bool>,
 }
 
-fn should_ignore(name: &str) -> bool {
+/// Whether a vault-root child name is excluded from the tree. Public for the
+/// LaTeX root scan (`features/compile/root.rs`), which walks the same vault
+/// and must apply the identical exclusion set.
+pub fn should_ignore(name: &str) -> bool {
     if name.is_empty() {
         return true;
     }
@@ -389,8 +392,8 @@ fn rel_under_root(root: &Path, dir: &Path) -> Result<String, AppError> {
         return Ok(rel);
     }
     // Handle symlinked prefixes (e.g. /var vs /private/var on macOS).
-    let root_canon = fs::canonicalize(root).unwrap_or_else(|_| root.to_path_buf());
-    let dir_canon = fs::canonicalize(dir).unwrap_or_else(|_| dir.to_path_buf());
+    let root_canon = crate::fs::canonicalize_best_effort(root);
+    let dir_canon = crate::fs::canonicalize_best_effort(dir);
     strip(&root_canon, &dir_canon)
         .ok_or_else(|| AppError::message("directory is outside the vault"))
 }

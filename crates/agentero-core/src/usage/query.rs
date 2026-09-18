@@ -1,11 +1,11 @@
 //! Reads, clears, and path renames over the activity log.
 
 use crate::error::AppError;
+use crate::fs::normalize_rel_separators;
 use rusqlite::params;
 use serde::Serialize;
 use std::path::Path;
 
-use super::record::normalize_rel;
 use super::schema::{ensure_usage_at, paper_path_of};
 
 #[derive(Debug, Clone, Default)]
@@ -173,8 +173,8 @@ pub fn clear_vault(db_path: &Path, vault: &str) -> Result<u64, AppError> {
 /// Rewrite stored `path` / `paper_path` prefixes after a paper or note moves.
 /// Returns the number of touched rows across `usage_events` and `usage_daily`.
 pub fn rename_path(db_path: &Path, vault: &str, from: &str, to: &str) -> Result<u64, AppError> {
-    let from = normalize_rel(from);
-    let to = normalize_rel(to);
+    let from = normalize_rel_separators(from.trim());
+    let to = normalize_rel_separators(to.trim());
     if from.is_empty() || to.is_empty() || from == to {
         return Ok(0);
     }

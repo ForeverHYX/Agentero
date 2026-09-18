@@ -530,11 +530,6 @@ pub fn extract_document(
     )
 }
 
-/// Legacy helper kept for focused callers/tests that only need link extraction.
-pub fn extract_wikilinks(markdown: &str) -> Vec<InternalLinkOccurrence> {
-    extract_document("", markdown).1
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;

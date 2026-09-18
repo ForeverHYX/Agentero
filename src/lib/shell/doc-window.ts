@@ -34,15 +34,6 @@ export async function openDocWindow(
 	}
 }
 
-/** True when this webview is a doc popout (`?window=doc`). */
-export function isDocWindowRoute(): boolean {
-	try {
-		return new URLSearchParams(window.location.search).get("window") === "doc";
-	} catch {
-		return false;
-	}
-}
-
 export function readDocWindowParams(): {
 	path: string | null;
 	mode: string | null;

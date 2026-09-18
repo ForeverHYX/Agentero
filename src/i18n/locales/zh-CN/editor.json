@@ -165,7 +165,6 @@
 		"title": "属性",
 		"yamlLabel": "YAML frontmatter",
 		"placeholder": "aliases:\n  - 论文全称\n  - 短标题",
-		"hint": "Obsidian 兼容 YAML。aliases 可让双链搜索通过标题找到这篇笔记。",
 		"sourceMode": "以 YAML 源码编辑",
 		"formMode": "以表单编辑",
 		"sourceOnly": "复杂 YAML，仅源码",

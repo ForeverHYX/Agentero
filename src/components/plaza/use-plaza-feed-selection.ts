@@ -12,23 +12,19 @@ import {
 	useState,
 } from "react";
 import type { PlazaSelectionScreen } from "@/components/plaza/plaza-selection-menu";
+import { addSelectionToChat } from "@/components/selection/add-selection-to-chat";
+import { useCopiedLabel } from "@/components/selection/use-copied-label";
 import {
 	createSelectionAskThread,
 	useSelectionAsk,
 } from "@/components/selection/use-selection-ask";
-import { registerSelectionQuickChat } from "@/lib/agent/selection-quick-chat";
-import {
-	pinActiveSelection,
-	publishSelection,
-} from "@/lib/agent/selection-store";
+import { useSelectionQuickChat } from "@/components/selection/use-selection-quick-chat";
 import { copyTextToClipboard } from "@/lib/core/clipboard";
 import type { PdfAskThread } from "@/lib/pdf/ask/types";
 import { buildPlazaAskPrompt } from "@/lib/plaza/ask-prompt";
 import type { FeedItem } from "@/lib/plaza/feeds";
-import { openRightTab } from "@/lib/shell/ui-window-actions";
 
 const MAX_SELECTION_CHARS = 4000;
-const COPIED_LABEL_DURATION_MS = 1000;
 
 export type PlazaFeedSelectionMenu = {
 	text: string;
@@ -63,11 +59,8 @@ export function usePlazaFeedSelection({
 	bodyRef: RefObject<HTMLElement | null>;
 }) {
 	const [menu, setMenu] = useState<PlazaFeedSelectionMenu | null>(null);
-	const [copiedLabelPos, setCopiedLabelPos] = useState<{
-		x: number;
-		y: number;
-	} | null>(null);
-	const labelTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+	const { copiedLabelPos, showCopiedLabel, clearCopiedLabel } =
+		useCopiedLabel();
 	const mouseUpPosRef = useRef<{ x: number; y: number } | null>(null);
 
 	// Viewer-wide single-run slot (ask cluster only on this surface).
@@ -82,14 +75,6 @@ export function usePlazaFeedSelection({
 		activeSessionRef,
 	});
 	const { ask, streaming, askError, resetAsk, setAsk } = askCtl;
-
-	const clearCopiedLabel = useCallback(() => {
-		if (labelTimerRef.current) {
-			clearTimeout(labelTimerRef.current);
-			labelTimerRef.current = null;
-		}
-		setCopiedLabelPos(null);
-	}, []);
 
 	// New item → drop selection chrome.
 	// biome-ignore lint/correctness/useExhaustiveDependencies: re-run on item navigation
@@ -133,16 +118,8 @@ export function usePlazaFeedSelection({
 		}
 		setMenu({ text, screen });
 		void copyTextToClipboard(text);
-		clearCopiedLabel();
-		const pos = mouseUpPosRef.current;
-		if (pos) {
-			setCopiedLabelPos(pos);
-			labelTimerRef.current = setTimeout(() => {
-				labelTimerRef.current = null;
-				setCopiedLabelPos(null);
-			}, COPIED_LABEL_DURATION_MS);
-		}
-	}, [bodyRef, clearCopiedLabel]);
+		showCopiedLabel(mouseUpPosRef.current);
+	}, [bodyRef, showCopiedLabel]);
 
 	useEffect(() => {
 		const root = bodyRef.current;
@@ -201,13 +178,7 @@ export function usePlazaFeedSelection({
 		const text = menu.text;
 		setMenu(null);
 		clearNativeSelection();
-		publishSelection({
-			text,
-			sourcePath,
-			origin: "markdown",
-		});
-		pinActiveSelection();
-		openRightTab("agent");
+		addSelectionToChat({ text, sourcePath, origin: "markdown" });
 	}, [menu, sourcePath, clearNativeSelection]);
 
 	const handleAsk = useCallback(() => {
@@ -222,17 +193,7 @@ export function usePlazaFeedSelection({
 	}, [menu, sourcePath, clearNativeSelection, setAsk]);
 
 	// ⌘K Quick chat — while this Plaza selection toolbar is armed.
-	const menuRef = useRef(menu);
-	menuRef.current = menu;
-	const handleAskRef = useRef(handleAsk);
-	handleAskRef.current = handleAsk;
-	useEffect(() => {
-		return registerSelectionQuickChat(() => {
-			if (!menuRef.current) return false;
-			handleAskRef.current();
-			return true;
-		});
-	}, []);
+	useSelectionQuickChat(() => menu != null, handleAsk);
 
 	return {
 		menu,

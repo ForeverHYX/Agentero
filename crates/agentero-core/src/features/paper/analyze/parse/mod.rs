@@ -102,7 +102,7 @@ fn pdf_parse_in_flight() -> &'static Mutex<HashSet<PathBuf>> {
 
 #[cfg(not(any(target_os = "ios", target_os = "android")))]
 fn pdf_parse_key(pdf_path: &Path) -> PathBuf {
-    fs::canonicalize(pdf_path).unwrap_or_else(|_| pdf_path.to_path_buf())
+    crate::fs::canonicalize_best_effort(pdf_path)
 }
 
 #[cfg(not(any(target_os = "ios", target_os = "android")))]
@@ -181,29 +181,6 @@ pub struct PaperParseBodyArgs {
     /// JobCenter job id (task id); passed to the isolated parser worker for cancellation.
     #[serde(default)]
     pub task_id: Option<String>,
-}
-
-/// After PDF/TeX download: if no TeX and PDF present, generate `PAPER.md` when missing.
-pub async fn maybe_generate_paper_md_after_download(
-    vault: &Path,
-    path_rel: &str,
-    paper_dir: &Path,
-) -> PaperParseResult {
-    maybe_generate_paper_md_after_download_with_task(vault, path_rel, paper_dir, None).await
-}
-
-/// Auto-parse variant used by frontend background tasks.
-///
-/// `task_id` connects frontend cancellation to the parser worker. The parser
-/// runs in a killable child process so a stuck PDFium/OCR call cannot keep the
-/// import or download command alive indefinitely.
-pub async fn maybe_generate_paper_md_after_download_with_task(
-    vault: &Path,
-    path_rel: &str,
-    paper_dir: &Path,
-    task_id: Option<&str>,
-) -> PaperParseResult {
-    parse_paper_body_inner(vault, path_rel, paper_dir, false, task_id, None).await
 }
 
 /// Manual / bulk parse entry (command).

@@ -244,6 +244,13 @@ function createHarness() {
 			notifySuccess: (...args: unknown[]) => successes.push(args),
 			notifyWarning: (...args: unknown[]) => warnings.push(args),
 		},
+		"@/lib/core/path": {
+			sameRelPaperPath: (a: string, b: string) =>
+				Boolean(a) &&
+				Boolean(b) &&
+				a.replace(/\\/g, "/").replace(/^\/+|\/+$/g, "") ===
+					b.replace(/\\/g, "/").replace(/^\/+|\/+$/g, ""),
+		},
 		"@/lib/pdf/layout": layout,
 		// Identity stub: the hook only maps known Host markers, else passes through.
 		"@/lib/translate": { displayTranslateError: (message: string) => message },

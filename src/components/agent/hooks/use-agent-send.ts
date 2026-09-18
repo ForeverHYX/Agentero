@@ -17,6 +17,7 @@ import type {
 	AgentPanelT,
 } from "@/components/agent/hooks/use-agent-panel-context";
 import type { QueuedPrompt } from "@/components/agent/types";
+import { formatLocaleTimestamp } from "@/i18n";
 import {
 	type AgentListResponse,
 	type AgentModeChoice,
@@ -563,7 +564,8 @@ export function useAgentSend({
 				title: activeHistory?.title || historyTitle || t("defaultName"),
 				agentName: selected?.name ?? t("defaultName"),
 				startedAt:
-					activeHistory?.startedAt || new Date().toLocaleString(i18nLanguage),
+					activeHistory?.startedAt ||
+					formatLocaleTimestamp(new Date(), i18nLanguage),
 				lines: historyLines,
 				status: "running",
 				// Carry over pin session provider id until completed event.
@@ -848,7 +850,7 @@ export function useAgentSend({
 					source: "local" as const,
 					title: req.title?.trim() || ctx.t("composer.visualAnnotation"),
 					agentName: ctx.agentName ?? ctx.t("defaultName"),
-					startedAt: new Date().toLocaleString(ctx.i18nLanguage),
+					startedAt: formatLocaleTimestamp(new Date(), ctx.i18nLanguage),
 					lines: req.seedLines,
 					status: "completed" as const,
 					providerSessionId: req.providerSessionId ?? null,

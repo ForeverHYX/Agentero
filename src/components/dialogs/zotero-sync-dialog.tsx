@@ -1,6 +1,11 @@
 import { CheckCircle2, FolderOpen, Loader2, TriangleAlert } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { useTranslation } from "react-i18next";
+import {
+	chooseZoteroFolder,
+	loadStoredOpts,
+	useZoteroDirDetect,
+} from "@/components/dialogs/zotero-dialog-shared";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
@@ -15,12 +20,8 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { useSettings } from "@/hooks/use-app-stores";
 import { useOverlayRegistration } from "@/hooks/use-overlay-registration";
 import { errorText } from "@/lib/core/error";
-import { readJsonStorage, writeJsonStorage } from "@/lib/core/storage";
-import { isTauri } from "@/lib/core/tauri";
-import {
-	discoverZoteroDirs,
-	pickZoteroDir,
-} from "@/lib/paper/import/zotero-migrate";
+import { writeJsonStorage } from "@/lib/core/storage";
+import { discoverZoteroDirs } from "@/lib/paper/import/zotero-migrate";
 import {
 	syncZotero,
 	type ZoteroSyncResult,
@@ -41,10 +42,6 @@ const DEFAULT_OPTS: SavedOpts = {
 	pushNotes: true,
 	dir: "",
 };
-function loadOpts(): SavedOpts {
-	const stored = readJsonStorage<Partial<SavedOpts>>(OPTS_KEY, {});
-	return { ...DEFAULT_OPTS, ...stored };
-}
 
 /**
  * Bidirectional Zotero sync: pull (metadata / child notes / annotations) and
@@ -65,9 +62,8 @@ export function ZoteroSyncDialog({
 }) {
 	const { t } = useTranslation(["sidebar", "app"]);
 	const zoteroSyncDir = useSettings((s) => s.zoteroSyncDir);
-	const saved = loadOpts();
+	const saved = loadStoredOpts(OPTS_KEY, DEFAULT_OPTS);
 	const [dir, setDir] = useState<string | null>(null);
-	const [detecting, setDetecting] = useState(false);
 	const [pullMetadata, setPullMetadata] = useState(saved.pullMetadata);
 	const [pullNotes, setPullNotes] = useState(saved.pullNotes);
 	const [pullAnnotations, setPullAnnotations] = useState(saved.pullAnnotations);
@@ -98,38 +94,23 @@ export function ZoteroSyncDialog({
 		onOpenChange(next);
 	};
 
-	const chooseFolder = async () => {
-		setError(null);
-		const picked = await pickZoteroDir();
-		if (picked) setDir(picked);
-	};
+	const chooseFolder = () => chooseZoteroFolder(setError, setDir);
 
 	// On open: prefer the settings dir, then the remembered dir, then
 	// auto-detect ~/Zotero so most users skip browsing.
-	useEffect(() => {
-		if (!open || dir || !isTauri()) return;
-		let cancelled = false;
-		void (async () => {
-			setDetecting(true);
-			try {
-				const candidates = [zoteroSyncDir, saved.dir].filter((c): c is string =>
-					Boolean(c),
-				);
-				for (const c of [...candidates, ...(await discoverZoteroDirs())]) {
-					if (!c) continue;
-					if (!cancelled) setDir(c);
-					break;
-				}
-			} catch {
-				// no default library — the user picks the folder manually
-			} finally {
-				if (!cancelled) setDetecting(false);
+	const detecting = useZoteroDirDetect(open, dir, {
+		deps: [zoteroSyncDir, saved.dir],
+		detect: async (isCancelled) => {
+			const candidates = [zoteroSyncDir, saved.dir].filter((c): c is string =>
+				Boolean(c),
+			);
+			for (const c of [...candidates, ...(await discoverZoteroDirs())]) {
+				if (!c) continue;
+				if (!isCancelled()) setDir(c);
+				break;
 			}
-		})();
-		return () => {
-			cancelled = true;
-		};
-	}, [open, dir, zoteroSyncDir, saved.dir]);
+		},
+	});
 
 	const handleSync = async () => {
 		if (!vaultPath || !dir) return;

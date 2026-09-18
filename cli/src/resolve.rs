@@ -113,7 +113,7 @@ fn canonicalize_existing(p: &Path) -> Result<PathBuf, CliError> {
             abs.display()
         )));
     }
-    Ok(abs.canonicalize().unwrap_or(abs))
+    Ok(agentero_core::fs::canonicalize_best_effort(&abs))
 }
 
 /// True if path looks like an Agentero vault root.
@@ -129,7 +129,7 @@ fn walk_up_vault(start: &Path) -> Option<PathBuf> {
     let mut cur = start.to_path_buf();
     loop {
         if looks_like_vault(&cur) {
-            return Some(cur.canonicalize().unwrap_or(cur));
+            return Some(agentero_core::fs::canonicalize_best_effort(&cur));
         }
         if !cur.pop() {
             return None;

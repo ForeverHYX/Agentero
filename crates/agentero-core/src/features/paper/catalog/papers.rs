@@ -464,30 +464,6 @@ pub fn list_all(vault_root: &Path) -> Result<Vec<PaperRecord>, AppError> {
     with_catalog(vault_root, list_all_conn)
 }
 
-/// List papers whose `publication` column is NULL or empty.
-/// Used by the batch venue backfill workflow.
-pub fn list_missing_publication(vault_root: &Path) -> Result<Vec<PaperRecord>, AppError> {
-    with_catalog(vault_root, |conn| {
-        let mut stmt = conn
-            .prepare(&format!(
-                r#"
-                SELECT {PAPER_COLUMNS}
-                FROM papers
-                WHERE publication IS NULL OR TRIM(publication) = ''
-                ORDER BY updated_at DESC
-                "#,
-            ))
-            .map_err(AppError::from)?;
-
-        let rows = stmt
-            .query_map([], map_row)
-            .map_err(AppError::from)?
-            .collect::<Result<Vec<_>, _>>()
-            .map_err(AppError::from)?;
-        Ok(rows)
-    })
-}
-
 /// Read all papers from an already-open Catalog connection.
 ///
 /// Doctor opens the database read-only so diagnosis never creates or migrates
@@ -1624,31 +1600,6 @@ mod tests {
         )
         .is_err());
         assert!(update_meta(&dir, "papers/missing", &PaperMetaPatch::default()).is_err());
-
-        let _ = fs::remove_dir_all(&dir);
-    }
-
-    #[test]
-    fn list_missing_publication_filters_null_and_empty() {
-        let dir = env::temp_dir().join(format!("agentero-missing-pub-{}", std::process::id()));
-        let _ = fs::remove_dir_all(&dir);
-        fs::create_dir_all(&dir).unwrap();
-        {
-            let conn = ensure_catalog(&dir).unwrap();
-            conn.execute_batch(
-                "INSERT INTO papers (path, id, type, title, publication, added_at, updated_at) VALUES \
-                 ('papers/a', 'a', 'article', 'A', 'NeurIPS', 't', 't'), \
-                 ('papers/b', 'b', 'article', 'B', NULL, 't', 't'), \
-                 ('papers/c', 'c', 'article', 'C', '', 't', 't'), \
-                 ('papers/d', 'd', 'article', 'D', '  ', 't', 't');",
-            )
-            .unwrap();
-        }
-
-        let rows = list_missing_publication(&dir).unwrap();
-        let mut paths: Vec<_> = rows.iter().map(|r| r.path.as_str()).collect();
-        paths.sort();
-        assert_eq!(paths, vec!["papers/b", "papers/c", "papers/d"]);
 
         let _ = fs::remove_dir_all(&dir);
     }

@@ -115,6 +115,8 @@ function createHarness(navigateOutcome: { outcome: string; uri?: string }) {
 			});
 		},
 	};
+	const isFloatingDialogActive = () => false;
+	const loadPdfDestMaps = async () => mapsBox.current;
 	const modules: Record<string, unknown> = {
 		react,
 		"@/components/viewer/pdf/coords": {
@@ -123,7 +125,47 @@ function createHarness(navigateOutcome: { outcome: string; uri?: string }) {
 		},
 		"@/components/viewer/pdf/floating-hover": {
 			EPHEMERAL_PREVIEW_HIDE_MS: 400,
-			isFloatingDialogActive: () => false,
+			isFloatingDialogActive,
+		},
+		// Mirrors the real useStickyHoverHide machine on the harness's mock
+		// React primitives, so the extracted hook keeps its semantics here.
+		"@/components/viewer/pdf/hooks/use-sticky-hover-hide": {
+			useStickyHoverHide: ({
+				delayMs,
+				hide,
+				hold,
+			}: {
+				delayMs: number;
+				hide: () => void;
+				hold?: () => boolean;
+			}) => {
+				const hideTimerRef = react.useRef<number | null>(null);
+				const hoverSurfaceRef = react.useRef(false);
+				const cancelHide = react.useCallback(() => {
+					if (hideTimerRef.current == null) return;
+					clearTimeout(hideTimerRef.current);
+					hideTimerRef.current = null;
+				});
+				const markHoverEnter = react.useCallback(() => {
+					hoverSurfaceRef.current = true;
+					cancelHide();
+				});
+				const scheduleHide = react.useCallback(() => {
+					hoverSurfaceRef.current = false;
+					cancelHide();
+					hideTimerRef.current = setTimeout(() => {
+						hideTimerRef.current = null;
+						if (hoverSurfaceRef.current) return;
+						if (isFloatingDialogActive()) {
+							hoverSurfaceRef.current = true;
+							return;
+						}
+						if (hold?.()) return;
+						hide();
+					}, delayMs);
+				});
+				return { hoverSurfaceRef, cancelHide, markHoverEnter, scheduleHide };
+			},
 		},
 		"@/components/viewer/pdf/layers/citation-links": {
 			getLinkDestination,
@@ -161,7 +203,35 @@ function createHarness(navigateOutcome: { outcome: string; uri?: string }) {
 		// Real pure helpers so dest-key building and matching are exercised.
 		"@/lib/pdf/citation-dest-keys": citationDestKeys,
 		"@/lib/pdf/citation-dest-map": {
-			loadPdfDestMaps: async () => mapsBox.current,
+			loadPdfDestMaps,
+			// Mirrors the real helper: idle-deferred (this harness runs idle
+			// callbacks synchronously), cancellable, non-fatal on rejection.
+			schedulePdfDestMapsBuild: ({
+				paperAbsPath,
+				documentId,
+				viewerBytes,
+				onMaps,
+			}: {
+				paperAbsPath: string | null;
+				documentId?: string | null;
+				viewerBytes: () => ArrayBuffer | null;
+				warnLabel: string;
+				onMaps: (maps: unknown) => void;
+			}) => {
+				let cancelled = false;
+				void (async () => {
+					const maps = await loadPdfDestMaps({
+						paperAbsPath,
+						viewerBytes: viewerBytes(),
+						documentId,
+					});
+					if (cancelled || !maps) return;
+					onMaps(maps);
+				})().catch(() => {});
+				return () => {
+					cancelled = true;
+				};
+			},
 		},
 	};
 	const exported = {} as { usePdfCitations: (options: unknown) => View };

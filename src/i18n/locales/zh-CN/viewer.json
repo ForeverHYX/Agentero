@@ -1,17 +1,10 @@
 {
-	"mode": {
-		"pdf": "PDF",
-		"html": "HTML"
-	},
-	"centerPaneView": "中间栏视图",
 	"unavailable": "{{label}} 不可用",
 	"pdf": {
 		"empty": "暂无论文。",
 		"loading": "正在加载 PDF…",
 		"loadError": "加载 PDF 失败",
 		"zoomPercentage": "缩放百分比",
-		"prevPage": "上一页",
-		"nextPage": "下一页",
 		"goToPage": "跳转到页",
 		"outline": "目录",
 		"linkAria": "PDF 链接",
@@ -31,25 +24,9 @@
 		"findClose": "关闭查找",
 		"findNoResults": "无结果",
 		"layout": {
-			"analyze": "检测配图、表格与公式",
 			"unavailable": "版面分析尚未就绪。",
-			"running": "正在分析版面…",
 			"preparingModel": "正在准备版面模型…",
-			"downloading": "正在下载版面模型… {{pct}}%",
-			"loadingModel": "正在加载版面模型… {{pct}}%",
-			"creatingSession": "正在初始化版面模型…",
-			"rendering": "正在渲染第 {{page}} 页…",
-			"detecting": "正在检测第 {{page}} 页版面…",
-			"mapping": "正在映射第 {{page}} 页坐标…",
-			"tableStructure": "表格结构 第 {{page}} 页（{{index}}/{{total}}）…",
-			"pageComplete": "版面进度 {{completed}}/{{total}}",
-			"done": "版面完成 — {{summary}}",
-			"failed": "版面分析失败",
-			"cancelled": "已取消版面分析",
-			"rerunHint": "重新运行版面分析。上次：{{summary}}",
-			"toggleOverlay": "切换版面框",
-			"showOverlay": "显示版面框",
-			"hideOverlay": "隐藏版面框"
+			"failed": "版面分析失败"
 		},
 		"layoutTranslate": {
 			"start": "全文翻译",
@@ -71,9 +48,7 @@
 		},
 		"translation": {
 			"title": "翻译",
-			"tabTitle": "译文 – {{title}}",
-			"noPaper": "打开一篇论文以查看渲染好的译文。",
-			"empty": "还没有渲染好的译文。请先在 PDF 阅读器中运行全文翻译。"
+			"tabTitle": "译文 – {{title}}"
 		}
 	},
 	"pdfAsk": {
@@ -97,43 +72,22 @@
 		"selectRegion": "添加视觉批注",
 		"cancelRegion": "取消区域选择",
 		"regionSelectionLabel": "选择第 {{page}} 页的图片区域",
-		"formulaQuestion": "解释这个公式或技术表达式。",
-		"figureQuestion": "解释这张图片、图表、表格或视觉区域。",
 		"cropFailed": "无法截取所选 PDF 区域。",
 		"cropping": "正在截取区域…",
-		"annotationEditorLabel": "批注备注",
-		"annotationPlaceholder": "写点备注…",
-		"annotationSave": "保存",
-		"annotationSendNow": "问 Agent",
-		"annotationCancel": "取消",
-		"annotationShortcuts": "Enter 保存批注 · ⌘/Ctrl+Enter 问 Agent",
-		"annotationPage": "第 {{page}} 页",
 		"annotationPreviewAlt": "第 {{page}} 页裁剪区域",
 		"visualAnnotation": "视觉批注",
 		"addToSidebarChat": "加入侧边栏对话",
-		"switchToNote": "编辑备注",
-		"switchToChat": "查看对话",
 		"tracePinAria": "打开视觉批注：{{preview}}",
 		"traceCardTitle": "视觉对话",
-		"traceAnnotationCount": "{{count}} 个区域",
-		"traceOpenSession": "在 Agent 中打开",
 		"traceDelete": "删除",
 		"traceHide": "收起",
-		"traceContinuePlaceholder": "继续对话…",
-		"traceEmptyMessages": "还没有消息。在下方输入即可针对该区域提问。",
-		"traceThinking": "思考中…",
-		"traceSend": "发送",
-		"traceStop": "停止",
-		"traceSessionUnavailable": "该批注会话尚未就绪。"
+		"traceEmptyMessages": "还没有消息。在下方输入即可针对该区域提问。"
 	},
 	"annotations": {
 		"title": "批注",
 		"pageLabel": "第 {{page}} 页",
 		"empty": "还没有提问或视觉批注。在 PDF 中划选文字提问，或添加视觉批注即可。",
 		"placeholder": "写点备注…",
-		"save": "保存",
-		"cancel": "取消",
-		"close": "关闭",
 		"delete": "删除",
 		"deleteAsk": "删除对话",
 		"deleteVisual": "删除视觉批注",
@@ -143,7 +97,6 @@
 		"sectionAsks": "对话",
 		"sectionVisual": "视觉批注",
 		"askTurns": "{{count}} 条消息",
-		"visualRegions": "{{count}} 个区域",
 		"copyLink": "复制双链",
 		"copyEmbed": "复制嵌入",
 		"linkCopied": "已复制双链",
@@ -218,8 +171,6 @@
 		"overlayLabel": "{{kind}} {{pct}}%",
 		"page": "第 {{page}} 页",
 		"thumbPending": "加载中…",
-		"confidence": "{{pct}}%",
-		"confidenceHint": "模型置信度（0–100%）。越高表示检测器越确定这是插图、表格、算法或公式。重叠重复框会自动去重。",
 		"toggleOverlay": "切换 PDF 上置信度≥30% 的原始检测框（调试）",
 		"showOverlay": "在 PDF 上显示置信度≥30% 的原始检测框（调试）",
 		"hideOverlay": "隐藏 PDF 上的原始检测框"
@@ -234,12 +185,10 @@
 			"pink": "粉色",
 			"purple": "紫色"
 		},
-		"copy": "复制",
 		"copied": "已复制",
 		"note": "批注",
 		"ask": "提问",
 		"quickChat": "快速对话",
-		"explainVisual": "解释公式或选区",
 		"addToChat": "加入对话",
 		"chatCommentPlaceholder": "添加批注（可选）…",
 		"translate": "翻译",
@@ -270,9 +219,6 @@
 	"image": {
 		"empty": "暂无图片。",
 		"altFallback": "图片预览"
-	},
-	"excalidraw": {
-		"empty": "暂无可用绘图。"
 	},
 	"textEditor": {
 		"errorCount": "{{count}} 个错误",

@@ -22,8 +22,7 @@ pub enum AgentTemplate {
     /// Pi coding agent via the community `pi-acp` adapter (pi has no native ACP).
     /// Docs: https://pi.dev · https://github.com/svkozak/pi-acp
     Pi,
-    /// DeepSeek Harness automation ACP server (`@deepseek-ai/dsh-acp-demo`),
-    /// npm-installed into a managed launcher directory (no repo checkout).
+    /// DeepSeek Harness umbrella CLI with native ACP (`dsh --profile acp`).
     /// Docs: https://github.com/deepseek-ai/deepseek-harness
     Dsh,
     /// Moonshot Kimi Code CLI with native ACP (`kimi acp`).
@@ -251,7 +250,7 @@ pub struct CatalogEntry {
     /// Normalized local host CLI version (`detect_command --version`), when known.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub installed_version: Option<String>,
-    /// Target version the silent updater can reach (npm latest or dsh pin).
+    /// Target version the silent updater can reach (npm latest).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub latest_version: Option<String>,
     /// True only when a newer silent-update target is known. Settings shows

@@ -13,9 +13,10 @@ Agentero 作为 **ACP Client**，stdio JSON-RPC 连接用户本机或远端 Agen
   转交给 MSYS2 shell（Git Bash）时 `mktemp` / `cd` 报 ENOENT；扩展 UNC
   （`\\?\UNC\...`）与 SSH 的 POSIX 路径保持不变。详见
   [bug_fix/hermes-terminal-pending-msys2-hang.md](../bug_fix/hermes-terminal-pending-msys2-hang.md)。
-- **Unix 本地 Agent（Dsh 除外）先经 shell 切到 Vault 或 scratch，再 exec**：ACP stdio
+- **Unix 本地 Agent 先经 shell 切到 Vault 或 scratch，再 exec**：ACP stdio
   spawn 无 cwd 字段，Finder 启动的 macOS GUI 进程 cwd 是 `/`，不能让 Agent 将其作为启动
-  工作区并触发无关 TCC 弹窗（#570）。Dsh 自带切到 launcher 目录的脚本，不加外层包装。
+  工作区并触发无关 TCC 弹窗（#570）。无模板例外——`dsh --profile acp` 也把启动 cwd
+  作为默认 workspace root，同样需要包装。
 - 本地 Vault 路径缺失或无效时，`agent_spawn_cwd()` 用 `agent_scratch_dir()`
   （`…/agentero/agent-cwd`）兜底；数据目录不可写时改用系统临时目录下的
   `agentero/agent-cwd` 专用子目录，两处均无法创建则在启动前明确报错，不回落到进程 cwd
@@ -35,25 +36,18 @@ Agentero 作为 **ACP Client**，stdio JSON-RPC 连接用户本机或远端 Agen
   GUI 启动 Agentero 也能读到 `.zshrc` / `.bashrc` 里 `export` 的 `OPENAI_API_KEY`、
   `OPENAI_BASE_URL` 等变量；`AgentDescriptor.env` 优先级最高，可覆盖 shell 值（#478）。
 - 统一接口：OpenCode、OpenClaw、Hermes、Claude ACP、Codex ACP、Qoder、Grok、Pi、Dsh（DeepSeek Harness）、Kimi Code、ZCode、自定义 `command`/`args`/`env`。
-- Dsh：ACP 服务端是 `@deepseek-ai/dsh-acp-demo`（npm 包），与依赖插件一起固定
-  `0.1.1-rc.2`。安装/启动三处入口，检测按序回退：
-  1. App 管理目录 `~/.agentero/dsh-acp/node_modules/.bin/dsh-acp-demo`（设置页「安装」按钮，
-     Rust 写入默认 `cordis.yml` + 最小 `package.json` 后执行 `npm i`；`package.json`
-     防止 npm 沿目录树向上找到用户 `~/package.json` 把包装进 `~/node_modules`）；
-  2. 用户 home npm 根 `~/node_modules/.bin/dsh-acp-demo`（手动 `npm i` 且 home 有
-     `package.json` 时）；
-  3. PATH 上的全局 `dsh-acp-demo`（`npm i -g`）。注意：`npm i -g @deepseek-ai/dsh`
-     是 umbrella CLI，**不带** ACP 服务端，不作为检测目标。
-  - 启动走 shell 包装（`bash -c` / `cmd /C`）`cd` 进 launcher 目录后 exec——ACP stdio
-    spawn 无 cwd 字段，而 `cordis.yml`、`.env`、session 持久化都相对该目录解析。
-  - 会话在进程内，进程退出即失效，且不声明 `session/resume` / `session/load`：
-    多轮续聊降级为**每轮新会话**（单发式），Host 不再报「不支持继续会话」。
-  - API Key：在 launcher 目录 `.env` 写 `DEEPSEEK_API_KEY`，或在注册项 env 中
-    export。缺少时 prompt 报 `no API key for provider route "deepseek-official"`。
-    `dsh-acp-demo` 只读启动 cwd 的 `.env` + 启动环境：它**不读** `~/.dsh` 的
-    凭据存储（`.credentials.yaml` 需在 `cordis.yml` 挂载 credentials provider，
-    `~/.dsh/.env` 的 user-env 层只有官方 `dsh` CLI 的 `loadLayeredEnv` 加载），
-    所以官方 CLI/Web UI 里配过的 key 对 ACP 服务不可见，须复制到 launcher `.env`。
+- Dsh：umbrella CLI `@deepseek-ai/dsh`（npm，需 0.1.2+）内置 ACP profile——
+  `dsh --profile acp` 以 ACP stdio 服务，首次启动从内置模板自动初始化 profile
+  （`$DSH_HOME/profiles/acp`），无需手写 `cordis.yml` 或受管 launcher 目录。
+  - 旧的独立包方案（`@deepseek-ai/dsh-acp-demo` 固定 `0.1.1-rc.2` + App 管理目录
+    `~/.agentero/dsh-acp`）已废弃：上游停止发布该包（配套插件已发到 `0.1.5-rc.2`
+    而 demo 停更，锁步 prerelease semver 无法混搭），uninstall 仍会清理该遗留目录。
+  - 安装/更新走 `npm i -g @deepseek-ai/dsh@latest`（Unix `--prefix "$HOME/.local"`），
+    检测/版本对比用 `dsh --version` vs npm latest，与其他 npm 模板一致。
+  - 会话：当前版本声明 `sessionCapabilities` 的 `close`/`list`/`resume`，多轮续聊
+    走标准 resume 路径，连接也可进入 warm 池。
+  - API Key：官方 CLI 的分层 env（`~/.dsh/.env` 等）由 `dsh` 自身加载，ACP
+    profile 同样受益；也可在注册项 env 中 export `DEEPSEEK_API_KEY`。
 - Kimi Code：原生 ACP（`kimi acp`）。官方 installer（`code.kimi.com/kimi-code/install.sh`）
   是单二进制、默认装入 `~/.kimi-code` 并写 PATH 进 shell rc；npm 包
   `@moonshot-ai/kimi-code`（需 Node 22.19+）作回退。`kimi upgrade` 是交互式的，静默
@@ -180,7 +174,7 @@ cursor 不再推进（`next == prev`）时视为走完，避免死循环。
 | `agent_respond_elicitation` | 回答 form elicitation（Codex `request_user_input`） |
 | `agent_respond_ask_user` | 回答 Grok `_x.ai/ask_user_question` |
 | `agent_run_tool_lifecycle` | 静默安装/升级/卸载 catalog CLI（及 Claude/Codex ACP 适配器）；本机 lifecycle 串行执行，设置页在对应 Agent 行内展示安装 / 扫描 / 探测进度（#250），Windows 使用唯一临时 `.bat` 并按 UTF-8/GBK 解码错误输出；安装失败会将 npm 缓存目录 EPERM 转成可操作的缓存迁移提示；受管安装探测到系统 npm 缓存不可写时自动注入独立缓存目录（`npm_config_cache`），可写的缓存不动；Windows 探测 `.exe` 时校验 PE 头，避免把文本 shim 当作 16 位程序执行；`uninstall` 做 best-effort npm 卸载 + 受管目录删除（不改 shell rc），成功后联动删除 catalog 注册项；见 [api.md](api.md) 与 [#225](https://github.com/poco-ai/Agentero/issues/225) |
-| `agent_check_catalog_updates` | PATH scan + 版本对比：本地 `detect --version` vs npm latest（或 dsh pin）；写入 `installedVersion` / `latestVersion` / `updateAvailable`。设置页「升级」仅在 `updateAvailable === true` 时显示；hermes 等无稳定 npm 源或探测失败时不显示。不塞进同步 `agent_scan_catalog`（避免 Doctor / 切换器打网络） |
+| `agent_check_catalog_updates` | PATH scan + 版本对比：本地 `detect --version` vs npm latest；写入 `installedVersion` / `latestVersion` / `updateAvailable`。设置页「升级」仅在 `updateAvailable === true` 时显示；hermes 等无稳定 npm 源或探测失败时不显示。不塞进同步 `agent_scan_catalog`（避免 Doctor / 切换器打网络） |
 | `agent_tool_lifecycle_supported` / `agent_tool_install_commands` / `agent_tool_uninstall_info` | 是否支持静默安装；平台手动安装文案；卸载清理项清单（确认对话框展示） |
 
 ACP slash command 不是独立的 `session/compact` RPC。Host 转发 Agent 广播的

@@ -219,9 +219,6 @@ pub(crate) struct RunOnceContext {
     agent_id: String,
     /// pi-acp forwards a CLI startup banner that must be dropped from the stream.
     is_pi: bool,
-    /// dsh keeps sessions in-process and never advertises resume/load, so a
-    /// requested continue degrades to a fresh session — always stream live.
-    dsh_fresh_sessions: bool,
     content_buf: Arc<Mutex<String>>,
     thought_buf: Arc<Mutex<String>>,
     coalescer: StreamCoalescer,
@@ -236,7 +233,6 @@ pub(crate) struct RunOnceContext {
 
 impl RunOnceContext {
     fn new(params: &RunOnceParams, cwd: std::path::PathBuf) -> Self {
-        let dsh_fresh_sessions = matches!(params.desc.template, AgentTemplate::Dsh);
         // Merge token-storm chunks into ~25 emits/s (Windows webview jank source).
         // Payload shape is unchanged: same event, longer `chunk`, lower rate.
         let coalescer = StreamCoalescer::new(STREAM_COALESCE_WINDOW, {
@@ -259,13 +255,10 @@ impl RunOnceContext {
             message_id: params.message_id.clone(),
             agent_id: params.desc.id.clone(),
             is_pi: matches!(params.desc.template, AgentTemplate::Pi),
-            dsh_fresh_sessions,
             content_buf: Arc::new(Mutex::new(String::new())),
             thought_buf: Arc::new(Mutex::new(String::new())),
             coalescer,
-            live_stream: Arc::new(AtomicBool::new(
-                params.resume_session_id.is_none() || dsh_fresh_sessions,
-            )),
+            live_stream: Arc::new(AtomicBool::new(params.resume_session_id.is_none())),
             stop_reason: Arc::new(Mutex::new(None)),
             terminals: acp_terminals(Some(cwd)),
         }
@@ -565,18 +558,9 @@ impl RunOnceContext {
             .is_some();
         let can_load = init.agent_capabilities.load_session;
 
-        // dsh never advertises session/resume or session/load (sessions
-        // die with the process), so continue degrades to a fresh session
-        // instead of erroring out.
         let resume_id = if let Some(rid) = &resume_session_id {
             if can_resume || can_load {
                 resume_session_id
-            } else if self.dsh_fresh_sessions {
-                log::debug!(
-                    target: "agentero::agent",
-                    "dsh cannot resume {rid}: starting a fresh session"
-                );
-                None
             } else {
                 return Err(acp_err(format!(
                     "Agent does not support continuing session {rid} \
@@ -843,11 +827,11 @@ impl RunOnceContext {
     }
 }
 
-/// dsh keeps sessions in-process and never advertises resume/load, so pooling
-/// would change its "continue degrades to a fresh session" semantics; every
-/// other template can reuse a warm connection.
-fn poolable_template(template: &AgentTemplate) -> bool {
-    !matches!(template, AgentTemplate::Dsh)
+/// Every template can reuse a warm connection — the current `dsh --profile
+/// acp` advertises session list/resume, so pooling no longer changes its
+/// continue semantics.
+fn poolable_template(_template: &AgentTemplate) -> bool {
+    true
 }
 
 /// Terminal outcome of a pooled run: `Done` finishes the run (result or

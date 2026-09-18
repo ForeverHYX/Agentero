@@ -6,10 +6,7 @@
 
 use crate::features::agent::models::CatalogScanResponse;
 use crate::features::agent::registry::discovery::resolve_command;
-use crate::features::agent::registry::lifecycle::DSH_ACP_PACKAGES;
-use crate::features::agent::registry::templates::{
-    dsh_entrypoint_exists, dsh_home_entrypoint, dsh_launcher_dir, template_info,
-};
+use crate::features::agent::registry::templates::template_info;
 use std::collections::HashMap;
 use std::process::Command;
 use std::sync::{Mutex, OnceLock};
@@ -46,17 +43,11 @@ pub fn npm_package_for_template(template_id: &str) -> Option<&'static str> {
         "codex-acp" => Some("@openai/codex"),
         "pi" => Some("@earendil-works/pi-coding-agent"),
         "grok-build" => Some("@xai-official/grok"),
+        "dsh" => Some("@deepseek-ai/dsh"),
         "kimi-code" => Some("@moonshot-ai/kimi-code"),
         "zcode" => Some("zcode-acp-server"),
         _ => None,
     }
-}
-
-/// Pinned dsh stack version from `DSH_ACP_PACKAGES` (e.g. `0.1.1-rc.2`).
-pub fn dsh_pinned_version() -> Option<&'static str> {
-    DSH_ACP_PACKAGES
-        .iter()
-        .find_map(|spec| spec.rsplit_once('@').map(|(_, ver)| ver))
 }
 
 /// Enrich installed lifecycle rows with version / update-available fields.
@@ -80,13 +71,8 @@ pub fn enrich_catalog_updates(
         };
         entry.installed_version = Some(installed.clone());
 
-        let latest = if entry.template_id == "dsh" {
-            dsh_pinned_version().map(str::to_string)
-        } else if let Some(pkg) = npm_package_for_template(&entry.template_id) {
-            npm_view_version(pkg, proxy_enabled, proxy_url)
-        } else {
-            None
-        };
+        let latest = npm_package_for_template(&entry.template_id)
+            .and_then(|pkg| npm_view_version(pkg, proxy_enabled, proxy_url));
 
         let Some(latest) = latest else {
             continue;
@@ -97,36 +83,12 @@ pub fn enrich_catalog_updates(
 }
 
 fn read_installed_version(template_id: &str) -> Option<String> {
-    let path = if template_id == "dsh" {
-        resolve_command("dsh-acp-demo")
-            .or_else(dsh_home_entrypoint)
-            .or_else(|| {
-                dsh_entrypoint_exists().then(|| {
-                    let bin = dsh_launcher_dir().join("node_modules").join(".bin");
-                    #[cfg(target_os = "windows")]
-                    {
-                        for name in ["dsh-acp-demo.cmd", "dsh-acp-demo"] {
-                            let candidate = bin.join(name);
-                            if candidate.exists() {
-                                return candidate;
-                            }
-                        }
-                        bin.join("dsh-acp-demo.cmd")
-                    }
-                    #[cfg(not(target_os = "windows"))]
-                    {
-                        bin.join("dsh-acp-demo")
-                    }
-                })
-            })
-    } else {
-        let info = template_info(template_id)?;
-        let detect = info
-            .detect_command
-            .as_deref()
-            .unwrap_or(info.command.as_str());
-        resolve_command(detect)
-    }?;
+    let info = template_info(template_id)?;
+    let detect = info
+        .detect_command
+        .as_deref()
+        .unwrap_or(info.command.as_str());
+    let path = resolve_command(detect)?;
 
     let mut cmd = Command::new(&path);
     cmd.arg("--version");
@@ -327,14 +289,7 @@ mod tests {
             Some("@anthropic-ai/claude-code")
         );
         assert_eq!(npm_package_for_template("hermes"), None);
-        assert_eq!(npm_package_for_template("dsh"), None);
-    }
-
-    #[test]
-    fn dsh_pin_parses_from_package_specs() {
-        let pin = dsh_pinned_version().expect("pin");
-        assert!(pin.chars().next().unwrap().is_ascii_digit());
-        assert!(DSH_ACP_PACKAGES[0].ends_with(pin));
+        assert_eq!(npm_package_for_template("dsh"), Some("@deepseek-ai/dsh"));
     }
 
     #[test]

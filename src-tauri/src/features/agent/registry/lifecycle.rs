@@ -8,9 +8,8 @@
 use crate::features::agent::registry::discovery::path_entries;
 use crate::features::agent::registry::discovery::resolve_command;
 use crate::features::agent::registry::templates::{
-    dsh_entrypoint_exists, dsh_launcher_dir, kimi_launcher_dir, template_info,
-    CLAUDE_ACP_INSTALL_COMMAND, PI_ACP_INSTALL_COMMAND, PI_HOST_INSTALL_COMMAND,
-    ZCODE_ACP_INSTALL_COMMAND,
+    kimi_launcher_dir, template_info, CLAUDE_ACP_INSTALL_COMMAND, DSH_INSTALL_COMMAND,
+    PI_ACP_INSTALL_COMMAND, PI_HOST_INSTALL_COMMAND, ZCODE_ACP_INSTALL_COMMAND,
 };
 use serde::Serialize;
 use std::collections::HashSet;
@@ -88,141 +87,25 @@ pub const LIFECYCLE_TEMPLATES: &[&str] = &[
     "zcode",
 ];
 
-/// dsh ACP demo + plugin stack, published together on npm. Pinning the full set
-/// to one verified version keeps cordis.yml plugin loading in sync.
-pub const DSH_ACP_PACKAGES: &[&str] = &[
-    "@deepseek-ai/dsh-acp-demo@0.1.1-rc.2",
-    "@deepseek-ai/dsh-llm-deepseek@0.1.1-rc.2",
-    "@deepseek-ai/dsh-sandbox-local@0.1.1-rc.2",
-    "@deepseek-ai/dsh-sandbox-policy@0.1.1-rc.2",
-    "@deepseek-ai/dsh-subprocess-local@0.1.1-rc.2",
-    "@deepseek-ai/dsh-bash-sandbox@0.1.1-rc.2",
-    "@deepseek-ai/dsh-user-approval@0.1.1-rc.2",
-    "@deepseek-ai/dsh-fs-sandbox@0.1.1-rc.2",
-    "@deepseek-ai/dsh-tool-fs@0.1.1-rc.2",
-];
-
-/// Default dsh composition written into the launcher dir on first install
-/// (never overwrites an existing file). Mirrors the canonical spine of
-/// deepseek-harness `examples/acp-agent/cordis.yml`: DeepSeek adapter, sandboxed
-/// bash + fs tools, user approval, and the ACP demo app. DEEPSEEK_API_KEY is
-/// read from the launcher dir's `.env`; sessions persist under `./.sessions`.
-pub const DSH_ACP_CORDIS_YML: &str = r#"- id: llm-deepseek
-  name: '@deepseek-ai/dsh-llm-deepseek'
-  config:
-    thinking: enabled
-    reasoningEffort: max
-    models:
-      - id: deepseek-v4-flash
-      - id: deepseek-v4-pro
-- id: sandbox
-  name: '@deepseek-ai/dsh-sandbox-local'
-- id: sandbox-policy
-  name: '@deepseek-ai/dsh-sandbox-policy'
-  config:
-    mode: workspace-write
-- id: subprocess
-  name: '@deepseek-ai/dsh-subprocess-local'
-- id: bash
-  name: '@deepseek-ai/dsh-bash-sandbox'
-  config:
-    timeoutMs: 60000
-- id: approval
-  name: '@deepseek-ai/dsh-user-approval'
-  config:
-    policy: ask
-- id: fs-sandbox
-  name: '@deepseek-ai/dsh-fs-sandbox'
-- id: tool-fs
-  name: '@deepseek-ai/dsh-tool-fs'
-- id: acp-agent
-  name: '@deepseek-ai/dsh-acp-demo'
-  config:
-    provider: deepseek-official
-    model: deepseek-v4-pro
-    persistenceRoot: ./.sessions
-    persistenceCompression: zstd
-    workspaceContext:
-      maxBytes: 65536
-    persona: |
-      You are a coding assistant powered by the {{model}} model. Your working directory is {{cwd}}. Your bash tool runs under a file sandbox — a `[sandbox: file access denied …]` result is policy, not a command bug.
-
-      Verify your work by running the code or tests. Keep answers brief and factual.
-"#;
-
-/// npm install for the dsh stack into its launcher dir (npm i is idempotent,
-/// so install and update run the same command with pinned versions).
-pub fn dsh_npm_install_command() -> String {
-    let packages = DSH_ACP_PACKAGES.join(" ");
+/// Launcher directory of the retired dsh ACP-demo scheme (managed `npm i` of
+/// the pinned `@deepseek-ai/dsh-acp-demo` stack). Kept only so uninstall can
+/// clean up installations made before the move to the umbrella CLI's built-in
+/// `dsh --profile acp`.
+fn legacy_dsh_launcher_dir() -> std::path::PathBuf {
     #[cfg(target_os = "windows")]
     {
-        format!(
-            "cd /d \"%USERPROFILE%\\.agentero\\dsh-acp\"\r\nnpm i --no-audit --no-fund {packages}"
-        )
+        let base = std::env::var_os("USERPROFILE")
+            .map(std::path::PathBuf::from)
+            .unwrap_or_else(|| std::path::PathBuf::from("C:\\"));
+        base.join(".agentero").join("dsh-acp")
     }
     #[cfg(not(target_os = "windows"))]
     {
-        format!("cd \"$HOME/.agentero/dsh-acp\" && npm i --no-audit --no-fund {packages}")
+        let home = std::env::var_os("HOME")
+            .map(std::path::PathBuf::from)
+            .unwrap_or_default();
+        home.join(".agentero").join("dsh-acp")
     }
-}
-
-/// Minimal project manifest for the launcher dir. Without it, npm walks up to
-/// a user's `~/package.json` and installs the dsh stack into `~/node_modules`.
-const DSH_ACP_PACKAGE_JSON: &str = r#"{
-  "name": "agentero-dsh-acp",
-  "private": true,
-  "version": "0.1.1-rc.2"
-}
-"#;
-
-/// Ensure the launcher dir, default cordis.yml and project manifest exist.
-/// Idempotent and non-destructive — never overwrites user-modified files.
-pub fn prepare_dsh_launcher() -> Result<(), String> {
-    let launcher = dsh_launcher_dir();
-    std::fs::create_dir_all(&launcher)
-        .map_err(|e| format!("failed to create dsh launcher dir: {e}"))?;
-    let config = launcher.join("cordis.yml");
-    if !config.exists() {
-        std::fs::write(&config, DSH_ACP_CORDIS_YML)
-            .map_err(|e| format!("failed to write dsh cordis.yml: {e}"))?;
-    }
-    let manifest = launcher.join("package.json");
-    if !manifest.exists() {
-        std::fs::write(&manifest, DSH_ACP_PACKAGE_JSON)
-            .map_err(|e| format!("failed to write dsh package.json: {e}"))?;
-    }
-    Ok(())
-}
-
-/// dsh lifecycle: prepare launcher dir + defaults, then `npm i` the pinned
-/// package stack. Install skips the download when dsh is already reachable
-/// (launcher, home npm root or PATH); update always refreshes the launcher copy.
-fn run_dsh_lifecycle(
-    action: ToolLifecycleAction,
-    app: Option<&AppHandle>,
-    task_id: Option<&str>,
-    proxy_enabled: bool,
-    proxy_url: &str,
-) -> Result<(), String> {
-    prepare_dsh_launcher()?;
-    let reachable = dsh_entrypoint_exists() || resolve_command("dsh-acp-demo").is_some();
-    log::info!(
-        target: "agentero::agent",
-        "dsh_lifecycle action={:?} launcher={} reachable={reachable}",
-        action,
-        dsh_launcher_dir().display()
-    );
-    if matches!(action, ToolLifecycleAction::Install) && reachable {
-        return Ok(());
-    }
-    run_tool_lifecycle_silently(
-        &dsh_npm_install_command(),
-        app,
-        task_id,
-        "agent-lifecycle-install",
-        proxy_enabled,
-        proxy_url,
-    )
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -373,6 +256,10 @@ pub fn uninstall_info(template_id: &str) -> Option<UninstallInfo> {
     let zcode_acp = "npm uninstall -g zcode-acp-server".to_string();
     #[cfg(not(target_os = "windows"))]
     let zcode_acp = "npm uninstall -g zcode-acp-server --prefix \"$HOME/.local\"".to_string();
+    #[cfg(target_os = "windows")]
+    let dsh_host = "npm uninstall -g @deepseek-ai/dsh".to_string();
+    #[cfg(not(target_os = "windows"))]
+    let dsh_host = "npm uninstall -g @deepseek-ai/dsh --prefix \"$HOME/.local\"".to_string();
 
     let (agent_commands, acp_commands): (Vec<String>, Vec<String>) = match template_id {
         // Single-package agents: host CLI and ACP are the same binary.
@@ -394,7 +281,9 @@ pub fn uninstall_info(template_id: &str) -> Option<UninstallInfo> {
             vec!["npm uninstall -g @xai-official/grok".to_string()],
             Vec::new(),
         ),
-        "dsh" => (Vec::new(), Vec::new()),
+        // The ACP profile lives inside the umbrella CLI; the dir entry below
+        // only cleans up the retired dsh-acp-demo launcher.
+        "dsh" => (vec![dsh_host], Vec::new()),
         "kimi-code" => (
             vec!["npm uninstall -g @moonshot-ai/kimi-code".to_string()],
             Vec::new(),
@@ -406,7 +295,10 @@ pub fn uninstall_info(template_id: &str) -> Option<UninstallInfo> {
         _ => return None,
     };
     let (agent_dirs, acp_dirs): (Vec<String>, Vec<String>) = match template_id {
-        "dsh" => (Vec::new(), vec![dsh_launcher_dir().display().to_string()]),
+        "dsh" => (
+            Vec::new(),
+            vec![legacy_dsh_launcher_dir().display().to_string()],
+        ),
         "kimi-code" => (vec![kimi_launcher_dir().display().to_string()], Vec::new()),
         _ => (Vec::new(), Vec::new()),
     };
@@ -451,8 +343,6 @@ fn remove_managed_dir(dir: &std::path::Path) -> Result<(), String> {
 
 /// Uninstall path: npm uninstall chains plus managed directory removal.
 /// `scope` lets the user remove only the host CLI, only the ACP adapter, or both.
-/// Must bypass `run_dsh_lifecycle` — its `prepare_dsh_launcher` recreates the
-/// launcher dir.
 pub fn run_partial_template_uninstall(
     template_id: &str,
     scope: UninstallScope,
@@ -464,9 +354,6 @@ pub fn run_partial_template_uninstall(
     let Some(info) = uninstall_info(template_id) else {
         return Ok(());
     };
-    if template_id == "dsh" && matches!(scope, UninstallScope::Acp | UninstallScope::All) {
-        return remove_managed_dir(&dsh_launcher_dir());
-    }
     let payload = info.for_scope(scope);
     if !payload.npm_commands.is_empty() {
         // A fully `|| true` chain would silently succeed when npm is missing.
@@ -526,12 +413,6 @@ pub fn run_template_lifecycle(
 
     if matches!(action, ToolLifecycleAction::Uninstall) {
         return run_template_uninstall(template_id, app, task_id, proxy_enabled, proxy_url);
-    }
-
-    // dsh is a project-dir npm install (not on PATH): Rust writes cordis.yml
-    // and the shell only runs the pinned `npm i` inside the launcher dir.
-    if template_id == "dsh" {
-        return run_dsh_lifecycle(action, app, task_id, proxy_enabled, proxy_url);
     }
 
     let detect = info
@@ -654,7 +535,7 @@ fn host_install_command(template_id: &str) -> Result<String, String> {
             "openclaw" => Ok("npm i -g openclaw@latest".to_string()),
             "hermes" => Ok(hermes_install_windows_command()),
             "pi" => Ok(PI_HOST_INSTALL_COMMAND.to_string()),
-            "dsh" => Ok(dsh_npm_install_command()),
+            "dsh" => Ok(DSH_INSTALL_COMMAND.to_string()),
             "kimi-code" => Ok(chain_or(
                 &kimi_install_windows_command(),
                 KIMI_NPM_INSTALL_COMMAND,
@@ -682,7 +563,7 @@ fn host_install_command(template_id: &str) -> Result<String, String> {
             "openclaw" => Ok("npm i -g openclaw@latest".to_string()),
             "hermes" => Ok(HERMES_INSTALL_UNIX.to_string()),
             "pi" => Ok(PI_HOST_INSTALL_COMMAND.to_string()),
-            "dsh" => Ok(dsh_npm_install_command()),
+            "dsh" => Ok(DSH_INSTALL_COMMAND.to_string()),
             "kimi-code" => Ok(chain_or(KIMI_INSTALL_UNIX, KIMI_NPM_INSTALL_COMMAND)),
             "grok-build" => Ok(chain_or(
                 GROK_INSTALL_UNIX,
@@ -864,7 +745,7 @@ npm i -g openclaw@latest
 # Kimi Code
 {kimi}
 # (or) npm i -g @moonshot-ai/kimi-code@latest
-# Dsh (DeepSeek Harness ACP demo — Agentero writes cordis.yml + runs this)
+# Dsh (DeepSeek Harness, ACP via dsh --profile acp)
 {dsh}"#,
             claude_acp = CLAUDE_ACP_INSTALL_COMMAND,
             pi_host = PI_HOST_INSTALL_COMMAND,
@@ -872,7 +753,7 @@ npm i -g openclaw@latest
             hermes = hermes_install_windows_command(),
             grok = grok_install_windows_command(),
             kimi = kimi_install_windows_command(),
-            dsh = dsh_npm_install_command(),
+            dsh = DSH_INSTALL_COMMAND,
         )
     }
     #[cfg(not(target_os = "windows"))]
@@ -897,7 +778,7 @@ npm i -g openclaw@latest
 {grok} || npm i -g @xai-official/grok@latest
 # Kimi Code
 {kimi} || npm i -g @moonshot-ai/kimi-code@latest
-# Dsh (DeepSeek Harness ACP demo — Agentero writes cordis.yml + runs this)
+# Dsh (DeepSeek Harness, ACP via dsh --profile acp)
 {dsh}"#,
             claude_host = CLAUDE_INSTALL_UNIX,
             claude_acp = CLAUDE_ACP_INSTALL_COMMAND,
@@ -907,7 +788,7 @@ npm i -g openclaw@latest
             hermes = HERMES_INSTALL_UNIX,
             grok = GROK_INSTALL_UNIX,
             kimi = KIMI_INSTALL_UNIX,
-            dsh = dsh_npm_install_command(),
+            dsh = DSH_INSTALL_COMMAND,
         )
     }
 }
@@ -1419,12 +1300,14 @@ mod tests {
     }
 
     #[test]
-    fn dsh_lifecycle_command_pins_packages() {
+    fn dsh_install_uses_global_npm_package() {
         let cmd = host_install_command("dsh").expect("dsh install");
-        for pkg in DSH_ACP_PACKAGES {
-            assert!(cmd.contains(pkg), "missing {pkg}");
-        }
+        assert!(cmd.contains("@deepseek-ai/dsh@latest"), "{cmd}");
+        assert!(!cmd.contains("dsh-acp-demo"), "{cmd}");
         assert!(!cmd.contains("curl"));
+        // Update re-runs the idempotent npm install (no official self-update).
+        let update = host_update_command("dsh").expect("dsh update");
+        assert_eq!(update, cmd);
     }
 
     #[test]
@@ -1533,9 +1416,16 @@ mod tests {
     #[test]
     fn uninstall_dirs_for_managed_installs() {
         let dsh = uninstall_info("dsh").unwrap();
-        assert!(dsh.agent.npm_commands.is_empty());
-        assert!(dsh.acp.npm_commands.is_empty());
-        assert_eq!(dsh.acp.dirs, vec![dsh_launcher_dir().display().to_string()]);
+        assert!(dsh
+            .agent
+            .npm_commands
+            .iter()
+            .any(|c| c.contains("@deepseek-ai/dsh")));
+        // The acp dir entry only cleans up the retired dsh-acp-demo launcher.
+        assert_eq!(
+            dsh.acp.dirs,
+            vec![legacy_dsh_launcher_dir().display().to_string()]
+        );
         let kimi = uninstall_info("kimi-code").unwrap();
         assert_eq!(
             kimi.agent.dirs,

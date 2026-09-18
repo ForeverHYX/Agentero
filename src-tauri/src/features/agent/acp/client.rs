@@ -278,10 +278,10 @@ pub(crate) fn agent_spawn_cwd(
     Ok(windows_shell_path(&raw))
 }
 
-/// Unix launches change cwd before exec, except Dsh whose own launcher already
-/// changes to its managed directory before starting the agent. The shell takes
-/// the cwd inline, so `env` stays unused on this platform (signature parity
-/// with the Windows launcher below).
+/// Unix launches change cwd before exec (#570): Finder-launched apps inherit
+/// `/`, and `dsh --profile acp` treats the invoking directory as its default
+/// workspace root. The shell takes the cwd inline, so `env` stays unused on
+/// this platform (signature parity with the Windows launcher below).
 #[cfg(not(windows))]
 fn local_launch_command(
     desc: &AgentDescriptor,
@@ -289,7 +289,7 @@ fn local_launch_command(
     _env: &mut HashMap<String, String>,
     cwd: Option<&Path>,
 ) -> (PathBuf, Vec<String>) {
-    match cwd.filter(|_| desc.template != AgentTemplate::Dsh) {
+    match cwd {
         Some(cwd) => wrap_local_command_with_cwd(&command, &desc.args, cwd),
         None => (command, desc.args.clone()),
     }
@@ -313,8 +313,8 @@ pub(crate) fn to_acp_agent_local(
         .unwrap_or_else(|| PathBuf::from(&desc.command));
 
     // Unix agents must not inherit `/` from a Finder-launched app (#570).
-    // Dsh owns its launcher cwd; Windows retains its existing Pi/Custom-only
-    // wrapping policy until the transport supports native cwd + tree teardown.
+    // Windows retains its existing Pi/Custom-only wrapping policy until the
+    // transport supports native cwd + tree teardown.
     let (command, args) = local_launch_command(desc, command, &mut child_env, cwd);
 
     let env: Vec<EnvVariable> = child_env
@@ -543,14 +543,23 @@ mod cwd_shell_wrap_tests {
     }
 
     #[test]
-    fn dsh_keeps_its_own_launcher_without_an_outer_shell() {
+    #[cfg(not(windows))]
+    fn dsh_gets_the_standard_cwd_wrapper_like_every_local_template() {
         let desc = descriptor(AgentTemplate::Dsh);
         let command = PathBuf::from(&desc.command);
         let mut env = HashMap::new();
         let (program, args) =
             local_launch_command(&desc, command.clone(), &mut env, Some(Path::new("/vault")));
-        assert_eq!(program, command);
-        assert_eq!(args, desc.args);
+        // `dsh --profile acp` resolves its default workspace root from the
+        // invoking directory, so it must go through the same `cd` wrapper.
+        assert_eq!(program, PathBuf::from("/bin/sh"));
+        assert!(
+            args.first().map(String::as_str) == Some("-c")
+                && args
+                    .get(1)
+                    .is_some_and(|s| s.starts_with("cd '/vault' && exec ")),
+            "dsh not wrapped: {args:?}"
+        );
         assert!(env.is_empty());
     }
 
@@ -599,13 +608,12 @@ mod cwd_shell_wrap_tests {
             .starts_with("cd '/path/with spaces' && exec '/usr/bin/pi-acp' '--foo' 'bar baz'"));
     }
 
-    /// #570 policy guard: on Unix every local template is wrapped except Dsh,
-    /// whose own launcher already `cd`s before starting the agent. Mirrors the
-    /// Windows test below so a future per-template exemption cannot slip in
-    /// unnoticed.
+    /// #570 policy guard: on Unix every local template is wrapped with a
+    /// `cd <cwd> && exec …` shell (no per-template exemptions — `dsh --profile
+    /// acp` also resolves its default workspace root from the invoking cwd).
     #[test]
     #[cfg(not(windows))]
-    fn unix_wraps_every_local_template_except_dsh() {
+    fn unix_wraps_every_local_template() {
         use crate::features::agent::registry::templates::{builtin_templates, template_from_id};
 
         let mut templates = builtin_templates()
@@ -615,18 +623,12 @@ mod cwd_shell_wrap_tests {
         templates.push(AgentTemplate::Custom);
 
         for template in templates {
-            let is_dsh = template == AgentTemplate::Dsh;
             let desc = descriptor(template);
             let command = PathBuf::from(&desc.command);
             let mut env = HashMap::new();
             let (program, args) =
                 local_launch_command(&desc, command.clone(), &mut env, Some(Path::new("/vault")));
 
-            if is_dsh {
-                assert_eq!((program, args), (command, desc.args.clone()), "{}", desc.id);
-                assert!(env.is_empty(), "{}", desc.id);
-                continue;
-            }
             assert_eq!(program, PathBuf::from("/bin/sh"), "{}", desc.id);
             assert!(
                 args.first().map(String::as_str) == Some("-c")

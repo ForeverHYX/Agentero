@@ -38,7 +38,7 @@ export type CatalogEntry = {
 	lastProbedAt?: string | null;
 	/** Normalized local host CLI version, when known. */
 	installedVersion?: string | null;
-	/** Silent-update target (npm latest or dsh pin), when known. */
+	/** Silent-update target (npm latest), when known. */
 	latestVersion?: string | null;
 	/** Settings shows Upgrade only when this is explicitly true. */
 	updateAvailable?: boolean | null;

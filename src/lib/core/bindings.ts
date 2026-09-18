@@ -49,7 +49,7 @@ export const commands = {
 	agentScanCatalog: () => __TAURI_INVOKE<ApiResult<CatalogScanResponse_Serialize>>("agent_scan_catalog"),
 	/**
 	 *  Scan catalog and compare installed CLI versions against silent-update
-	 *  targets (npm latest / dsh pin). Settings shows Upgrade only when
+	 *  targets (npm latest). Settings shows Upgrade only when
 	 *  `updateAvailable === true`. Network / `--version` I/O runs on a worker.
 	 */
 	agentCheckCatalogUpdates: () => typedError<ApiResult<CatalogScanResponse_Serialize>, string>(__TAURI_INVOKE("agent_check_catalog_updates")),
@@ -1259,8 +1259,7 @@ export type AgentTemplate = "opencode" |
  */
 "pi" | 
 /**
- *  DeepSeek Harness automation ACP server (`@deepseek-ai/dsh-acp-demo`),
- *  npm-installed into a managed launcher directory (no repo checkout).
+ *  DeepSeek Harness umbrella CLI with native ACP (`dsh --profile acp`).
  *  Docs: https://github.com/deepseek-ai/deepseek-harness
  */
 "dsh" | 
@@ -1810,7 +1809,7 @@ export type CatalogEntry_Deserialize = {
 	lastProbedAt?: string | null,
 	/**  Normalized local host CLI version (`detect_command --version`), when known. */
 	installedVersion?: string | null,
-	/**  Target version the silent updater can reach (npm latest or dsh pin). */
+	/**  Target version the silent updater can reach (npm latest). */
 	latestVersion?: string | null,
 	/**
 	 *  True only when a newer silent-update target is known. Settings shows
@@ -1849,7 +1848,7 @@ export type CatalogEntry_Serialize = {
 	lastProbedAt?: string | null,
 	/**  Normalized local host CLI version (`detect_command --version`), when known. */
 	installedVersion?: string | null,
-	/**  Target version the silent updater can reach (npm latest or dsh pin). */
+	/**  Target version the silent updater can reach (npm latest). */
 	latestVersion?: string | null,
 	/**
 	 *  True only when a newer silent-update target is known. Settings shows

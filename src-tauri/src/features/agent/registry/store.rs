@@ -7,7 +7,7 @@ use crate::features::agent::models::{
 use crate::features::agent::registry::discovery::{probe_command, resolve_command};
 use crate::features::agent::registry::lifecycle;
 use crate::features::agent::registry::templates::{
-    catalog_templates, dsh_entrypoint_exists, dsh_launcher_dir, template_from_id, template_info,
+    catalog_templates, template_from_id, template_info,
 };
 use std::collections::HashMap;
 use std::fs;
@@ -219,12 +219,6 @@ impl AgentRegistry {
             .filter(|t| t.id != "custom")
             .ok_or_else(|| AppError::message(format!("unknown catalog template: {template_id}")))?;
 
-        // dsh needs its launcher dir (cordis.yml / package.json) even when the
-        // server itself is already installed elsewhere (home npm root / PATH).
-        if template_id == "dsh" {
-            lifecycle::prepare_dsh_launcher().map_err(AppError::message)?;
-        }
-
         let env = catalog_env(&info);
 
         // Prefer existing registration for this template. Built-in descriptors are owned by the
@@ -409,27 +403,13 @@ impl AgentRegistry {
             let mut entries = Vec::new();
             let mut registered_new = false;
             for info in catalog_templates() {
-                // dsh lives in a managed launcher dir (project npm install) or as a
-                // global `dsh-acp-demo` on PATH — "installed" means either entrypoint.
-                let (detect_path, binary_available, acp_command_available) = if info.id == "dsh" {
-                    let local = dsh_entrypoint_exists();
-                    let global = resolve_command("dsh-acp-demo");
-                    let ready = local || global.is_some();
-                    (
-                        global.or_else(|| ready.then(dsh_launcher_dir)),
-                        ready,
-                        ready,
-                    )
-                } else {
-                    let detect = info
-                        .detect_command
-                        .as_deref()
-                        .unwrap_or(info.command.as_str());
-                    let detect_path = resolve_command(detect);
-                    let binary_available = detect_path.is_some();
-                    let acp_command_available = resolve_command(&info.command).is_some();
-                    (detect_path, binary_available, acp_command_available)
-                };
+                let detect = info
+                    .detect_command
+                    .as_deref()
+                    .unwrap_or(info.command.as_str());
+                let detect_path = resolve_command(detect);
+                let binary_available = detect_path.is_some();
+                let acp_command_available = resolve_command(&info.command).is_some();
 
                 let registered = state.agents.iter().find(|a| {
                     a.template.as_str() == info.id

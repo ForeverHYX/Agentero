@@ -53,7 +53,7 @@ pub fn agent_scan_catalog(registry: State<'_, AgentRegistry>) -> ApiResult<Catal
 }
 
 /// Scan catalog and compare installed CLI versions against silent-update
-/// targets (npm latest / dsh pin). Settings shows Upgrade only when
+/// targets (npm latest). Settings shows Upgrade only when
 /// `updateAvailable === true`. Network / `--version` I/O runs on a worker.
 #[tauri::command]
 #[specta::specta]

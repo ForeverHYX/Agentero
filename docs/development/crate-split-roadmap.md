@@ -60,7 +60,7 @@ parse 引擎同理：远端引擎（MinerU/Paddle/OpenAI-compatible，依赖 `la
 | `features/paper/zotero`：`db`、`commands`、`sync/` | `tauri::AppHandle`（jobs spawn）、Channel IPC |
 | `features/paper/analyze/layout`（hosted/model_assets）、`body_engines` | settings store 凭据、模型资产下载任务、tauri command |
 | `features/paper/discovery`：`coolpapers`、`recommend`、`proxy/{mod,arxiv,modelscope}` | tauri command / `tauri::http` 站点代理 |
-| `markdown/wiki`：`commands`、`heading_rename` | tauri State（`WikiIndexState` manage）、watcher 协同 |
+| `markdown/wiki`：`commands` | tauri State（`WikiIndexState` manage）、watcher 协同；`heading_rename` 事务体已随 `rename` 一起在 core |
 | `features/lifecycle` desktop 部分 | `job:completed/failed` 依赖 JobSnapshot |
 | `core/telemetry`、`core/usage::commands`、`app/open_request` desktop 部分 | posthog-rs、tauri command、fs scope/窗口聚焦 |
 | `integration/*`（connector、mcp、remote、bridge、sync） | axum/rmcp/openssh/tauri runtime，全 desktop |

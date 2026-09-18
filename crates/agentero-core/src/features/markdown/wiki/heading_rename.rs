@@ -3,35 +3,27 @@
 //! A normal Markdown save never enters this module. The caller must provide the
 //! exact saved document snapshot plus a heading path and line, making the
 //! cross-file rewrite an explicit and reviewable user action.
+//!
+//! The plan→verify→atomic-write→rollback skeleton is shared with the file-move
+//! rename in [`super::rename`]; both build on [`super::edit_txn`]. This module
+//! owns only the heading-specific planning (anchor identity, fragment suffix
+//! rewrites) and the post-commit wiki index rebuild.
 
-use crate::features::markdown::wiki::extract::{extract_document, parse_heading_source};
-use crate::features::markdown::wiki::index::WikiIndex;
-use crate::features::markdown::wiki::models::{
+use super::edit_txn::{
+    apply_edits, restore_written_sources, validate_edits, verify_sources_unchanged,
+    write_all_sources, PlannedEdit, PlannedSource,
+};
+use crate::features::wiki::extract::{extract_document, parse_heading_source};
+use crate::features::wiki::index::WikiIndex;
+use crate::features::wiki::models::{
     LinkFragment, LinkResolutionStatus, SourceRange, WikiRenameErrorCode, WikiRenameHeadingResult,
     WikiRenameRollback,
 };
-use crate::features::markdown::wiki::rename::{
-    atomic_write, content_hash, normalize_vault_path, WikiRenameError,
-};
-use crate::features::markdown::wiki::resolve::{fragment_anchors, FragmentAnchor};
+use crate::features::wiki::rename::{normalize_vault_path, WikiRenameError};
+use crate::features::wiki::resolve::{fragment_anchors, FragmentAnchor};
 use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
 use std::path::{Path, PathBuf};
-
-#[derive(Debug, Clone)]
-struct PlannedEdit {
-    range: SourceRange,
-    expected: String,
-    replacement: String,
-}
-
-#[derive(Debug, Clone)]
-struct PlannedSource {
-    path: String,
-    original_content: String,
-    original_hash: String,
-    edits: Vec<PlannedEdit>,
-}
 
 #[derive(Debug, Clone)]
 pub(crate) struct WikiHeadingRenameTransaction {
@@ -54,7 +46,7 @@ impl WikiHeadingRenameTransaction {
         new_text: &str,
         dirty_paths: &[String],
     ) -> Result<Self, WikiRenameError> {
-        crate::core::fs::ensure_vault_dir(vault_root)
+        crate::fs::ensure_vault_dir(vault_root)
             .map_err(|e| WikiRenameError::new(WikiRenameErrorCode::InvalidPath, e.to_string()))?;
         if index.vault_path.as_deref() != vault_root.to_str() {
             return Err(WikiRenameError::new(
@@ -157,7 +149,8 @@ impl WikiHeadingRenameTransaction {
         let heading_edit = PlannedEdit {
             expected: heading.text.clone(),
             replacement: new_text.to_string(),
-            range: heading_range,
+            start: heading_range.start,
+            end: heading_range.end,
         };
         let heading_only_content =
             apply_edits(expected_content, std::slice::from_ref(&heading_edit));
@@ -248,7 +241,8 @@ impl WikiHeadingRenameTransaction {
                 .entry(edge.occurrence.source.clone())
                 .or_default()
                 .push(PlannedEdit {
-                    range,
+                    start: range.start,
+                    end: range.end,
                     expected: String::new(),
                     replacement,
                 });
@@ -286,7 +280,7 @@ impl WikiHeadingRenameTransaction {
             for edit in &mut edits {
                 if edit.expected.is_empty() {
                     edit.expected = original_content
-                        .get(edit.range.start..edit.range.end)
+                        .get(edit.start..edit.end)
                         .ok_or_else(|| {
                             WikiRenameError::new(
                                 WikiRenameErrorCode::OverlappingEdits,
@@ -296,13 +290,12 @@ impl WikiHeadingRenameTransaction {
                         .to_string();
                 }
             }
-            validate_edits(&source_path, &original_content, &mut edits)?;
-            sources.push(PlannedSource {
-                path: source_path,
-                original_hash: content_hash(&original_content),
+            validate_edits(&source_path, &original_content, &mut edits, "heading")?;
+            sources.push(PlannedSource::in_place(
+                source_path,
                 original_content,
                 edits,
-            });
+            ));
         }
 
         Ok(Self {
@@ -320,30 +313,28 @@ impl WikiHeadingRenameTransaction {
         fail_write_at: Option<usize>,
         fail_rebuild: bool,
     ) -> Result<WikiRenameHeadingResult, WikiRenameError> {
-        self.verify_sources_unchanged()?;
-        let mut written: Vec<&PlannedSource> = Vec::new();
-        for (write_index, source) in self.sources.iter().enumerate() {
-            if fail_write_at == Some(write_index) {
-                let rollback = self.rollback(&written, index);
-                return Err(WikiRenameError::after_mutation(
+        verify_sources_unchanged(&self.vault_root, &self.sources, "heading")?;
+        let written =
+            write_all_sources(&self.vault_root, &self.sources, fail_write_at, |written| {
+                self.rollback(written, index)
+            })
+            .map_err(|failure| {
+                let source = &self.sources[failure.source_index];
+                let message = match failure.error {
+                    Some(error) => {
+                        format!(
+                            "could not rewrite heading source {}: {error}",
+                            source.final_path
+                        )
+                    }
+                    None => format!("simulated heading write failure for {}", source.final_path),
+                };
+                WikiRenameError::after_mutation(
                     WikiRenameErrorCode::WriteFailed,
-                    format!("simulated heading write failure for {}", source.path),
-                    rollback,
-                ));
-            }
-            let rewritten = apply_edits(&source.original_content, &source.edits);
-            if let Err(error) =
-                atomic_write(&self.vault_root.join(&source.path), rewritten.as_bytes())
-            {
-                let rollback = self.rollback(&written, index);
-                return Err(WikiRenameError::after_mutation(
-                    WikiRenameErrorCode::WriteFailed,
-                    format!("could not rewrite heading source {}: {error}", source.path),
-                    rollback,
-                ));
-            }
-            written.push(source);
-        }
+                    message,
+                    failure.rollback,
+                )
+            })?;
 
         let vault_path = self.vault_root.to_str().ok_or_else(|| {
             WikiRenameError::new(
@@ -372,47 +363,18 @@ impl WikiHeadingRenameTransaction {
             updated_sources: self
                 .sources
                 .iter()
-                .filter(|source| source.path != self.path)
-                .map(|source| source.path.clone())
+                .filter(|source| source.final_path != self.path)
+                .map(|source| source.final_path.clone())
                 .collect(),
             rollback: WikiRenameRollback::NotNeeded,
         })
-    }
-
-    fn verify_sources_unchanged(&self) -> Result<(), WikiRenameError> {
-        for source in &self.sources {
-            let current =
-                fs::read_to_string(self.vault_root.join(&source.path)).map_err(|error| {
-                    WikiRenameError::new(
-                        WikiRenameErrorCode::SourceChanged,
-                        format!("could not re-read heading source {}: {error}", source.path),
-                    )
-                })?;
-            if content_hash(&current) != source.original_hash {
-                return Err(WikiRenameError::new(
-                    WikiRenameErrorCode::SourceChanged,
-                    format!("heading source changed: {}", source.path),
-                ));
-            }
-        }
-        Ok(())
     }
 
     fn rollback(&self, written: &[&PlannedSource], index: &mut WikiIndex) -> WikiRenameRollback {
         if written.is_empty() {
             return WikiRenameRollback::NotNeeded;
         }
-        let mut complete = true;
-        for source in written.iter().rev() {
-            if atomic_write(
-                &self.vault_root.join(&source.path),
-                source.original_content.as_bytes(),
-            )
-            .is_err()
-            {
-                complete = false;
-            }
-        }
+        let mut complete = restore_written_sources(&self.vault_root, written);
         if self
             .vault_root
             .to_str()
@@ -518,43 +480,8 @@ fn path_may_reference_at_or_under(path: &[String], root: &[String]) -> bool {
     (0..root.len()).any(|start| {
         let suffix = &root[start..];
         path.len() >= suffix.len()
-            && crate::features::markdown::wiki::resolve::heading_path_ends_with(
-                &path[..suffix.len()],
-                suffix,
-            )
+            && crate::features::wiki::resolve::heading_path_ends_with(&path[..suffix.len()], suffix)
     })
-}
-
-fn validate_edits(
-    path: &str,
-    content: &str,
-    edits: &mut [PlannedEdit],
-) -> Result<(), WikiRenameError> {
-    edits.sort_by_key(|edit| std::cmp::Reverse(edit.range.start));
-    if edits.iter().any(|edit| {
-        edit.range.start > edit.range.end
-            || edit.range.end > content.len()
-            || !content.is_char_boundary(edit.range.start)
-            || !content.is_char_boundary(edit.range.end)
-            || content.get(edit.range.start..edit.range.end) != Some(edit.expected.as_str())
-    }) || edits
-        .windows(2)
-        .any(|pair| pair[0].range.start < pair[1].range.end)
-    {
-        return Err(WikiRenameError::new(
-            WikiRenameErrorCode::OverlappingEdits,
-            format!("heading edits overlap or exceed source bounds in {path}"),
-        ));
-    }
-    Ok(())
-}
-
-fn apply_edits(content: &str, edits: &[PlannedEdit]) -> String {
-    let mut rewritten = content.to_string();
-    for edit in edits {
-        rewritten.replace_range(edit.range.start..edit.range.end, edit.replacement.as_str());
-    }
-    rewritten
 }
 
 #[cfg(test)]

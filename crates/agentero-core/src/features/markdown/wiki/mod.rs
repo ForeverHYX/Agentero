@@ -1,8 +1,10 @@
 mod cache;
 pub mod doctor;
+mod edit_txn;
 pub mod embed;
 pub mod extract;
 pub mod frontmatter;
+pub mod heading_rename;
 pub mod index;
 pub mod models;
 mod notes;

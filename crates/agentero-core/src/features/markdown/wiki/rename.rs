@@ -15,13 +15,17 @@ use crate::features::wiki::models::{
     WikiRenameRollback, WikiRenameSkipped,
 };
 use crate::features::wiki::util::replacement_target;
-use sha2::{Digest, Sha256};
 use std::collections::{BTreeMap, BTreeSet};
 use std::error::Error;
 use std::fmt;
 use std::fs;
 use std::path::{Component, Path, PathBuf};
-use uuid::Uuid;
+
+pub use super::edit_txn::{atomic_write, content_hash};
+use super::edit_txn::{
+    restore_written_sources, validate_edits, verify_sources_unchanged, write_all_sources,
+    PlannedEdit, PlannedSource,
+};
 
 #[derive(Debug, Clone)]
 pub struct WikiRenameError {
@@ -67,23 +71,6 @@ impl fmt::Display for WikiRenameError {
 }
 
 impl Error for WikiRenameError {}
-
-#[derive(Debug, Clone)]
-struct PlannedEdit {
-    start: usize,
-    end: usize,
-    expected: String,
-    replacement: String,
-}
-
-#[derive(Debug, Clone)]
-struct PlannedSource {
-    current_path: String,
-    final_path: String,
-    original_content: String,
-    original_hash: String,
-    edits: Vec<PlannedEdit>,
-}
 
 /// A preflighted local rename/move. Construction never mutates the Vault.
 #[derive(Debug, Clone)]
@@ -249,20 +236,7 @@ impl WikiRenameTransaction {
                         format!("could not read planned source {current_path}: {error}"),
                     )
                 })?;
-            edits.sort_by_key(|edit| std::cmp::Reverse(edit.start));
-            if edits.iter().any(|edit| {
-                edit.start > edit.end
-                    || edit.end > original_content.len()
-                    || !original_content.is_char_boundary(edit.start)
-                    || !original_content.is_char_boundary(edit.end)
-                    || original_content.get(edit.start..edit.end) != Some(edit.expected.as_str())
-            }) || edits.windows(2).any(|pair| pair[0].start < pair[1].end)
-            {
-                return Err(WikiRenameError::new(
-                    WikiRenameErrorCode::OverlappingEdits,
-                    format!("planned edits overlap or exceed source bounds in {path}"),
-                ));
-            }
+            validate_edits(&path, &original_content, &mut edits, "planned")?;
             sources.push(PlannedSource {
                 final_path: remap_path(&path, &from, &to),
                 original_hash: content_hash(&original_content),
@@ -378,7 +352,7 @@ impl WikiRenameTransaction {
     where
         F: FnOnce() -> Result<(), String>,
     {
-        self.verify_sources_unchanged()?;
+        verify_sources_unchanged(&self.vault_root, &self.sources, "planned")?;
 
         let mut primary_move_completed = false;
         if self.primary_move_pending {
@@ -414,30 +388,22 @@ impl WikiRenameTransaction {
             ));
         }
 
-        let mut written = Vec::new();
-        for (write_index, source) in self.sources.iter().enumerate() {
-            if fail_write_at == Some(write_index) {
-                let rollback = self.rollback(&written, primary_move_completed);
-                return Err(WikiRenameError::after_mutation(
+        let written =
+            write_all_sources(&self.vault_root, &self.sources, fail_write_at, |written| {
+                self.rollback(written, primary_move_completed)
+            })
+            .map_err(|failure| {
+                let source = &self.sources[failure.source_index];
+                let message = match failure.error {
+                    Some(error) => format!("could not rewrite {}: {error}", source.final_path),
+                    None => format!("simulated write failure for {}", source.final_path),
+                };
+                WikiRenameError::after_mutation(
                     WikiRenameErrorCode::WriteFailed,
-                    format!("simulated write failure for {}", source.final_path),
-                    rollback,
-                ));
-            }
-            let rewritten = apply_edits(&source.original_content, &source.edits);
-            if let Err(error) = atomic_write(
-                &self.vault_root.join(&source.final_path),
-                rewritten.as_bytes(),
-            ) {
-                let rollback = self.rollback(&written, primary_move_completed);
-                return Err(WikiRenameError::after_mutation(
-                    WikiRenameErrorCode::WriteFailed,
-                    format!("could not rewrite {}: {error}", source.final_path),
-                    rollback,
-                ));
-            }
-            written.push(source);
-        }
+                    message,
+                    failure.rollback,
+                )
+            })?;
 
         if let Err(message) = commit() {
             let rollback = self.rollback(&written, primary_move_completed);
@@ -456,45 +422,12 @@ impl WikiRenameTransaction {
         })
     }
 
-    fn verify_sources_unchanged(&self) -> Result<(), WikiRenameError> {
-        for source in &self.sources {
-            let current = fs::read_to_string(self.vault_root.join(&source.current_path)).map_err(
-                |error| {
-                    WikiRenameError::new(
-                        WikiRenameErrorCode::SourceChanged,
-                        format!(
-                            "could not re-read planned source {}: {error}",
-                            source.current_path
-                        ),
-                    )
-                },
-            )?;
-            if content_hash(&current) != source.original_hash {
-                return Err(WikiRenameError::new(
-                    WikiRenameErrorCode::SourceChanged,
-                    format!("planned source changed: {}", source.current_path),
-                ));
-            }
-        }
-        Ok(())
-    }
-
     fn rollback(
         &self,
         written: &[&PlannedSource],
         primary_move_completed: bool,
     ) -> WikiRenameRollback {
-        let mut complete = true;
-        for source in written.iter().rev() {
-            if atomic_write(
-                &self.vault_root.join(&source.final_path),
-                source.original_content.as_bytes(),
-            )
-            .is_err()
-            {
-                complete = false;
-            }
-        }
+        let mut complete = restore_written_sources(&self.vault_root, written);
         if primary_move_completed
             && fs::rename(
                 self.vault_root.join(&self.to),
@@ -549,39 +482,12 @@ fn remap_path(path: &str, from: &str, to: &str) -> String {
         .unwrap_or_else(|| path.to_string())
 }
 
-pub fn content_hash(content: &str) -> String {
-    hex::encode(Sha256::digest(content.as_bytes()))
-}
-
-fn apply_edits(content: &str, edits: &[PlannedEdit]) -> String {
-    let mut rewritten = content.to_string();
-    for edit in edits {
-        rewritten.replace_range(edit.start..edit.end, &edit.replacement);
-    }
-    rewritten
-}
-
-pub fn atomic_write(path: &Path, contents: &[u8]) -> Result<(), String> {
-    path.parent()
-        .ok_or_else(|| format!("{} has no parent", path.display()))?;
-    let name = path
-        .file_name()
-        .and_then(|name| name.to_str())
-        .unwrap_or("markdown");
-    // `.agentero-rename-` marks the temp for the vault watcher (content
-    // modify, not a user rename); the `.tmp` suffix keeps sync scans away.
-    let opts = crate::fs::AtomicOpts {
-        temp_name: Some(format!(".{name}.agentero-rename-{}.tmp", Uuid::new_v4())),
-        ..Default::default()
-    };
-    crate::fs::atomic_write_with(path, contents, &opts).map_err(|error| error.to_string())
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::features::wiki::index::WikiIndex;
     use serde::Deserialize;
+    use uuid::Uuid;
 
     #[derive(Deserialize)]
     struct SharedFixture {

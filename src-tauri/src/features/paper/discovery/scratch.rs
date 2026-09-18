@@ -60,7 +60,7 @@ pub async fn plaza_scratch_stats() -> ApiResult<scratch::ScratchStats> {
 #[tauri::command]
 #[specta::specta]
 pub async fn plaza_scratch_clear() -> ApiResult<scratch::ScratchClearResult> {
-    match scratch::clear() {
+    match scratch::clear().await {
         Ok(data) => ApiResult::ok(data),
         Err(e) => map_err(e),
     }

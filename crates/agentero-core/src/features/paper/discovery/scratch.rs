@@ -17,10 +17,21 @@ use crate::http;
 use crate::paths;
 
 /// Total cap for all scratch papers (PDF + markdown), oldest-first eviction.
+/// Bounded at cap + one in-flight download (`MAX_PAPER_PDF_BYTES`).
 const MAX_TOTAL_BYTES: u64 = 500 * 1024 * 1024;
+/// Per-paper download cap: streaming aborts (and cleans the partial) beyond
+/// this, so one pathological response cannot blow the memory or disk budget.
+const MAX_PAPER_PDF_BYTES: u64 = 100 * 1024 * 1024;
 const DOWNLOAD_TIMEOUT_SECS: u64 = 90;
 /// Marker file rewritten on every use; mtime drives LRU eviction.
 const LAST_USED_FILE: &str = ".last-used";
+
+/// Serializes every cache mutation. Overlapping `plaza_scratch_prepare`
+/// calls (e.g. a frontend-timeout retry while the host is still working)
+/// would otherwise each protect only their own entry during LRU eviction,
+/// letting one evict a directory the other is about to return; `clear`
+/// races the same way.
+static SCRATCH_MUTEX: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
 
 #[derive(Debug, Clone, Default, Serialize, specta::Type)]
 #[serde(rename_all = "camelCase")]
@@ -146,8 +157,13 @@ fn enforce_cap_in(root: &Path, keep: &Path, cap: u64) {
     }
 }
 
-async fn download_pdf(arxiv_id: &str, pdf_path: &Path) -> Result<(), AppError> {
-    let url = format!("https://arxiv.org/pdf/{arxiv_id}");
+/// Stream one arXiv PDF into `tmp`, enforcing the per-paper size cap so an
+/// oversized response can never buffer in memory or blow past the cache
+/// budget. The `%PDF-` magic is checked on the first chunk before anything
+/// is written.
+async fn stream_pdf_to_file(url: &str, tmp: &Path) -> Result<(), AppError> {
+    use tokio::io::AsyncWriteExt;
+
     let client = http::client_builder()
         .timeout(Duration::from_secs(DOWNLOAD_TIMEOUT_SECS))
         .user_agent(http::BROWSER_USER_AGENT)
@@ -156,8 +172,8 @@ async fn download_pdf(arxiv_id: &str, pdf_path: &Path) -> Result<(), AppError> {
         ))
         .build()
         .map_err(|e| AppError::message(format!("http client: {e}")))?;
-    let response = client
-        .get(&url)
+    let mut response = client
+        .get(url)
         .send()
         .await
         .map_err(|e| AppError::message(format!("download {url}: {e}")))?;
@@ -167,19 +183,51 @@ async fn download_pdf(arxiv_id: &str, pdf_path: &Path) -> Result<(), AppError> {
             response.status()
         )));
     }
-    let bytes = response
-        .bytes()
+    let mut file = tokio::fs::File::create(tmp)
         .await
-        .map_err(|e| AppError::message(format!("download {url}: {e}")))?;
-    if bytes.len() < 5 || &bytes[..5] != b"%PDF-" {
-        return Err(AppError::message(format!(
-            "download {url}: response is not a PDF ({} bytes)",
-            bytes.len()
-        )));
+        .map_err(|e| AppError::message(format!("create scratch pdf part: {e}")))?;
+    let mut written: u64 = 0;
+    let mut magic_checked = false;
+    while let Some(chunk) = response
+        .chunk()
+        .await
+        .map_err(|e| AppError::message(format!("download {url}: {e}")))?
+    {
+        if !magic_checked {
+            if chunk.len() < 5 || &chunk[..5] != b"%PDF-" {
+                return Err(AppError::message(format!(
+                    "download {url}: response is not a PDF"
+                )));
+            }
+            magic_checked = true;
+        }
+        written += chunk.len() as u64;
+        if written > MAX_PAPER_PDF_BYTES {
+            return Err(AppError::message(format!(
+                "download {url}: exceeds the {MAX_PAPER_PDF_BYTES} byte per-paper cap"
+            )));
+        }
+        file.write_all(&chunk)
+            .await
+            .map_err(|e| AppError::message(format!("write scratch pdf: {e}")))?;
     }
-    let tmp = pdf_path.with_extension("pdf.part");
-    std::fs::write(&tmp, &bytes)
+    if !magic_checked {
+        return Err(AppError::message(format!("download {url}: empty response")));
+    }
+    file.flush()
+        .await
         .map_err(|e| AppError::message(format!("write scratch pdf: {e}")))?;
+    Ok(())
+}
+
+async fn download_pdf(arxiv_id: &str, pdf_path: &Path) -> Result<(), AppError> {
+    let url = format!("https://arxiv.org/pdf/{arxiv_id}");
+    let tmp = pdf_path.with_extension("pdf.part");
+    if let Err(e) = stream_pdf_to_file(&url, &tmp).await {
+        // Rejected / aborted downloads must not leave partials behind.
+        let _ = std::fs::remove_file(&tmp);
+        return Err(e);
+    }
     std::fs::rename(&tmp, pdf_path)
         .map_err(|e| AppError::message(format!("finalize scratch pdf: {e}")))?;
     Ok(())
@@ -239,6 +287,7 @@ async fn ensure_paper_in(root: &Path, arxiv_id: &str) -> Result<ScratchPaper, Ap
 }
 
 pub async fn ensure_paper(arxiv_id: &str) -> Result<ScratchPaper, AppError> {
+    let _guard = SCRATCH_MUTEX.lock().await;
     ensure_paper_in(&scratch_root(), arxiv_id).await
 }
 
@@ -265,7 +314,8 @@ fn stats_in(root: &Path) -> ScratchStats {
     ScratchStats { papers, bytes }
 }
 
-pub fn clear() -> Result<ScratchClearResult, AppError> {
+pub async fn clear() -> Result<ScratchClearResult, AppError> {
+    let _guard = SCRATCH_MUTEX.lock().await;
     clear_in(&scratch_root())
 }
 
@@ -342,14 +392,20 @@ mod tests {
             std::fs::create_dir_all(dir).unwrap();
             std::fs::write(dir.join("paper.pdf"), vec![0u8; 300]).unwrap();
         }
-        // Old entry: last used an hour ago. Fresh entry: now (being prepared).
+        // LRU order comes from the `.last-used` marker mtime, not the pdf's:
+        // backdate the old entry's marker by an hour, leave `fresh` at now.
         let past = std::time::SystemTime::now() - Duration::from_secs(3600);
-        let file = std::fs::OpenOptions::new()
+        for dir in [&old, &fresh] {
+            std::fs::write(dir.join(LAST_USED_FILE), b"").unwrap();
+        }
+        let marker = std::fs::OpenOptions::new()
             .write(true)
-            .open(old.join("paper.pdf"))
+            .open(old.join(LAST_USED_FILE))
             .unwrap();
-        file.set_times(std::fs::FileTimes::new().set_modified(past))
+        marker
+            .set_times(std::fs::FileTimes::new().set_modified(past))
             .unwrap();
+        drop(marker);
 
         enforce_cap_in(&root, &fresh, 300);
 

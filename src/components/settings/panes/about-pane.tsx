@@ -559,7 +559,7 @@ export function AboutPane() {
 						}
 					>
 						<div className="flex items-center gap-2">
-							{scratchStats && scratchStats.papers > 0 ? (
+							{scratchStats?.bytes ? (
 								<span className="text-muted-foreground text-xs">
 									{t("about.scratch.summary", {
 										papers: scratchStats.papers,
@@ -567,10 +567,13 @@ export function AboutPane() {
 									})}
 								</span>
 							) : null}
+							{/* Gate on bytes, not papers: failed parses leave an
+							    orphaned paper.pdf (bytes > 0, papers == 0) that
+							    must stay clearable. */}
 							<Button
 								variant="outline"
 								size="sm"
-								disabled={scratchBusy || !scratchStats?.papers}
+								disabled={scratchBusy || !scratchStats?.bytes}
 								onClick={onClearScratch}
 							>
 								{scratchBusy ? (

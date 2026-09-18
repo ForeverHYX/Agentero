@@ -306,7 +306,7 @@ DocTab：`kind: "plaza"`（或 `file` + mode `plaza` + path 虚拟 URI——实�
 | **P0d 播客** | 占位页 | 可进入、文案清晰 |
 | **P1** | 入库（解析 arXiv / 魔棒管线）、预览抽屉、批量加入 Library | 与魔棒语义一致 |
 | **P2** | 播客实体、Agent 推荐、命令面板 | — |
-| **P2 @ 广场条目（已交付）** | Agent `@` 搜索引用 arXiv Daily + Feeds 条目；虚拟路径 `agentero:plaza/…`，发送时展开元数据，并为 arXiv 条目准备 Vault 外全文临时副本（`<cache>/agentero/plaza-scratch/`，liteparse 转 `PAPER.md`，500MB LRU；设置→关于可清除） | 标题关键词可命中；Agent 读全文无需入库；条目过期 / 全文准备失败降级提示，不静默丢弃 |
+| **P2 @ 广场条目（已交付）** | Agent `@` 搜索引用 arXiv Daily + Feeds 条目；虚拟路径 `agentero:plaza/…`，发送时展开元数据，并为 arXiv 条目准备 Vault 外全文临时副本（`<cache>/agentero/plaza-scratch/`，liteparse 转 `PAPER.md`，500MB LRU、单篇下载上限 100MB、并发串行化；设置→关于可清除） | 标题关键词可命中；Agent 读全文无需入库；条目过期 / 全文准备失败降级提示，不静默丢弃 |
 | **订阅 MVP** | 原生面板 + 本地 RSS + 论文入库 | 见 [`plaza-feeds.md`](plaza-feeds.md) M1–M4 |
 
 ## 7. 明确不做（P0）

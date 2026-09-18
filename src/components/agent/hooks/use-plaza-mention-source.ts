@@ -63,8 +63,12 @@ export function usePlazaMentionSource(
 	const [entries, setEntries] = useState<PlazaMentionEntry[]>([]);
 
 	useEffect(() => {
+		// Drop the previous vault's entries and registry first: until the new
+		// loads land, stale recommendations must not stay mentionable or
+		// expandable into a prompt (and no vault must keep any registry).
+		setEntries([]);
+		registerPlazaMentionEntries([]);
 		if (!vaultPath || !isTauri()) {
-			setEntries([]);
 			return;
 		}
 		let cancelled = false;

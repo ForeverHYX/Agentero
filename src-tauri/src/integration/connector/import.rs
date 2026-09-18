@@ -509,26 +509,13 @@ fn translator_url_from_ctrl(ctrl: &ConnectorController) -> String {
         .unwrap_or_else(|| crate::features::paper::import::DEFAULT_TRANSLATOR_BASE_URL.to_string())
 }
 
-/// Strip trailing `.pdf` or `.PDF` from a filename-based title.
-fn strip_pdf_ext(s: &str) -> &str {
-    let trimmed = s.trim();
-    if let Some(rest) = trimmed
-        .strip_suffix(".pdf")
-        .or_else(|| trimmed.strip_suffix(".PDF"))
-    {
-        rest.trim()
-    } else {
-        trimmed
-    }
-}
-
 /// Fallback metadata for a standalone PDF when online resolution is unavailable.
 fn fallback_standalone_meta(title: Option<&str>, clean_url: Option<&str>) -> papers::PaperRecord {
     let title_raw = title.map(str::trim).filter(|s| !s.is_empty());
     let title = title_raw
         .map(decode_connector_title)
         .as_deref()
-        .map(strip_pdf_ext)
+        .map(crate::features::paper::import::strip_pdf_ext)
         .filter(|s| !s.is_empty())
         .map(str::to_string)
         .or_else(|| {
@@ -553,18 +540,21 @@ fn fallback_standalone_meta(title: Option<&str>, clean_url: Option<&str>) -> pap
 
 /// Resolve metadata for a standalone PDF upload: first try online resolution via
 /// translator / scholar APIs when a URL is available, otherwise fall back to
-/// title / URL-derived metadata.
+/// title / URL-derived metadata. The browser extension expects a response well
+/// under ~15s, so the synchronous lookup is bounded far below the translator's
+/// own 60s timeout; on timeout or failure the fallback metadata is used and the
+/// background recognition pass completes the record later.
 async fn resolve_standalone_meta(
     ctrl: &ConnectorController,
     title: Option<&str>,
     url: Option<&str>,
 ) -> papers::PaperRecord {
+    const RESOLVE_BUDGET: std::time::Duration = std::time::Duration::from_secs(6);
     let clean_url = url.map(str::trim).filter(|s| !s.is_empty());
     if let Some(u) = clean_url {
         let base = translator_url_from_ctrl(ctrl);
-        if let Ok((mut resolved_meta, _)) =
-            crate::features::paper::import::resolve_metadata(u, &base, None).await
-        {
+        let lookup = crate::features::paper::import::resolve_metadata(u, &base, None);
+        if let Ok(Ok((mut resolved_meta, _))) = tokio::time::timeout(RESOLVE_BUDGET, lookup).await {
             resolved_meta.meta_source = Some("zotero-connector".into());
             resolved_meta.source_url = Some(u.to_string());
             resolved_meta.pdf_url = Some(u.to_string());
@@ -768,10 +758,24 @@ async fn import_standalone_remote(
         return Err(AppError::message("resolved metadata has empty id"));
     }
     if let Ok(Some(existing)) = papers::get_by_id(&session.work_root, &id) {
+        // Dedupe hit with a missing PDF: backfill the file both into the local
+        // staging mirror and onto the remote vault, or the save is lost.
         let staging = session.work_root.join(&existing.path);
         let pdf_path = staging.join(format!("{id}.pdf"));
         if !pdf_path.is_file() {
-            let _ = fs::write(&pdf_path, bytes);
+            fs::create_dir_all(&staging)?;
+            fs::write(&pdf_path, bytes)?;
+            let remote_pdf = format!("{}/{id}.pdf", existing.path.trim_matches('/'));
+            session
+                .fs
+                .write(
+                    &remote_pdf,
+                    bytes,
+                    WriteOpts {
+                        create_parents: true,
+                    },
+                )
+                .await?;
         }
         return Ok(ConnectorImportResult {
             path: existing.path,

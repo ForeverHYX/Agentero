@@ -43,6 +43,7 @@ import {
 	TooltipContent,
 	TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { formatLocaleTimestamp } from "@/i18n";
 import { formatBytes } from "@/lib/core/background-tasks";
 import { events } from "@/lib/core/bindings";
 import { errorMessage, notifyError, notifySuccess } from "@/lib/core/notify";
@@ -328,7 +329,7 @@ export function SyncPane({ vaultPath }: { vaultPath: string | null }) {
 				})
 			: status?.lastSyncAt
 				? t("sync.lastSync", {
-						time: new Date(status.lastSyncAt).toLocaleString(),
+						time: formatLocaleTimestamp(status.lastSyncAt),
 					})
 				: status?.configured
 					? t("sync.neverSynced")

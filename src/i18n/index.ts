@@ -95,4 +95,15 @@ i18n.use(initReactI18next).init({
 	returnNull: false,
 });
 
+/**
+ * Locale-formatted timestamp for UI display (session lists, sync status, …).
+ * Omit `locale` to use the host default locale.
+ */
+export function formatLocaleTimestamp(
+	date: Date | number | string,
+	locale?: string,
+): string {
+	return new Date(date).toLocaleString(locale);
+}
+
 export default i18n;

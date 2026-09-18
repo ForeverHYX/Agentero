@@ -52,6 +52,7 @@ import {
 	vaultRelativePath,
 	writeVaultFile,
 } from "@/lib/vault";
+import { normalizePathKey as pathKey } from "@/lib/vault/path";
 import {
 	clearRemoteSessionMeta,
 	isRemoteVaultHandle,
@@ -518,11 +519,6 @@ export async function movePathsTo(
 	} finally {
 		setVaultBusy(false);
 	}
-}
-
-/** Normalize a path for case-insensitive comparison. */
-function pathKey(path: string): string {
-	return path.replace(/\\/g, "/").replace(/\/+$/, "").toLowerCase();
 }
 
 /** Find a tree node by absolute path (case-insensitive). */

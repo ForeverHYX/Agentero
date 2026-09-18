@@ -20,6 +20,7 @@ import {
 	notifySuccess,
 	notifyWarning,
 } from "@/lib/core/notify";
+import { sameRelPaperPath } from "@/lib/core/path";
 import {
 	applyLayoutTranslateSidecar,
 	currentLayoutTranslateCacheKey,
@@ -83,18 +84,6 @@ export type PdfLayoutTranslate = {
 type LayoutTranslateWaitTarget =
 	| { mode: "document" }
 	| { mode: "page"; pageIndex: number };
-
-function normalizeRelPaperPath(path: string): string {
-	return path.replace(/\\/g, "/").replace(/^\/+|\/+$/g, "");
-}
-
-function sameRelPaperPath(
-	a: string | null | undefined,
-	b: string | null | undefined,
-): boolean {
-	if (!a || !b) return false;
-	return normalizeRelPaperPath(a) === normalizeRelPaperPath(b);
-}
 
 function mergeTranslatePageItems(
 	items: readonly LayoutTranslateItem[],

@@ -37,6 +37,7 @@ import {
 	PopoverTrigger,
 } from "@/components/ui/popover";
 import { copyTextToClipboard } from "@/lib/core/clipboard";
+import { readJsonStorage, writeJsonStorage } from "@/lib/core/storage";
 import { cn } from "@/lib/core/utils";
 import type { PaperMetadata } from "@/lib/paper";
 import { arxivUrls } from "@/lib/paper/arxiv";
@@ -410,13 +411,9 @@ function clampHeight(value: number) {
 }
 
 function loadStoredHeight(): number {
-	try {
-		const raw = localStorage.getItem(HEIGHT_STORAGE_KEY);
-		const parsed = raw ? Number.parseInt(raw, 10) : Number.NaN;
-		if (Number.isFinite(parsed)) return clampHeight(parsed);
-	} catch {
-		// localStorage unavailable; fall through to default.
-	}
+	// Stored as a bare integer string; JSON numbers round-trip identically.
+	const parsed = readJsonStorage<number>(HEIGHT_STORAGE_KEY, Number.NaN);
+	if (Number.isFinite(parsed)) return clampHeight(parsed);
 	return DEFAULT_CONTENT_HEIGHT;
 }
 
@@ -437,11 +434,7 @@ export function PaperInfoPanel({
 	} | null>(null);
 
 	const persistHeight = (value: number) => {
-		try {
-			localStorage.setItem(HEIGHT_STORAGE_KEY, String(Math.round(value)));
-		} catch {
-			// Ignore persistence failures.
-		}
+		writeJsonStorage(HEIGHT_STORAGE_KEY, Math.round(value));
 	};
 
 	const onHandlePointerDown = (e: ReactPointerEvent<HTMLDivElement>) => {

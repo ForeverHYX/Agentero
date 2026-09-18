@@ -27,6 +27,7 @@ import {
 } from "@/components/ui/tooltip";
 import type { PromptImage } from "@/lib/agent";
 import { backgroundTasksStore } from "@/lib/core/background-tasks";
+import { sameRelPaperPath } from "@/lib/core/path";
 import { cn } from "@/lib/core/utils";
 import {
 	compareLayoutReadingOrder,
@@ -64,18 +65,6 @@ type FiguresPanelProps = {
 	/** Hide the pane header for use inside a floating PDF panel. */
 	compact?: boolean;
 };
-
-function normalizeRelPaperPath(path: string): string {
-	return path.replace(/\\/g, "/").replace(/^\/+|\/+$/g, "");
-}
-
-function sameRelPaperPath(
-	a: string | null | undefined,
-	b: string | null | undefined,
-): boolean {
-	if (!a || !b) return false;
-	return normalizeRelPaperPath(a) === normalizeRelPaperPath(b);
-}
 
 type SidebarKind = "image" | "chart" | "table" | "algorithm" | "formula";
 

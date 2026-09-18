@@ -16,6 +16,7 @@ import type {
 	AgentPanelT,
 } from "@/components/agent/hooks/use-agent-panel-context";
 import { useUiStore } from "@/hooks/use-app-stores";
+import { formatLocaleTimestamp } from "@/i18n";
 import {
 	type AcpLoadSessionResult,
 	type AcpSessionInfo,
@@ -244,7 +245,7 @@ export function mergeImportedSessions(
 			existingById.get(session.sessionId) ??
 			existingByProvider.get(session.sessionId);
 		const startedAt = session.updatedAt
-			? new Date(session.updatedAt).toLocaleString(i18nLanguage)
+			? formatLocaleTimestamp(session.updatedAt, i18nLanguage)
 			: "";
 		const acpTitle = session.title?.trim() ?? "";
 		// Prefer ACP title → first local user turn → keep a prior human title.
@@ -693,7 +694,8 @@ export function useAgentHistory({
 					request.prompt?.trim() ||
 					t("composer.visualAnnotation"),
 				agentName: selected?.name ?? t("defaultName"),
-				startedAt: match?.startedAt || new Date().toLocaleString(i18nLanguage),
+				startedAt:
+					match?.startedAt || formatLocaleTimestamp(new Date(), i18nLanguage),
 				emptyFallback: t("composer.visualAnnotation"),
 				paperAbsPath: request.paperAbsPath,
 			});
@@ -762,7 +764,7 @@ export function useAgentHistory({
 				request.prompt?.trim() ||
 				t("composer.visualAnnotation"),
 			agentName: selected?.name ?? t("defaultName"),
-			startedAt: new Date().toLocaleString(i18nLanguage),
+			startedAt: formatLocaleTimestamp(new Date(), i18nLanguage),
 			lines: fallbackLines,
 			status: snapshot ? "completed" : "failed",
 			providerSessionId: request.providerSessionId ?? null,

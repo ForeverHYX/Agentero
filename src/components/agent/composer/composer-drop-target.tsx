@@ -17,7 +17,7 @@ import {
 	readComposerImageFiles,
 } from "@/lib/agent/prompt-image";
 import {
-	isPhysicalPointInRect,
+	isPhysicalPointInSelector,
 	subscribeTauriFileDrop,
 } from "@/lib/agent/tauri-file-drop";
 import {
@@ -79,14 +79,14 @@ export const ComposerDropTarget = forwardRef<
 				hasImageExtension(path),
 			);
 			if (!imagePaths.length) return;
-			const shell = document.querySelector("[data-composer-drop-shell]");
-			const panel = document.querySelector("[data-agent-panel]");
-			const overShell =
-				shell instanceof HTMLElement &&
-				isPhysicalPointInRect(payload.position, shell.getBoundingClientRect());
-			const overPanel =
-				panel instanceof HTMLElement &&
-				isPhysicalPointInRect(payload.position, panel.getBoundingClientRect());
+			const overShell = isPhysicalPointInSelector(
+				payload.position,
+				"[data-composer-drop-shell]",
+			);
+			const overPanel = isPhysicalPointInSelector(
+				payload.position,
+				"[data-agent-panel]",
+			);
 			if (!overShell && !overPanel) return;
 			attachFromPaths(imagePaths);
 		});

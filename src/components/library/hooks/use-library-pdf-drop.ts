@@ -1,20 +1,17 @@
 /**
  * PDF drop highlight + import for the Library table.
  *
- * HTML5 dragenter is unreliable for macOS Finder files, so we hit-test the
- * shell on document dragover plus Tauri `onDragDropEvent`. Overlay only when
- * the payload is a PDF (one or more); images / other types stay ignored.
- * Drops are accepted only when the pointer is over the Library panel so
- * file-tree `papers/` imports are not stolen.
+ * Overlay machinery (macOS-safe document dragover hit-testing + Tauri
+ * `onDragDropEvent` state machine) lives in `useFileDragOverlay`; this hook
+ * owns the PDF predicates and the import flow. Overlay only when the payload
+ * is a PDF (one or more); images / other types stay ignored. Drops are
+ * accepted only when the pointer is over the Library panel so file-tree
+ * `papers/` imports are not stolen.
  */
-import type { DragEvent as ReactDragEvent, RefObject } from "react";
-import { useCallback, useEffect, useRef, useState } from "react";
+import type { DragEvent as ReactDragEvent } from "react";
+import { useCallback, useRef } from "react";
 import { useTranslation } from "react-i18next";
-import {
-	isClientPointInRect,
-	isPhysicalPointInRect,
-	subscribeTauriFileDrop,
-} from "@/lib/agent/tauri-file-drop";
+import { useFileDragOverlay } from "@/hooks/use-file-drag-overlay";
 import {
 	dataTransferLooksLikeOsFiles,
 	dataTransferLooksLikePdfs,
@@ -52,122 +49,31 @@ function destForLibraryDrop(scopePath: string | null | undefined): string {
 
 export function useLibraryPdfDrop(scopePath: string | null | undefined) {
 	const { t } = useTranslation("sidebar");
-	const shellRef = useRef<HTMLDivElement>(null);
-	const tauriPathsRef = useRef<string[]>([]);
 	const scopePathRef = useRef(scopePath);
 	scopePathRef.current = scopePath;
-	const [isPdfDragOver, setIsPdfDragOver] = useState(false);
-
-	const overShell = useCallback((x: number, y: number) => {
-		const el = shellRef.current;
-		if (!el) return false;
-		return isClientPointInRect(x, y, el.getBoundingClientRect());
-	}, []);
 
 	const importPdfs = useCallback((items: ResolvedDropPdf[]) => {
 		if (!items.length) return;
 		dropLocalPdfs(items, destForLibraryDrop(scopePathRef.current));
 	}, []);
 
-	useEffect(() => {
-		const onDragOver = (event: DragEvent) => {
-			if (
-				isVaultFileDragActive() ||
-				dataTransferLooksLikeVaultMove(event.dataTransfer)
-			) {
-				setIsPdfDragOver(false);
-				return;
-			}
-			if (!dataTransferLooksLikeOsFiles(event.dataTransfer)) return;
-			if (!overShell(event.clientX, event.clientY)) {
-				setIsPdfDragOver(false);
-				return;
-			}
-			if (!dataTransferLooksLikePdfs(event.dataTransfer)) {
-				setIsPdfDragOver(false);
-				return;
-			}
-			event.preventDefault();
-			if (event.dataTransfer) event.dataTransfer.dropEffect = "copy";
-			setIsPdfDragOver(true);
-		};
-		const onDragLeave = (event: DragEvent) => {
-			if (event.relatedTarget) return;
-			setIsPdfDragOver(false);
-		};
-		const clear = () => setIsPdfDragOver(false);
-		document.addEventListener("dragover", onDragOver);
-		document.addEventListener("dragleave", onDragLeave);
-		window.addEventListener("dragend", clear);
-		window.addEventListener("drop", clear, true);
-		return () => {
-			document.removeEventListener("dragover", onDragOver);
-			document.removeEventListener("dragleave", onDragLeave);
-			window.removeEventListener("dragend", clear);
-			window.removeEventListener("drop", clear, true);
-		};
-	}, [overShell]);
-
-	useEffect(() => {
-		return subscribeTauriFileDrop((payload) => {
-			if (isVaultFileDragActive()) {
-				setIsPdfDragOver(false);
-				return false;
-			}
-			if (payload.type === "leave" || payload.type === "drop") {
-				let claimed = false;
-				if (payload.type === "drop") {
-					const pdfs = pdfsFromPaths(payload.paths);
-					const el = shellRef.current;
-					const overShell =
-						el != null &&
-						isPhysicalPointInRect(payload.position, el.getBoundingClientRect());
-					if (pdfs.length > 0 && overShell) {
-						importPdfs(pdfs);
-						claimed = true;
-					}
-				}
-				tauriPathsRef.current = [];
-				setIsPdfDragOver(false);
-				return claimed;
-			}
-			if (payload.type === "enter") {
-				tauriPathsRef.current = payload.paths;
-			}
-			const paths = tauriPathsRef.current;
-			if (!pdfsFromPaths(paths).length) {
-				setIsPdfDragOver(false);
-				return false;
-			}
-			const el = shellRef.current;
-			const over =
-				el != null &&
-				isPhysicalPointInRect(payload.position, el.getBoundingClientRect());
-			setIsPdfDragOver(over);
-			return false;
-		});
-	}, [importPdfs]);
-
-	const onPdfDragEnter = useCallback((event: ReactDragEvent) => {
-		if (dataTransferLooksLikeVaultMove(event.dataTransfer)) return;
-		if (!dataTransferLooksLikePdfs(event.dataTransfer)) return;
-		event.preventDefault();
-		setIsPdfDragOver(true);
-	}, []);
-
-	const onPdfDragLeave = useCallback((event: ReactDragEvent) => {
-		if (event.currentTarget.contains(event.relatedTarget as Node | null)) {
-			return;
-		}
-		setIsPdfDragOver(false);
-	}, []);
-
-	const onPdfDragOver = useCallback((event: ReactDragEvent) => {
-		if (dataTransferLooksLikeVaultMove(event.dataTransfer)) return;
-		if (!dataTransferLooksLikePdfs(event.dataTransfer)) return;
-		event.preventDefault();
-		event.dataTransfer.dropEffect = "copy";
-	}, []);
+	const {
+		shellRef,
+		isDragOver,
+		resetDragOver,
+		onDragEnter,
+		onDragLeave,
+		onDragOver,
+	} = useFileDragOverlay({
+		looksLikeDrag: dataTransferLooksLikePdfs,
+		pathsMatch: (paths) => pdfsFromPaths(paths).length > 0,
+		onTauriDrop: (paths) => {
+			const pdfs = pdfsFromPaths(paths);
+			if (!pdfs.length) return false;
+			importPdfs(pdfs);
+			return true;
+		},
+	});
 
 	const onPdfDrop = useCallback(
 		(event: ReactDragEvent) => {
@@ -184,7 +90,7 @@ export function useLibraryPdfDrop(scopePath: string | null | undefined) {
 			if (!snapshotLooksLikePdf(snap)) return;
 			event.preventDefault();
 			event.stopPropagation();
-			setIsPdfDragOver(false);
+			resetDragOver();
 			void resolveDroppedPdfPaths(snap)
 				.then((pdfs) => {
 					importPdfs(pdfs);
@@ -197,15 +103,15 @@ export function useLibraryPdfDrop(scopePath: string | null | undefined) {
 					);
 				});
 		},
-		[importPdfs, t],
+		[importPdfs, resetDragOver, t],
 	);
 
 	return {
-		shellRef: shellRef as RefObject<HTMLDivElement>,
-		isPdfDragOver,
-		onPdfDragEnter,
-		onPdfDragLeave,
-		onPdfDragOver,
+		shellRef,
+		isPdfDragOver: isDragOver,
+		onPdfDragEnter: onDragEnter,
+		onPdfDragLeave: onDragLeave,
+		onPdfDragOver: onDragOver,
 		onPdfDrop,
 	};
 }
